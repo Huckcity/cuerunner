@@ -3,8 +3,12 @@ import type {
   MscCue,
   MicCue,
   LightCue,
-  TimecodeCue
+  TimecodeCue,
+  ControlCue,
+  OscPatch
 } from '../../../shared/cue'
+import { fadeTargetIds, oscDestination, oscMessages, STOP_ALL, stopTargetIds } from '../../../shared/cueTargets'
+import { fadeRoutes, stopOrder } from './targets'
 import type { MidiFileCue } from '../../../shared/cue'
 import { isProCueType } from '../../../shared/cue'
 import { audioEngine } from './audioEngineClient'
@@ -202,6 +206,12 @@ interface RunnerDeps {
   // a resume can put back what it said. Optional: a runner without it still holds the show,
   // and only the rows do not change.
   getRunning?: () => ReadonlyMap<string, RunningCue>
+  // The show's OSC patches, read per send: a patch edited while the show is loaded is where
+  // the next message goes. Optional: a runner without it sends every message to its own host.
+  getOscPatches?: () => OscPatch[]
+  // Arms or disarms cues, as an edit of the show: what a Control cue's arm and disarm do.
+  // Optional: a runner without it says so in the log rather than half-arming anything.
+  setArmed?: (cueIds: string[], armed: boolean) => void
 }
 
 export class CueEngine {
@@ -248,6 +258,11 @@ export class CueEngine {
   private randomDraws = new ShuffleBag()
   /** Audio cues held on their own, while the rest of the show goes on, by cue id. */
   private pausedCues = new Map<string, { at: number; wallAt: number; row: RunningCue | null }>()
+  /**
+   * Cues a Control cue's Load has readied to start part-way in, by cue id: how far in, ms. The
+   * next firing starts there and forgets it; a Reset forgets it without firing.
+   */
+  private loadedAt = new Map<string, number>()
 
   init(deps: RunnerDeps): void {
     this.deps = deps
@@ -531,6 +546,15 @@ export class CueEngine {
   ): void {
     const generation = this.generation
 
+    // A cue a Load readied part-way in starts there, once: the load is the next firing's.
+    if (!adopted && seekMs === 0) {
+      const loaded = this.loadedAt.get(cue.id)
+      if (loaded !== undefined) {
+        this.loadedAt.delete(cue.id)
+        seekMs = loaded
+      }
+    }
+
     // A cue fired while it is already in flight replaces its previous run. Capture the
     // old run's engine identity before taking it away: an `ended` line from that run,
     // batched 16 ms, can arrive after this firing, and must not close the new run
@@ -769,6 +793,9 @@ export class CueEngine {
         break
       case 'timecode':
         this.executeTimecode(cue as TimecodeCue, run, at, finish)
+        break
+      case 'control':
+        this.executeControl(cue as ControlCue, at, finish)
         break
     }
   }
@@ -1078,20 +1105,46 @@ export class CueEngine {
     }).catch(() => {})
   }
 
+  /**
+   * Sends an OSC cue's messages in the order the cue lists them, each to its patch or to its
+   * own host, one after another so the wire carries them in that order. A message that fails
+   * does not hold back the ones after it — the desk that did answer should still be told — and
+   * the run reports the first failure, naming which message it was when there are several.
+   */
   private executeOsc(cue: OscCue, finish: Finish): void {
-    const detail: Partial<CueRunResult> = {}
-    window.cuerunner.osc.send({ host: cue.host, port: cue.port, address: cue.address, args: cue.args })
-      .then(result => {
-        if (!result.ok) {
-          detail.outcome = 'error'
-          detail.error = result.error ?? 'OSC send failed'
+    const messages = oscMessages(cue)
+    const patches = this.deps!.getOscPatches?.() ?? []
+    const failures: string[] = []
+    const sendAll = async (): Promise<void> => {
+      for (const [index, message] of messages.entries()) {
+        const which = messages.length > 1 ? `message ${index + 1} (${message.address || 'no address'}): ` : ''
+        const destination = oscDestination(message, patches)
+        if ('error' in destination) {
+          failures.push(`${which}${destination.error}`)
+          continue
         }
-      })
-      .catch(error => {
-        detail.outcome = 'error'
-        detail.error = errorMessage(error)
-      })
-      .finally(() => finish(this.now(), detail))
+        try {
+          const result = await window.cuerunner.osc.send({
+            host: destination.host,
+            port: destination.port,
+            address: message.address,
+            args: message.args
+          })
+          if (!result.ok) failures.push(`${which}${result.error ?? 'OSC send failed'}`)
+        } catch (error) {
+          failures.push(`${which}${errorMessage(error)}`)
+        }
+      }
+    }
+    void sendAll().finally(() => {
+      const detail: Partial<CueRunResult> = failures.length === 0
+        ? {}
+        : {
+            outcome: 'error',
+            error: failures.length === 1 ? failures[0] : `${failures[0]} (and ${failures.length - 1} more)`
+          }
+      finish(this.now(), detail)
+    })
   }
 
   private executeWait(cue: WaitCue, run: CueRun, at: number, finish: Finish): void {
@@ -1099,29 +1152,60 @@ export class CueEngine {
     this.scheduleRunEnd(run, endAt, finish)
   }
 
+  /**
+   * Fades every cue the fade names, together, over the same time and curve: each sound's level
+   * (and pan) in the audio engine, each light's intensity in the lighting engine, and every cue
+   * inside a group it names the same way. Asked to stop its targets when it is done, it stops
+   * each where its own kind stops — and a group it names whole, so a sequence does not step on.
+   */
   private executeFade(cue: FadeCue, run: CueRun, at: number, finish: Finish): void {
-    if (isLightCue(this.deps!.getCues(), cue.targetCueId)) {
-      this.executeLightFade(cue, run, at, finish)
-      return
-    }
+    const ids = fadeTargetIds(cue)
+    const routes = fadeRoutes(this.deps!.getCues(), ids)
     const param: AudioFadeParam = cue.fadeProperty === 'volume' ? 'volume' : 'pan'
-    // The ramp starts at the cue's own time on the clock, whether that is now or later.
-    void audioEngine.fade(cue.targetCueId, param, cue.targetValue, cue.duration, cue.curve, at)
-      .catch(() => {
-        // A fade with nothing playing is not an error: the cue still takes its time.
-      })
-    // A volume fade that takes the pan with it: the same ramp's time and curve, on the pan.
-    if (param === 'volume' && typeof cue.panTargetValue === 'number') {
-      void audioEngine.fade(cue.targetCueId, 'pan', cue.panTargetValue, cue.duration, cue.curve, at)
-        .catch(() => {})
+    // A target the show no longer has is still told to the engine, which refuses what it never
+    // knew — the way a stop's is — and the run says it was missing.
+    const sounds = [...routes.audio, ...routes.missing]
+    for (const id of sounds) {
+      // The ramp starts at the cue's own time on the clock, whether that is now or later.
+      void audioEngine.fade(id, param, cue.targetValue, cue.duration, cue.curve, at)
+        .catch(() => {
+          // A fade with nothing playing is not an error: the cue still takes its time.
+        })
+      // A volume fade that takes the pan with it: the same ramp's time and curve, on the pan.
+      if (param === 'volume' && typeof cue.panTargetValue === 'number') {
+        void audioEngine.fade(id, 'pan', cue.panTargetValue, cue.duration, cue.curve, at)
+          .catch(() => {})
+      }
     }
+    // A Fade cue aimed at a Light cue moves the intensity that cue holds to its target share of
+    // what the cue set, over the fade.
+    const level = Math.min(1, Math.max(0, cue.targetValue))
+    for (const id of routes.light) void levelLight(id, level, cue.duration, cue.curve)
+
+    // A fade that names nothing, or only cues the show no longer has, moves nothing — and says
+    // so, rather than reporting "completed" for a fade nobody heard. Its timing is unchanged.
+    const reason = ids.length === 0
+      ? 'no cue chosen to fade'
+      : routes.missing.length === ids.length
+        ? (ids.length === 1 ? 'the cue it fades is not in the show' : 'the cues it fades are not in the show')
+        : routes.missing.length > 0
+          ? `${routes.missing.length} of the cues it fades ${routes.missing.length === 1 ? 'is' : 'are'} not in the show`
+          : null
     const endAt = at + cue.duration
     this.planRelease(run, endAt)
     this.track(run, this.scheduler!.schedule({
       at: endAt,
       due: () => {
-        if (cue.stopTargetWhenDone) this.stopCue(cue.targetCueId, 0)
-        finish(endAt)
+        if (cue.stopTargetWhenDone) {
+          for (const id of routes.groups) {
+            const group = this.deps!.getCues().find(candidate => candidate.id === id)
+            this.stopCue(id, 0)
+            if (group?.type === 'group') this.stopGroup(group as GroupCue, 0)
+          }
+          for (const id of sounds) this.stopCue(id, 0)
+          for (const id of routes.light) void releaseLight(id, 0)
+        }
+        finish(endAt, reason === null ? {} : { outcome: 'error', error: reason })
       }
     }))
   }
@@ -1232,24 +1316,6 @@ export class CueEngine {
       }
     })
     this.scheduleRunEnd(run, endAt, finish)
-  }
-
-  /**
-   * A Fade cue aimed at a Light cue moves the intensity that cue holds to its target share of
-   * what the cue set, over the fade; asked to stop the target when it is done, it releases it.
-   */
-  private executeLightFade(cue: FadeCue, run: CueRun, at: number, finish: Finish): void {
-    const level = Math.min(1, Math.max(0, cue.targetValue))
-    void levelLight(cue.targetCueId, level, cue.duration, cue.curve)
-    const endAt = at + cue.duration
-    this.planRelease(run, endAt)
-    this.track(run, this.scheduler!.schedule({
-      at: endAt,
-      due: () => {
-        if (cue.stopTargetWhenDone) void releaseLight(cue.targetCueId, 0)
-        finish(endAt)
-      }
-    }))
   }
 
   private executeMic(cue: MicCue, finish: Finish): void {
@@ -1408,7 +1474,7 @@ export class CueEngine {
         if (child.type === 'midi' || child.type === 'osc' || child.type === 'scene' ||
             child.type === 'network' || child.type === 'script' || child.type === 'stop' ||
             child.type === 'devamp' || child.type === 'msc' || child.type === 'mic' ||
-            child.type === 'memo') continue
+            child.type === 'memo' || child.type === 'control') continue
         items.push({ kind: 'seek', child, seekOffsetMs })
       }
     }
@@ -1568,7 +1634,9 @@ export class CueEngine {
 
   private executeStop(cue: StopCue, run: CueRun, at: number, finish: Finish): void {
     const fadeMs = cue.fadeOut ? cue.fadeOutDuration : 0
-    if (cue.targetCueId === 'all') {
+    const targets = stopTargetIds(cue)
+    let reason: string | null = null
+    if (targets === STOP_ALL) {
       // Groups first: each run is taken away, and a run that is a group's child settles
       // its parent, so the parent has to be gone before its children are walked or a
       // live group would fire its next step into a stop that was meant to take all.
@@ -1590,51 +1658,28 @@ export class CueEngine {
       void audioEngine.stopAll(fadeMs).catch(() => {})
       this.deps!.clearAllRunning()
     } else {
-      const target = this.deps!.getCues().find(c => c.id === cue.targetCueId)
-      if (target?.type === 'audio') {
-        // A stop aimed at one cue takes the sound away; the cue's own run ends as the
-        // engine reports it stopped, so a fade is heard and the row goes dark when the
-        // sound does. Everything else is taken away here, because nothing else will
-        // report: a wait, a fade, a MIDI/OSC send, a network request, a scene, a devamp,
-        // an MSC command and a script hold no engine voice to answer for them.
-        //
-        // A cue that has not begun is the one case where there is no voice to fade: a
-        // pre-wait run would otherwise begin after the stop that named it, so it is
-        // taken away here with its planned start. A start a timeline is still holding
-        // for this cue — a child that has not fired yet — goes the same way, whatever
-        // the run beside it is doing: it is a firing that has not happened.
-        const pending = this.runs.get(cue.targetCueId)
-        this.cancelTimelineTasks(cue.targetCueId)
-        if (pending && pending.phase === 'pending') {
-          this.stopCue(cue.targetCueId, fadeMs)
-        } else {
-          void audioEngine.stop(cue.targetCueId, fadeMs).catch(() => {})
-        }
-      } else if (target === undefined) {
+      // Every cue it names, groups first: a child stopped in the same breath as its group
+      // must not settle the group on to its next step before the group itself is taken.
+      const { ordered, missing } = stopOrder(this.deps!.getCues(), targets.filter(id => id !== cue.id))
+      for (const target of ordered) this.stopTarget(cue, target, fadeMs)
+      for (const id of missing) {
         // No such cue: still tell the engine, which refuses what it never knew.
-        void audioEngine.stop(cue.targetCueId, fadeMs).catch(() => {})
-      } else if (target.type === 'group') {
-        // The group's own run goes first, so its children settling cannot carry it on.
-        this.stopCue(target.id, fadeMs)
-        this.stopGroup(target as GroupCue, fadeMs)
-      } else if (target.type === 'light') {
-        // A light that is stopped stays on where its fade had got to; a stop with a fade-out
-        // is the one that turns it off — what the cue holds fades home over the fade-out.
-        this.stopCue(target.id, fadeMs)
-        if (cue.fadeOut) void releaseLight(target.id, fadeMs)
-      } else {
-        this.stopCue(target.id, fadeMs)
+        void audioEngine.stop(id, fadeMs).catch(() => {})
+      }
+      // A stop aimed at a cue that is no longer in the show stops nothing, and says so: the
+      // cue it named was deleted, and a stop that reported "ok" for it is a cue that looks
+      // like it is doing its job on the night it is not. Its timing is what it always was —
+      // the show moves on when it would have — only the result differs.
+      if (targets.length === 0) reason = 'no cue chosen to stop'
+      else if (missing.length === targets.length) {
+        reason = targets.length === 1 ? 'the cue it stops is not in the show' : 'the cues it stops are not in the show'
+      } else if (missing.length > 0) {
+        reason = `${missing.length} of the cues it stops ${missing.length === 1 ? 'is' : 'are'} not in the show`
       }
     }
-    // A stop aimed at a cue that is no longer in the show stops nothing, and says so: the
-    // cue it named was deleted, and a stop that reported "ok" for it is a cue that looks
-    // like it is doing its job on the night it is not. Its timing is what it always was —
-    // the show moves on when it would have — only the result differs.
-    const targetGone = cue.targetCueId !== 'all' &&
-      !this.deps!.getCues().some(c => c.id === cue.targetCueId)
-    const done: Finish = targetGone
-      ? endMs => finish(endMs, { outcome: 'error', error: 'the cue it stops is not in the show' })
-      : finish
+    const done: Finish = reason === null
+      ? finish
+      : endMs => finish(endMs, { outcome: 'error', error: reason })
     // A wait-for-fade stop keeps the run open until the fade has finished sounding,
     // so the next cue does not start over it.
     if (cue.fadeOut && cue.waitForFade) {
@@ -1643,6 +1688,188 @@ export class CueEngine {
     } else {
       done(at)
     }
+  }
+
+  /** Takes one cue a stop names away, the way its own kind is stopped. */
+  private stopTarget(cue: StopCue, target: Cue, fadeMs: number): void {
+    if (target.type === 'audio') {
+      // A stop aimed at one cue takes the sound away; the cue's own run ends as the
+      // engine reports it stopped, so a fade is heard and the row goes dark when the
+      // sound does. Everything else is taken away here, because nothing else will
+      // report: a wait, a fade, a MIDI/OSC send, a network request, a scene, a devamp,
+      // an MSC command and a script hold no engine voice to answer for them.
+      //
+      // A cue that has not begun is the one case where there is no voice to fade: a
+      // pre-wait run would otherwise begin after the stop that named it, so it is
+      // taken away here with its planned start. A start a timeline is still holding
+      // for this cue — a child that has not fired yet — goes the same way, whatever
+      // the run beside it is doing: it is a firing that has not happened.
+      const pending = this.runs.get(target.id)
+      this.cancelTimelineTasks(target.id)
+      if (pending && pending.phase === 'pending') {
+        this.stopCue(target.id, fadeMs)
+      } else {
+        void audioEngine.stop(target.id, fadeMs).catch(() => {})
+      }
+    } else if (target.type === 'group') {
+      // The group's own run goes first, so its children settling cannot carry it on.
+      this.stopCue(target.id, fadeMs)
+      this.stopGroup(target as GroupCue, fadeMs)
+    } else if (target.type === 'light') {
+      // A light that is stopped stays on where its fade had got to; a stop with a fade-out
+      // is the one that turns it off — what the cue holds fades home over the fade-out.
+      this.stopCue(target.id, fadeMs)
+      if (cue.fadeOut) void releaseLight(target.id, fadeMs)
+    } else {
+      this.stopCue(target.id, fadeMs)
+    }
+  }
+
+  /**
+   * A Control cue: its verb, on every cue it names, in the order it names them — and then it
+   * completes at once, so a chain runs through it the way it runs through a memo. It never acts
+   * on itself: a Start of itself would fire for ever, and the rest mean nothing on a cue that is
+   * already over. A target the show no longer has is skipped and counted in the result.
+   */
+  private executeControl(cue: ControlCue, at: number, finish: Finish): void {
+    const label = this.cueLabel(cue)
+    const cues = this.deps!.getCues()
+    const ids = cue.targetCueIds.filter(id => id !== cue.id)
+    if (ids.length === 0) {
+      // A control cue aimed at nothing must do nothing rather than guess which cue was meant.
+      this.log({ level: 'error', message: 'no cue chosen', label })
+      finish(at, { outcome: 'error', error: 'no cue chosen' })
+      return
+    }
+    const byId = new Map(cues.map(candidate => [candidate.id, candidate]))
+    const targets = ids.flatMap(id => byId.get(id) ?? [])
+    const missing = ids.length - targets.length
+
+    switch (cue.action) {
+      case 'start':
+        for (const target of targets) {
+          if (!target.isArmed) {
+            this.log({ level: 'error', message: 'not started: it is disarmed', label: this.cueLabel(target) })
+            continue
+          }
+          // A cue already running is left to its own policy, as a second press of it would be.
+          if (this.hasActiveRun(target.id) && refirePolicy(target) === 'ignore') continue
+          this.log({ level: 'info', message: `started by ${label}`, label: this.cueLabel(target) })
+          // On the clock at this cue's own moment: the start is the show's plumbing, not a press.
+          this.goById(target.id, at)
+        }
+        break
+      case 'stop':
+        for (const target of stopOrder(cues, targets.map(t => t.id)).ordered) {
+          this.stopCue(target.id, 0)
+          if (target.type === 'group') this.stopGroup(target as GroupCue, 0)
+        }
+        break
+      case 'pause':
+        for (const id of this.holdTargets(targets)) this.pauseCue(id)
+        break
+      case 'resume':
+        for (const id of this.holdTargets(targets)) this.resumeCue(id)
+        break
+      case 'load':
+        for (const target of targets) this.loadCue(target, Math.max(0, cue.loadToMs))
+        break
+      case 'reset':
+        for (const target of targets) this.resetCue(target)
+        break
+      case 'goto': {
+        // The playhead is one place: the first target the show still has is where it goes.
+        const first = targets[0]
+        if (first !== undefined) {
+          this.deps!.setSelected(first.id)
+          this.log({ level: 'info', message: `moved the playhead to ${this.cueLabel(first)}`, label })
+        }
+        break
+      }
+      case 'arm':
+      case 'disarm': {
+        const armed = cue.action === 'arm'
+        if (this.deps!.setArmed === undefined) {
+          this.log({ level: 'error', message: `cannot ${cue.action} cues here`, label })
+          break
+        }
+        const changing = targets.filter(target => target.isArmed !== armed).map(target => target.id)
+        if (changing.length > 0) this.deps!.setArmed(changing, armed)
+        this.log({ level: 'info', message: `${armed ? 'armed' : 'disarmed'} ${targets.length} cue${targets.length === 1 ? '' : 's'}`, label })
+        break
+      }
+    }
+
+    finish(at, missing === 0
+      ? {}
+      : { outcome: 'error', error: `${missing} of the cues it acts on ${missing === 1 ? 'is' : 'are'} not in the show` })
+  }
+
+  /**
+   * The cues a pause or resume of these targets holds: each audio cue named, and every audio
+   * cue inside a group named — the sounds are what is held; a group has none of its own.
+   */
+  private holdTargets(targets: readonly Cue[]): string[] {
+    const cues = this.deps!.getCues()
+    const ids = new Set<string>()
+    for (const target of targets) {
+      if (target.type !== 'group') { ids.add(target.id); continue }
+      const inside = new Set([target.id])
+      for (const candidate of cues) {
+        if (candidate.parentId === null || !inside.has(candidate.parentId)) continue
+        inside.add(candidate.id)
+        if (candidate.type === 'audio' && this.runs.has(candidate.id)) ids.add(candidate.id)
+      }
+    }
+    return [...ids]
+  }
+
+  /**
+   * Readies a cue to start `atMs` into itself: a cue that is playing moves there now, and one
+   * that is not starts there the next time it is fired — once — with its file already decoded
+   * so the GO that follows is instant. A timeline group is readied the way the timeline's own
+   * cursor readies one.
+   */
+  private loadCue(target: Cue, atMs: number): void {
+    const label = this.cueLabel(target)
+    if (target.type === 'audio' && this.hasActiveRun(target.id)) {
+      this.seekCue(target.id, (target as AudioCue).startTime + atMs)
+      this.log({ level: 'info', message: `moved to ${(atMs / 1000).toFixed(1)}s`, label })
+      return
+    }
+    if (target.type === 'group' && (target as GroupCue).mode === 'timeline') {
+      this.groupStartOffsets.set(target.id, atMs)
+    } else if (atMs > 0) {
+      this.loadedAt.set(target.id, atMs)
+    } else {
+      this.loadedAt.delete(target.id)
+    }
+    if (target.type === 'audio' && (target as AudioCue).filePath !== '') {
+      void audioEngine.prepare(target.id, (target as AudioCue).filePath).catch(() => {
+        // A file that will not decode says so when it is fired; a load readies what it can.
+      })
+    }
+    this.log({ level: 'info', message: `loaded to ${(atMs / 1000).toFixed(1)}s`, label })
+  }
+
+  /**
+   * Puts a cue back the way the show opened it: stopped where it stands with no fade, its load
+   * forgotten, a playlist group back at its first child and a random group drawing afresh.
+   */
+  private resetCue(target: Cue): void {
+    this.stopCue(target.id, 0)
+    if (target.type === 'group') this.stopGroup(target as GroupCue, 0)
+    this.loadedAt.delete(target.id)
+    this.pausedCues.delete(target.id)
+    this.groupStartOffsets.delete(target.id)
+    this.playlistCursors.delete(target.id)
+    this.randomDraws.forget(target.id)
+    this.log({ level: 'info', message: 'reset', label: this.cueLabel(target) })
+  }
+
+  /** Whether a Load has readied this cue to start part-way in, and how far, ms. */
+  loadedOffset(cueId: string): number | null {
+    return this.loadedAt.get(cueId) ?? null
   }
 
   getGroupStartOffset(groupId: string): number {
@@ -1780,6 +2007,8 @@ export class CueEngine {
     this.scheduler!.cancelAll()
     this.timelineTasks.clear()
     this.playlistCursors.clear()
+    // What a Load readied is part of the show that was stopped: the next GO starts clean.
+    this.loadedAt.clear()
   }
 
   stop(cueId?: string, settles = true): void {

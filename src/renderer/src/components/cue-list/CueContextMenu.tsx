@@ -117,8 +117,8 @@ export function CueContextMenu({ x, y, cue, onClose, onRename, onBatchEdit }: Pr
   const handleArmToggle = () => { updateCues(targets, { isArmed: !allArmed }); onClose() }
   const handleBatchEdit = () => { onBatchEdit?.(targets); onClose() }
 
-  // A fade or a stop made for the selection, put after the last cue it acts on: one cue for
-  // one target, a group that fires them together for several. One edit, one undo.
+  // A fade or a stop made for the selection, put after the last cue it acts on: one cue aimed
+  // at every target, however many. One edit, one undo.
   const aimable = (kind: TargetingKind) => targetCues.filter(target => canTarget(kind, target))
   const handleTargeting = (kind: TargetingKind) => {
     const aimedAt = aimable(kind)

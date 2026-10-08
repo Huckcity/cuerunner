@@ -1,6 +1,6 @@
 import type {
   AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, DevampCue, MicCue,
-  MscCue, Cue, CueType, AudioCrosspoint, MemoCue, LightCue, TimecodeCue
+  MscCue, Cue, CueType, AudioCrosspoint, MemoCue, LightCue, TimecodeCue, ControlCue
 } from '../../../shared/cue'
 import type { MidiFileCue } from '../../../shared/cue'
 import { MIDI_FILE_IDENTITY_MAP } from '../../../shared/midiFile'
@@ -75,7 +75,8 @@ export const TIMECODE_DEFAULTS = {
 }
 
 export const FADE_DEFAULTS = {
-  targetCueId: '',
+  // A list from the start: a fade made here names its cues the way a fade can now name several.
+  targetCueIds: [] as string[],
   fadeProperty: 'volume' as const,
   targetValue: 0,
   curve: 'linear' as const,
@@ -84,6 +85,8 @@ export const FADE_DEFAULTS = {
 }
 
 export const STOP_DEFAULTS = {
+  // Everything, in the spelling every build reads: a new stop is the stop it always was until
+  // it is pointed at cues.
   targetCueId: 'all',
   fadeOut: false,
   fadeOutDuration: 500,
@@ -91,6 +94,11 @@ export const STOP_DEFAULTS = {
 }
 
 export const GROUP_DEFAULTS = { mode: 'sequence' as const }
+
+export const CONTROL_DEFAULTS = {
+  action: 'start' as const,
+  loadToMs: 0
+}
 
 export const NETWORK_DEFAULTS = {
   method: 'GET' as const,
@@ -210,8 +218,8 @@ export function createCue(type: CueType, number = '1'): Cue {
       return {
         ...base('OSC Cue', number),
         type: 'osc',
-        ...OSC_DEFAULTS,
-        args: []
+        // A list from the start: a new cue's one message, with room for the next.
+        messages: [{ patchId: '', ...OSC_DEFAULTS, args: [] }]
       } satisfies OscCue
     case 'wait':
       return {
@@ -223,7 +231,9 @@ export function createCue(type: CueType, number = '1'): Cue {
       return {
         ...base('Fade Cue', number),
         type: 'fade',
-        ...FADE_DEFAULTS
+        ...FADE_DEFAULTS,
+        // A list of its own: the defaults' one must not be shared by every fade made.
+        targetCueIds: []
       } satisfies FadeCue
     case 'stop':
       return {
@@ -311,6 +321,15 @@ export function createCue(type: CueType, number = '1'): Cue {
         type: 'timecode',
         ...TIMECODE_DEFAULTS
       } satisfies TimecodeCue
+    case 'control':
+      return {
+        ...base('Control Cue', number),
+        type: 'control',
+        ...CONTROL_DEFAULTS,
+        // Nothing until it is pointed at cues: a control cue aimed at nothing does nothing,
+        // where a start of everything would be a mistake nobody could take back.
+        targetCueIds: []
+      } satisfies ControlCue
   }
 }
 

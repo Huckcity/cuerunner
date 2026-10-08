@@ -31,6 +31,12 @@ export class ShuffleBag {
     return next
   }
 
+  /** Forgets one group's bag: a group a Control cue reset draws afresh. */
+  forget(groupId: string): void {
+    this.bags.delete(groupId)
+    this.last.delete(groupId)
+  }
+
   /** Forgets every bag: a show that has just been opened has played nothing yet. */
   reset(): void {
     this.bags.clear()

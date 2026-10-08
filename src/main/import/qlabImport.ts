@@ -48,6 +48,7 @@ export function convertQLabShow(show: QLabShow, source: 'file' | 'live', origin:
     createdAt: new Date().toISOString(),
     audioSettings: { outputDeviceId: 'default' },
     midiSettings: { outputPortName: '' },
+    ...(mapped.oscPatches.length > 0 ? { oscPatches: mapped.oscPatches } : {}),
     cues: mapped.cues
   }
   const loadNotes: LoadNote[] = []

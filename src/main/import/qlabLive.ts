@@ -50,7 +50,7 @@ const TYPE_KEYS: Partial<Record<QLabKind, string[]>> = {
   devamp: ['cueTargetID', 'cueTargetNumber', 'stopTargetWhenDone'],
   start: ['cueTargetID', 'cueTargetNumber'],
   pause: ['cueTargetID', 'cueTargetNumber'],
-  load: ['cueTargetID', 'cueTargetNumber'],
+  load: ['cueTargetID', 'cueTargetNumber', 'loadAt'],
   reset: ['cueTargetID', 'cueTargetNumber'],
   goto: ['cueTargetID', 'cueTargetNumber'],
   target: ['cueTargetID', 'cueTargetNumber'],
@@ -358,6 +358,8 @@ export function liveCue(
   const targetId = text(value('cueTargetID'))
   const targetNumber = text(value('cueTargetNumber'))
   if (targetId !== '' || targetNumber !== '') cue.target = { uniqueID: targetId, number: targetNumber }
+  const loadAt = kind === 'load' ? number(value('loadAt')) : undefined
+  if (loadAt !== undefined) cue.loadAt = loadAt
   const file = text(value('fileTarget'))
   // A live QLab reports the file where it is on that machine.
   if (file !== '') cue.media = { relative: '', absolute: file }

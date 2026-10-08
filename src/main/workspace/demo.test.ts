@@ -36,6 +36,7 @@ import { materialiseDemoAssets, openDemoWorkspace } from './demo'
 import { migrateWorkspace, saveWorkspace } from './WorkspaceManager'
 import type { AudioCue, ScriptCue } from '../../shared/cue'
 import type { LoadNote, Workspace } from '../../shared/workspace'
+import { fadeTargetIds } from '../../shared/cueTargets'
 
 const ends = vi.hoisted(() => ({ userData: { path: '' }, packaged: { on: false } }))
 
@@ -170,7 +171,7 @@ describe('the bundled demo workspace', () => {
 
     const ids = new Set(workspace.cues.map(cue => cue.id))
     expect(workspace.cues.filter(cue => cue.parentId !== null && !ids.has(cue.parentId))).toEqual([])
-    expect(workspace.cues.filter(cue => cue.type === 'fade' && !ids.has(cue.targetCueId))).toEqual([])
+    expect(workspace.cues.filter(cue => cue.type === 'fade' && fadeTargetIds(cue).some(id => !ids.has(id)))).toEqual([])
   })
 
   it('points every audio cue at a file shipped beside it', async () => {

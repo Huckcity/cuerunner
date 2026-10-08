@@ -57,6 +57,7 @@ const build = () =>
     triggerGuard: guard,
     lighting: undefined,
     timecode: undefined,
+    oscPatches: undefined,
     cues: [cue()]
   })
 

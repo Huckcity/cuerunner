@@ -57,6 +57,7 @@ const MORE_CUES: { type: CueType; label: string }[] = [
   { type: 'midiFile', label: 'MIDI File' },
   { type: 'light',   label: 'Light' },
   { type: 'timecode', label: 'Timecode' },
+  { type: 'control', label: 'Control' },
 ]
 
 interface Props {
@@ -100,7 +101,7 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
     addCue(
       type,
       selectedId ?? undefined,
-      target === undefined ? undefined : { name: `Fade ${target.name}`, targetCueId: target.id }
+      target === undefined ? undefined : { name: `Fade ${target.name}`, targetCueIds: [target.id] }
     )
   }
 

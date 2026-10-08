@@ -21,6 +21,7 @@ export function useAutosave(): void {
         triggerGuard,
         lighting,
         timecode,
+        oscPatches,
         workspaceId,
         workspaceCreatedAt,
         showHistory,
@@ -40,6 +41,7 @@ export function useAutosave(): void {
         triggerGuard,
         lighting,
         timecode,
+        oscPatches,
         cues
       })
       // The cue GO would fire next goes with the work: a crash mid-show is exactly when

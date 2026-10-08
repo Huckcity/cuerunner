@@ -31,6 +31,7 @@ function sent(): Workspace {
     triggerGuard: s.triggerGuard,
     lighting: s.lighting,
     timecode: s.timecode,
+    oscPatches: s.oscPatches,
     cues: s.cues
   })
 }
@@ -65,6 +66,9 @@ function editRouted(key: WorkspaceKey): void {
       useStore.getState().setLighting({ ...useStore.getState().lighting, panic: 'blackout' })
       return
     case 'timecode': useStore.getState().setTimecode({ chase: !useStore.getState().timecode.chase }); return
+    case 'oscPatches':
+      useStore.getState().setOscPatches([{ id: 'p1', name: 'Desk', host: '10.0.0.9', port: 8000 }])
+      return
     default: throw new Error(`no edit for routed section '${key}': the witness walk needs one`)
   }
 }

@@ -25,7 +25,9 @@ export function useCueEngine() {
       getMidiDefaultPort: () => useStore.getState().midiSettings.outputPortName,
       getTriggerGuard: () => useStore.getState().triggerGuard,
       getRunning: () => useStore.getState().running,
-      isPro: () => isPro(useStore.getState().license)
+      isPro: () => isPro(useStore.getState().license),
+      getOscPatches: () => useStore.getState().oscPatches,
+      setArmed: (cueIds, armed) => useStore.getState().updateCues(cueIds, { isArmed: armed })
     })
   }, [select, setRunning, clearAllRunning, syncCueDuration, setLastRun, appendLog])
 

@@ -25,6 +25,9 @@ export function matchesTrigger(trigger: CueTrigger, event: ShowEvent): boolean {
   // A timecode trigger answers the clock, not a message: the follower fires it
   // (engine/timecodeFollow.ts).
   if (trigger.kind === 'timecode') return false
+  // A key and a time of day are this machine's own, and answer no message: the keyboard
+  // fires one (hooks/useHotkeyTriggers.ts) and the wall clock the other (engine/clockTriggers.ts).
+  if (trigger.kind === 'hotkey' || trigger.kind === 'clock') return false
 
   if (event.kind !== 'midi') return false
   if (event.device !== trigger.device) return false

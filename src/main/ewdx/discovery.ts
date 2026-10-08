@@ -133,7 +133,9 @@ export function modelOf(product: string): string {
 export async function discoverEwDx(options: DiscoverOptions = {}): Promise<DiscoverResult> {
   const windowMs = options.windowMs ?? DEFAULT_WINDOW_MS
   const interfaces = options.interfaces ?? localAddresses()
-  const open = options.open ?? ((): ScanSocket => createSocket({ type: 'udp4', reuseAddr: true }))
+  // No address reuse: each scan socket binds an ephemeral port of its own (below), which no
+  // other socket can want, so there is nothing to share and nothing for reuse to let in.
+  const open = options.open ?? ((): ScanSocket => createSocket({ type: 'udp4' }))
   const identify = options.identify ?? readIdentity
 
   const candidates = new Map<string, Candidate>()

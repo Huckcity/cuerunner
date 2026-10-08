@@ -1,7 +1,9 @@
 import { useStore } from '../../store'
 import type { FadeCue, FadeCurve } from '../../../../shared/cue'
 import { LastRun } from './LastRun'
-import { targetLabel } from './targetLabel'
+import { TargetList } from './TargetList'
+import { fadeTargetIds, fadeTargetsPatch } from '../../../../shared/cueTargets'
+import { fadeRoutes } from '../../engine/targets'
 import { ResetButton } from './ResetButton'
 import { NumberField } from '../common/Field'
 import { FADE_DEFAULTS } from '../../utils/cueDefaults'
@@ -20,29 +22,29 @@ export function FadeInspector({ cue }: Props) {
   const clampedFor = (next: 'volume' | 'pan'): Partial<FadeCue> =>
     next === 'volume' && cue.targetValue < 0 ? { targetValue: 0 } : {}
 
-  // A fade moves a sound, and only an audio cue has one: a wait, a group or a MIDI cue in
-  // this list was a target that could be chosen and would do nothing. A cue of another
-  // kind that an older show already aims at stays in the list, so the panel shows what
-  // the cue says rather than quietly showing something else.
-  //
-  // A Light cue has a level too: its intensity, which a fade moves to a share of what the
-  // cue set, so it is offered beside the sounds.
-  const targets = cues.filter(c => c.id !== cue.id && (c.type === 'audio' || c.type === 'light' || c.id === cue.targetCueId))
-  const targetGone = cue.targetCueId !== '' && !targets.some(c => c.id === cue.targetCueId)
-  const lightTarget = cues.some(c => c.id === cue.targetCueId && c.type === 'light')
+  // A fade moves a level: a sound's, or a light's intensity, which a fade moves to a share of
+  // what the cue set. A group is offered too, and a fade of a group fades everything inside it.
+  // A deleted target stays in the list saying so, rather than quietly vanishing from it.
+  const ids = fadeTargetIds(cue)
+  const routes = fadeRoutes(cues, ids)
+  // A light's one level is its intensity: a fade whose targets are all lights reads that way.
+  const lightTarget = routes.light.length > 0 && routes.audio.length === 0
 
   return (
     <div>
-      <div className="field-row">
-        <label>Target cue</label>
-        <select value={cue.targetCueId} onChange={e => set({ targetCueId: e.target.value })}>
-          <option value="">— select —</option>
-          {/* A target that was deleted is said, not papered over: a select whose value
-              matches no option draws its first one, which reads as a choice nobody made. */}
-          {targetGone && <option value={cue.targetCueId}>— not in this show —</option>}
-          {targets.map(c => <option key={c.id} value={c.id}>{targetLabel(c)}</option>)}
-        </select>
-      </div>
+      <div className="field-section-title">Targets</div>
+      <TargetList
+        id="fade-target-add"
+        cueId={cue.id}
+        ids={ids}
+        cues={cues}
+        eligible={candidate => candidate.type === 'audio' || candidate.type === 'light' || candidate.type === 'group'}
+        onChange={next => set(fadeTargetsPatch(next))}
+        empty="No cue chosen: this fade moves nothing."
+      />
+      {ids.length > routes.missing.length && routes.audio.length === 0 && routes.light.length === 0 && (
+        <p className="inspector-hint">Nothing it names has a level to fade.</p>
+      )}
       <div className="field-row">
         <label>Property</label>
         {lightTarget ? (

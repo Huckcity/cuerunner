@@ -194,7 +194,18 @@ Object.defineProperty(window, 'cuerunner', {
       cancel: vi.fn(() => Promise.resolve(false))
     },
     osc: {
-      send: vi.fn(() => Promise.resolve({ ok: true }))
+      send: vi.fn(() => Promise.resolve({ ok: true })),
+      interfaces: vi.fn(() => Promise.resolve({
+        interfaces: [],
+        input: { selected: null, boundAddress: null, missing: false },
+        output: { selected: null, boundAddress: null, missing: false }
+      })),
+      setInterface: vi.fn(() => Promise.resolve({
+        ok: true as const,
+        interfaces: [],
+        input: { selected: null, boundAddress: null, missing: false },
+        output: { selected: null, boundAddress: null, missing: false }
+      }))
     },
     show: {
       snapshot: vi.fn(() => Promise.resolve({

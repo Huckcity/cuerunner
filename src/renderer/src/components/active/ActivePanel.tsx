@@ -8,6 +8,7 @@ import { CUE_COLOR_VAR } from '../../utils/cueColors'
 import { formatRunTime, runTiming } from '../../utils/runTiming'
 import { groupDurationMs } from '../../utils/cueDuration'
 import { scrubbableRegion, scrubPositionMs } from '../../utils/scrub'
+import { actingOn, fadedBy } from '../../utils/actingOn'
 import './ActivePanel.css'
 
 interface Props {
@@ -30,6 +31,8 @@ export function ActivePanel({ onClose }: Props) {
   const rows = [...running.values()]
     .filter(run => byId.has(run.cueId))
     .sort((a, b) => a.startedAt - b.startedAt)
+  // The sounds a running fade is moving, so their own rows can say so.
+  const fading = fadedBy(cues, running)
 
   return (
     <div className="active-panel">
@@ -45,7 +48,7 @@ export function ActivePanel({ onClose }: Props) {
           <div className="active-empty">Nothing is running. Cues appear here while they play.</div>
         ) : (
           rows.map(run => (
-            <ActiveRow key={run.cueId} cue={byId.get(run.cueId)!} run={run} cues={cues} />
+            <ActiveRow key={run.cueId} cue={byId.get(run.cueId)!} run={run} cues={cues} fading={fading.has(run.cueId)} />
           ))
         )}
       </div>
@@ -53,7 +56,7 @@ export function ActivePanel({ onClose }: Props) {
   )
 }
 
-function ActiveRow({ cue, run, cues }: { cue: Cue; run: RunningCue; cues: Cue[] }) {
+function ActiveRow({ cue, run, cues, fading }: { cue: Cue; run: RunningCue; cues: Cue[]; fading: boolean }) {
   const fillRef = useRef<HTMLDivElement>(null)
   const timeRef = useRef<HTMLSpanElement>(null)
   const barRef = useRef<HTMLDivElement>(null)
@@ -63,6 +66,7 @@ function ActiveRow({ cue, run, cues }: { cue: Cue; run: RunningCue; cues: Cue[] 
   heldRef.current = held
 
   const totalMs = cue.type === 'group' ? groupDurationMs(cues, cue.id) : cue.duration
+  const acting = actingOn(cue, cues)
   const audio = cue.type === 'audio' ? cue as AudioCue : null
   const region = audio !== null && run.state === 'playing' ? scrubbableRegion(audio) : null
 
@@ -121,8 +125,17 @@ function ActiveRow({ cue, run, cues }: { cue: Cue; run: RunningCue; cues: Cue[] 
       <span className="active-color" style={{ background: CUE_COLOR_VAR[cue.colorLabel] }} />
       <CueIcon type={cue.type} className="active-icon" />
       <span className="active-number">{cue.number}</span>
-      <span className="active-name">{cue.name || 'untitled'}</span>
-      {run.state !== 'playing' && <span className="state-pill active-state">{run.state}</span>}
+      <span className="active-name">
+        {cue.name || 'untitled'}
+        {/* What a fade, a stop or a control cue is acting on: the row is otherwise a name and a
+            clock, and the question in the booth is which sounds it is taking away. */}
+        {acting !== null && <span className="active-targets" title={acting}> → {acting}</span>}
+      </span>
+      {run.state !== 'playing'
+        ? <span className="state-pill active-state">{run.state}</span>
+        : fading
+          ? <span className="state-pill active-state" data-fading="true">fading</span>
+          : null}
       <span className="active-time" ref={timeRef} />
       {audio !== null && (run.state === 'playing' || run.state === 'paused') ? (
         <button

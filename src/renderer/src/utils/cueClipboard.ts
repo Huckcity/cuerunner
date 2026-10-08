@@ -1,5 +1,6 @@
 import type { Cue } from '../../../shared/cue'
 import { nextCueNumber } from './cueDefaults'
+import { retargeted } from '../../../shared/cueTargets'
 
 /**
  * Copy and paste of cues: what is held between the two, and where a paste puts it.
@@ -66,10 +67,9 @@ export function pastedBlock(block: readonly Cue[], cues: readonly Cue[], parentI
       number: String(number++),
       parentId: cue.parentId === null ? parentId : copyOf.get(cue.parentId) ?? parentId
     }
-    if ('targetCueId' in pasted && typeof pasted.targetCueId === 'string' && copyOf.has(pasted.targetCueId)) {
-      (pasted as { targetCueId: string }).targetCueId = copyOf.get(pasted.targetCueId)!
-    }
-    return pasted
+    // A cue that acts on cues pasted with it acts on their copies — every target it names, in
+    // the spelling it already used; a target outside the block is still the original.
+    return retargeted(pasted, copyOf)
   })
 }
 

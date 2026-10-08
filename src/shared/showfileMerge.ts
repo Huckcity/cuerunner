@@ -30,6 +30,8 @@ import type { Cue } from './cue'
 import { heldShowSettings } from './show'
 import type { Workspace } from './workspace'
 import { WORKSPACE_SECTIONS } from './workspaceSections'
+import { fadeTargetsPatch, oscMessagesPatch, STOP_ALL, stopTargetsPatch } from './cueTargets'
+import type { CueType, OscMessage } from './cue'
 import {
   cueLabel,
   cuePlaces,
@@ -80,6 +82,34 @@ export interface MergeResult {
 /** A cue's change on one side of the merge, by cue id. */
 function changeIndex(diff: ReturnType<typeof diffWorkspaces>): Map<string, CueChange> {
   return new Map(diff.changed.map(change => [change.id, change]))
+}
+
+/**
+ * Writes the merge's logical fields back in the fields a cue is read from: a fade's or a stop's
+ * `targets` as its list (or `'all'`), an OSC cue's `messages` as the list with the single message
+ * the cue may have carried taken away — the spelling an edit gives it.
+ */
+function writeLogical(merged: Record<string, unknown>, type: CueType): void {
+  if ((type === 'fade' || type === 'stop') && Object.hasOwn(merged, 'targets')) {
+    const value = merged.targets
+    delete merged.targets
+    const patch: Record<string, unknown> = type === 'stop' && value === STOP_ALL
+      ? stopTargetsPatch(STOP_ALL)
+      : type === 'stop'
+        ? stopTargetsPatch(Array.isArray(value) ? value.map(String) : [])
+        : fadeTargetsPatch(Array.isArray(value) ? value.map(String) : [])
+    for (const [key, entry] of Object.entries(patch)) {
+      if (entry === undefined) delete merged[key]
+      else merged[key] = entry
+    }
+  }
+  if (type === 'osc' && Array.isArray(merged.messages)) {
+    const patch: Record<string, unknown> = oscMessagesPatch(merged.messages as OscMessage[])
+    for (const [key, entry] of Object.entries(patch)) {
+      if (entry === undefined) delete merged[key]
+      else merged[key] = entry
+    }
+  }
 }
 
 function byId(cues: Cue[]): Map<string, Cue> {
@@ -134,6 +164,9 @@ function mergeCue(
     if (myField) tookOurs = true
     else tookTheirs = true
   }
+  // The logical fields are written back in the cue's own spelling: the merge decided the
+  // targets or the messages, and the cue carries them in the fields it is read from.
+  writeLogical(merged, mine.type)
 
   // The file a cue plays is not merged — the two copies resolved it on two machines — so
   // a disagreement about it is reported rather than decided quietly.

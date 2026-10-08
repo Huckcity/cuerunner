@@ -1,3 +1,4 @@
+import type { OscFeedbackSettings } from './oscFeedback'
 import type { MidiMessageKind, OscArg } from './cue'
 import type { RedundancyStatus } from './redundancy'
 
@@ -187,6 +188,12 @@ export interface OscInSettings {
    * the remote or the Monitor.
    */
   allowFrom?: string[]
+  /**
+   * Where the show's state is pushed for a remote to read — the playhead, the running cues and
+   * their progress (`src/shared/oscFeedback.ts`). Optional on disk: a show saved before
+   * feedback existed has none, and absent is off; remotes that ask still get their answers.
+   */
+  feedback?: OscFeedbackSettings
 }
 
 export interface MidiInSettings {

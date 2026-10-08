@@ -24,7 +24,7 @@ An Electron app with three layers — main process, preload bridge, renderer —
 exclusively over IPC. The renderer has no Node access; the audio engine is a native
 process of its own, so a renderer crash does not stop the sound.
 
-The **cue stack is free**: thirteen cue types, groups and timelines, the waveform editor,
+The **cue stack is free**: fourteen cue types, groups and timelines, the waveform editor,
 the run log, workspaces, undo — and the ears it needs: OSC and MIDI input, cue triggers,
 and the monitor that shows what arrived. **Cuerunner Pro** is the show around it —
 wireless and the mic plot, scenes and the desk, the script panel with its tablet view,
@@ -232,7 +232,7 @@ Renderer Layer (React/Zustand)
 Main Process Layer
   ├─ src/main/ipc/handlers.ts (ipcMain.handle)
   │   ├─ MidiEngine (using 'midi' npm package)
-  │   ├─ OscEngine (using 'node-osc')
+  │   ├─ OscEngine (its own UDP sockets and OSC codec, osc/codec.ts)
   │   └─ WorkspaceManager (fs + file dialogs)
   └─ src/main/ipc/windowHandlers.ts (the per-window channels: close request, menu action)
 ```

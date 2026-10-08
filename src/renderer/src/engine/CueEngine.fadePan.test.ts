@@ -13,7 +13,7 @@ const runners: CueEngine[] = []
 afterEach(() => { for (const runner of runners.splice(0)) runner.dispose() })
 
 function fade(patch: Partial<FadeCue>): FadeCue {
-  return { ...(createCue('fade') as FadeCue), id: 'f', targetCueId: 'a', duration: 2000, ...patch }
+  return { ...(createCue('fade') as FadeCue), id: 'f', targetCueIds: ['a'], duration: 2000, ...patch }
 }
 
 function setup(cues: Cue[]): CueEngine {

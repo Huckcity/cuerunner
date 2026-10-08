@@ -77,6 +77,11 @@
   white-space: nowrap;
 }
 
+.active-targets {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
 .active-name {
   overflow: hidden;
   text-overflow: ellipsis;

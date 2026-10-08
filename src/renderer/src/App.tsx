@@ -21,6 +21,9 @@ import { useMediaLengths } from './hooks/useMediaLengths'
 import { useSilenceTrim } from './hooks/useSilenceTrim'
 import { useShowBridge } from './hooks/useShowBridge'
 import { useCueTriggers } from './hooks/useCueTriggers'
+import { useHotkeyTriggers } from './hooks/useHotkeyTriggers'
+import { useClockTriggers } from './hooks/useClockTriggers'
+import { useOscFeedback } from './hooks/useOscFeedback'
 import { useDeskButtons } from './hooks/useDeskButtons'
 import { useHighestWins } from './hooks/useHighestWins'
 import { useCompanionPublisher } from './hooks/useCompanionPublisher'
@@ -63,6 +66,9 @@ export function App() {
   useSilenceTrim()
   useShowBridge()
   useCueTriggers()
+  useHotkeyTriggers()
+  useClockTriggers()
+  useOscFeedback()
   useDeskButtons()
   useHighestWins()
   useCompanionPublisher()

@@ -1,5 +1,7 @@
 import { create } from 'zustand'
-import type { Cue, CueType, AudioCue, GroupCue, SoundRegion } from '../../../shared/cue'
+import type { Cue, CueType, AudioCue, GroupCue, OscPatch, SoundRegion } from '../../../shared/cue'
+import { withPatch } from '../../../shared/cueTargets'
+import { heldOscPatches } from '../../../shared/oscPatches'
 import type { MissingMedia } from '../../../shared/media'
 import type { ShowHistoryEntry } from '../../../shared/showfile'
 import type { MergeNote, MergeTally } from '../../../shared/showfileMerge'
@@ -323,6 +325,13 @@ interface CueListState {
   timecode: TimecodeShowSettings
   setTimecode: (patch: Partial<TimecodeShowSettings>) => void
 
+  /**
+   * The show's named OSC destinations: workspace content, so an edit dirties the show and
+   * enters undo with the cues whose messages name them.
+   */
+  oscPatches: OscPatch[]
+  setOscPatches: (next: OscPatch[]) => void
+
   // Show services. Everything here is reported by the main process and rendered by the
   // monitor panel: what is listening, what is on stage, and what has gone wrong. None
   // of it is workspace content, so none of it dirties the show or enters undo.
@@ -570,7 +579,8 @@ interface CueListState {
     triggerGuard?: TriggerGuardSettings,
     history?: ShowHistoryEntry[],
     lighting?: LightingSettings,
-    timecode?: TimecodeShowSettings
+    timecode?: TimecodeShowSettings,
+    oscPatches?: OscPatch[]
   ) => void
   /** A save that reached the disk: its path, and the history it wrote into the file. */
   saveSucceeded: (path: string, name: string, history: ShowHistoryEntry[]) => void
@@ -592,6 +602,7 @@ interface EditSnapshot {
   plot: RfPlot
   lighting: LightingSettings
   timecode: TimecodeShowSettings
+  oscPatches: OscPatch[]
 }
 
 function snapshotOf(state: CueListState): EditSnapshot {
@@ -602,7 +613,8 @@ function snapshotOf(state: CueListState): EditSnapshot {
     desk: state.showSettings.desk,
     plot: state.showSettings.rf.plot,
     lighting: state.lighting,
-    timecode: state.timecode
+    timecode: state.timecode,
+    oscPatches: state.oscPatches
   }
 }
 
@@ -726,7 +738,10 @@ function cueRetargeted(cues: Cue[], id: string, patch: Partial<Cue>): boolean {
  * file that answered, not about the cue.
  */
 function patchedCue(cue: Cue, patch: Partial<Cue>): Cue {
-  const next = { ...cue, ...patch } as Cue
+  // A field the patch names as undefined is taken off the cue rather than left on it as
+  // undefined: that is how an edit moves a cue from one spelling of a field to another — a
+  // fade's single legacy target to its list (`fadeTargetsPatch`) — without carrying both.
+  const next = withPatch(cue, patch) as Cue
   // Only an audio cue has a file to point somewhere else, and only a measurement has a
   // file to belong to.
   const was = cue.type === 'audio' ? cue : null
@@ -852,6 +867,7 @@ export const useStore = create<CueListState>((set) => ({
   triggerGuard: { ...DEFAULT_TRIGGER_GUARD },
   lighting: defaultLightingSettings(),
   timecode: defaultTimecodeShowSettings(),
+  oscPatches: [],
   showServices: [],
   showDevices: [],
   showAlerts: [],
@@ -1187,6 +1203,7 @@ export const useStore = create<CueListState>((set) => ({
       showSettings: restoreSettings(s.showSettings, snapshot),
       lighting: snapshot.lighting,
       timecode: snapshot.timecode,
+      oscPatches: snapshot.oscPatches,
       past,
       future: [snapshotOf(s), ...s.future.slice(0, HISTORY_LIMIT - 1)],
       // An undo after a save moves the cues away from the file's bytes: the session is
@@ -1204,6 +1221,7 @@ export const useStore = create<CueListState>((set) => ({
       showSettings: restoreSettings(s.showSettings, snapshot),
       lighting: snapshot.lighting,
       timecode: snapshot.timecode,
+      oscPatches: snapshot.oscPatches,
       future,
       past: pushPast(s.past, snapshotOf(s)),
       // A redo after a save is an edit like any other: it leaves the file behind.
@@ -1560,7 +1578,7 @@ export const useStore = create<CueListState>((set) => ({
 
   markDirty: () => set({ isDirty: true }),
 
-  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history, lighting, timecode) => set(() => {
+  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history, lighting, timecode, oscPatches) => set(() => {
     // Where the operator was standing when the file was saved is not in the file; a load
     // starts on the show's first cue.
     const first = cues.find(c => c.parentId === null)?.id ?? cues[0]?.id ?? null
@@ -1597,6 +1615,8 @@ export const useStore = create<CueListState>((set) => ({
       lighting: heldLighting(lighting),
       // A show that says nothing about timecode follows it with the defaults.
       timecode: heldTimecode(timecode),
+      // A show with no OSC patches opens with none.
+      oscPatches: heldOscPatches(oscPatches),
       // The file's own record of its saves. A file that has never been saved has none.
       showHistory: history ?? [],
       // Where the last show's cursor sat says nothing about this one.
@@ -1649,6 +1669,13 @@ export const useStore = create<CueListState>((set) => ({
 
   setTimecode: (patch) => set(s => ({
     timecode: normalizeTimecodeShowSettings({ ...s.timecode, ...patch }),
+    isDirty: true,
+    past: pushPast(s.past, snapshotOf(s)),
+    future: []
+  })),
+
+  setOscPatches: (oscPatches) => set(s => ({
+    oscPatches,
     isDirty: true,
     past: pushPast(s.past, snapshotOf(s)),
     future: []

@@ -28,7 +28,7 @@ import type { ShowSettings, TelemetrySource } from '../../shared/show'
 import { defaultRedundancySettings, type RedundancySettings } from '../../shared/redundancy'
 import { deskLinkName } from '../../shared/deskLink'
 import { SqNativeEngine } from '../desk/SqNativeEngine'
-import { OscInputService } from './OscInputService'
+import { OscInputService, type OscSocket } from './OscInputService'
 import { MidiInputService } from './MidiInputService'
 import { MidiTcpService, type DeskLink } from './MidiTcpService'
 import { SqNativeService } from './SqNativeService'
@@ -324,20 +324,6 @@ interface Driver {
 
 // ─── The fakes each seam takes ─────────────────────────────────────────────────
 
-/** Stands in for node-osc's server, so a drive opens no UDP port. */
-class FakeOscServer extends EventEmitter {
-  readonly port: number
-
-  constructor(port: number) {
-    super()
-    this.port = port
-  }
-
-  close(): void {
-    // Nothing was opened, so there is nothing to release.
-  }
-}
-
 /** Stands in for the optional `midi` package's view of the machine: a port list and inputs. */
 class FakeMidiOs {
   failWith: Error | null = null
@@ -382,24 +368,25 @@ class FakeSocket extends EventEmitter {
 // ─── The drives ────────────────────────────────────────────────────────────────
 
 function oscDriver(): Driver {
-  const servers: FakeOscServer[] = []
+  const sockets: FakeSocket[] = []
   return {
-    // The OSC listener holds no clock of its own.
+    // The OSC listener holds no clock of its own until a remote is fed back to.
     arms: [],
     names: 'EADDRINUSE',
     start(h) {
-      const service = new OscInputService(port => {
-        const server = new FakeOscServer(port)
-        servers.push(server)
-        return server
+      const service = new OscInputService({
+        open: () => {
+          const socket = new FakeSocket()
+          sockets.push(socket)
+          return socket as unknown as OscSocket
+        }
       })
       service.start(h.context, h.settings({ oscIn: { enabled: true, port: 53000 } }))
-      servers[0].emit('listening')
       return service
     },
     crash() {
       // The port somebody else holds, reported on the socket the service opened.
-      servers[0].emit('error', new Error('EADDRINUSE'))
+      sockets[0].emit('error', Object.assign(new Error('bind EADDRINUSE 0.0.0.0:53000'), { code: 'EADDRINUSE' }))
     }
   }
 }

@@ -54,6 +54,11 @@ export class PresenceService implements ShowService {
   private failure: string | null = null
 
   constructor(
+    // Address reuse is required here and kept: mDNS is multicast on 5353, a port the
+    // machine's own responder (Bonjour, Avahi) already holds and must keep holding. Every
+    // socket in the group is handed a copy of each announcement, so sharing loses nothing,
+    // and binding exclusively would either fail beside the responder or, started first,
+    // take the network's names away from the machine.
     private readonly open: () => PresenceSocket = () =>
       createSocket({ type: 'udp4', reuseAddr: true })
   ) {}

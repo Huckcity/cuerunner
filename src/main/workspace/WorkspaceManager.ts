@@ -29,6 +29,7 @@ import { heldShowSettings } from '../../shared/show'
 import { LIGHTING_SHAPE } from '../../shared/dmxShape'
 import { lightingRefusal } from '../../shared/dmx'
 import { TIMECODE_SHOW_SHAPE } from '../../shared/timecodeShape'
+import { OSC_PATCH_SHAPE, oscPatchesRefusal } from '../../shared/oscPatches'
 import { timecodeShowRefusal, type TimecodeShowSettings } from '../../shared/timecode'
 import { hasCueList, isUnnamedShow, normalizeTriggerGuard, UNTITLED_SHOW } from '../../shared/workspace'
 import {
@@ -707,6 +708,16 @@ function refuseUnknownShape(workspace: Workspace, source: string): void {
   if (Object.hasOwn(workspace, 'timecode') && workspace.timecode !== undefined) {
     refuseForeignFields(workspace.timecode, TIMECODE_SHOW_SHAPE, 'timecode', -1, source, SHOW_VOICE_STRICT, null)
     const refusal = timecodeShowRefusal(workspace.timecode as TimecodeShowSettings)
+    if (refusal !== null) {
+      throw new Refusal(`that show has ${refusal} — ${source} was probably saved by another build`)
+    }
+  }
+  // The show's OSC patches are read element by element the way the lighting is — a field this
+  // build does not write refuses, and so does one it writes and the file left out — and then for
+  // what a kind cannot say: two patches under one id, a port past UDP's, more than a show names.
+  if (Object.hasOwn(workspace, 'oscPatches') && workspace.oscPatches !== undefined) {
+    refuseForeignValue(workspace.oscPatches, { elements: OSC_PATCH_SHAPE }, 'oscPatches', source, SHOW_VOICE_STRICT, null)
+    const refusal = oscPatchesRefusal(workspace.oscPatches)
     if (refusal !== null) {
       throw new Refusal(`that show has ${refusal} — ${source} was probably saved by another build`)
     }

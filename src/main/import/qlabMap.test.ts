@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import path from 'node:path'
 import type {
-  AudioCue, Cue, FadeCue, GroupCue, MidiCue, MscCue, OscCue, StopCue, DevampCue, WaitCue
+  AudioCue, ControlCue, Cue, FadeCue, GroupCue, MidiCue, MscCue, OscCue, StopCue, DevampCue, WaitCue
 } from '../../shared/cue'
 import { mapQLabShow, mediaPath, oscTokens, parseOscMessage } from './qlabMap'
 import { parseQLabWorkspace } from './qlabFile'
@@ -60,7 +60,9 @@ describe('the Press Night workspace, mapped', () => {
     expect(row('MIDI', null)).toBe(1)
     expect(row('Network', 'osc')).toBe(2)
     expect(row('Network', null)).toBe(1)
-    for (const placeholder of ['Script', 'Video', 'Light', 'Start', 'Timecode']) expect(row(placeholder, null)).toBe(1)
+    for (const placeholder of ['Script', 'Video', 'Light', 'Timecode']) expect(row(placeholder, null)).toBe(1)
+    // QLab's Start cue is a Control cue here, not a placeholder.
+    expect(row('Start', 'control')).toBe(1)
     expect(mapped.types.reduce((sum, entry) => sum + entry.count, 0)).toBe(30)
   })
 
@@ -71,9 +73,14 @@ describe('the Press Night workspace, mapped', () => {
     expect(video.notes).toContain('File: video/intro.mov')
     expect(byNumber<WaitCue>(cues, '13').notes).toContain('tell application "QLab" to start')
     expect(byNumber<WaitCue>(cues, '15').notes).toContain('all = 0')
-    expect(byNumber<WaitCue>(cues, '17').notes).toContain('Targets cue 4.')
     expect(mapped.notes.filter(note => note.kind === 'placeholder').map(note => note.number))
-      .toEqual(['10', '12', '13', '14', '15', '17', '18'])
+      .toEqual(['10', '12', '13', '14', '15', '18'])
+  })
+
+  it('makes QLab’s Start cue a Control cue aimed at the cue it names', () => {
+    expect(byNumber<ControlCue>(cues, '17')).toMatchObject({
+      type: 'control', action: 'start', isArmed: true, targetCueIds: [byNumber(cues, '4').id]
+    })
   })
 
   it('keeps a second list as a disarmed group, so GO never runs into it', () => {
@@ -218,15 +225,17 @@ describe('fade, stop and devamp', () => {
       number: '2', target: { uniqueID: 'T', number: '' }, duration: 4, fadeTo: { master: 0.5, pan: null }, stopTargetWhenDone: true
     })]), ids)
     expect(byNumber<FadeCue>(cues, '2')).toMatchObject({
-      type: 'fade', targetCueId: 'T', fadeProperty: 'volume', targetValue: 0.5, duration: 4000, curve: 'sCurve', stopTargetWhenDone: true
+      type: 'fade', targetCueIds: ['T'], fadeProperty: 'volume', targetValue: 0.5, duration: 4000, curve: 'sCurve', stopTargetWhenDone: true
     })
+    // The list, not the single field a show saved before lists carries.
+    expect('targetCueId' in byNumber<FadeCue>(cues, '2')).toBe(false)
   })
 
   it('fades pan when pan is all it moves, and finds a target by number', () => {
     const { cues } = mapQLabShow(show([target, rec('fade', {
       number: '2', target: { uniqueID: '', number: '1' }, fadeTo: { master: null, pan: -0.5 }
     })]), ids)
-    expect(byNumber<FadeCue>(cues, '2')).toMatchObject({ targetCueId: 'T', fadeProperty: 'pan', targetValue: -0.5 })
+    expect(byNumber<FadeCue>(cues, '2')).toMatchObject({ targetCueIds: ['T'], fadeProperty: 'pan', targetValue: -0.5 })
   })
 
   it('holds a fade with nothing Cuerunner can fade as a placeholder', () => {
@@ -255,8 +264,42 @@ describe('fade, stop and devamp', () => {
       rec('stop', { number: '2', target: { uniqueID: 'T', number: '' } }),
       rec('devamp', { number: '3', target: { uniqueID: 'T', number: '' } })
     ]), ids)
-    expect(byNumber<StopCue>(cues, '2')).toMatchObject({ type: 'stop', targetCueId: 'T', fadeOut: false })
+    expect(byNumber<StopCue>(cues, '2')).toMatchObject({ type: 'stop', targetCueIds: ['T'], fadeOut: false })
+    // Never "all": QLab's stop stops what it names.
+    expect('targetCueId' in byNumber<StopCue>(cues, '2')).toBe(false)
     expect(byNumber<DevampCue>(cues, '3')).toMatchObject({ type: 'devamp', targetCueId: 'T' })
+  })
+
+  it('keeps a stop with no target a stop of nothing, not of everything', () => {
+    const { cues } = mapQLabShow(show([rec('stop', { number: '2' })]), ids)
+    expect(byNumber<StopCue>(cues, '2').targetCueIds).toEqual([])
+  })
+})
+
+describe('control cues', () => {
+  const target = rec('audio', { uniqueID: 'T', number: '1', media: { relative: 'a.wav', absolute: '' } })
+
+  it('makes each of QLab’s control cue types a Control cue with that verb', () => {
+    const kinds = ['start', 'pause', 'load', 'reset', 'goto', 'arm', 'disarm'] as const
+    const { cues, types } = mapQLabShow(show([
+      target,
+      ...kinds.map((kind, index) => rec(kind, { number: String(index + 2), target: { uniqueID: 'T', number: '' } }))
+    ]), ids)
+    expect(kinds.map((_, index) => byNumber<ControlCue>(cues, String(index + 2)))).toEqual(
+      kinds.map(kind => expect.objectContaining({ type: 'control', action: kind, targetCueIds: ['T'] }))
+    )
+    expect(types.filter(entry => entry.becameType === 'control').reduce((sum, entry) => sum + entry.count, 0)).toBe(7)
+  })
+
+  it('keeps a Load cue’s time into its target', () => {
+    const { cues } = mapQLabShow(show([target, rec('load', { number: '2', target: { uniqueID: 'T', number: '' }, loadAt: 12.5 })]), ids)
+    expect(byNumber<ControlCue>(cues, '2')).toMatchObject({ action: 'load', loadToMs: 12_500 })
+  })
+
+  it('says when a control cue’s target is missing', () => {
+    const { cues, notes } = mapQLabShow(show([rec('start', { number: '2', target: { uniqueID: 'nope', number: '99' } })]), ids)
+    expect(byNumber<ControlCue>(cues, '2').targetCueIds).toEqual([])
+    expect(notes[0].detail).toBe('its target, cue 99, is not in this show: pick one in the inspector')
   })
 })
 
@@ -307,19 +350,31 @@ describe('MIDI', () => {
 
 describe('network', () => {
   it('sends an OSC message to the patch’s destination, its arguments typed as QLab types them', () => {
-    const { cues, notes } = mapQLabShow(show([rec('network', {
+    const mapped = mapQLabShow(show([rec('network', {
       network: { kind: 'osc', message: '/eos/cue/1/go 1 -2.5 "hello world" word', host: '10.0.0.5', port: 8000, patch: 'desk' }
     })]), ids)
-    expect(cues[0] as OscCue).toMatchObject({
-      type: 'osc', host: '10.0.0.5', port: 8000, address: '/eos/cue/1/go',
+    const { cues, notes } = mapped
+    expect(mapped.oscPatches).toEqual([{ id: expect.any(String), name: 'desk', host: '10.0.0.5', port: 8000 }])
+    expect((cues[0] as OscCue).messages).toEqual([{
+      patchId: mapped.oscPatches[0].id, host: '10.0.0.5', port: 8000, address: '/eos/cue/1/go',
       args: [{ type: 'i', value: 1 }, { type: 'f', value: -2.5 }, { type: 's', value: 'hello world' }, { type: 's', value: 'word' }]
-    })
+    }])
     expect(notes).toEqual([])
+  })
+
+  it('makes each named patch once, shared by every cue that sends through it', () => {
+    const network = (message: string, patch: string) =>
+      rec('network', { network: { kind: 'osc', message, host: '10.0.0.5', port: 8000, patch } })
+    const mapped = mapQLabShow(show([network('/a', 'desk'), network('/b', 'desk'), network('/c', 'video')]), ids)
+    expect(mapped.oscPatches.map(patch => patch.name)).toEqual(['desk', 'video'])
+    const patchOf = (index: number) => (mapped.cues[index] as OscCue).messages![0].patchId
+    expect(patchOf(0)).toBe(patchOf(1))
+    expect(patchOf(2)).not.toBe(patchOf(0))
   })
 
   it('says so when the patch does not say where it sends', () => {
     const { cues, notes } = mapQLabShow(show([rec('network', { network: { kind: 'osc', message: '/go', host: null, port: null, patch: 'Patch 3' } })]), ids)
-    expect(cues[0] as OscCue).toMatchObject({ host: '127.0.0.1', port: 53000 })
+    expect((cues[0] as OscCue).messages).toEqual([{ patchId: '', host: '127.0.0.1', port: 53000, address: '/go', args: [] }])
     expect(notes[0].detail).toBe('QLab’s network patch “Patch 3” did not say where it sends: set the host and port')
   })
 

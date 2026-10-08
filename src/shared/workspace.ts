@@ -1,4 +1,4 @@
-import type { Cue } from './cue'
+import type { Cue, OscPatch } from './cue'
 import type { ShowSettings } from './show'
 import type { ShowHistoryEntry } from './showfile'
 import type { LightingSettings } from './dmx'
@@ -167,6 +167,12 @@ export interface Workspace {
    * is the machine's, not here.
    */
   timecode?: TimecodeShowSettings
+  /**
+   * The show's named OSC destinations, chosen per message by an OSC cue. Optional: a show with
+   * none carries no such section, so a show saved before patches existed writes the bytes it
+   * always wrote.
+   */
+  oscPatches?: OscPatch[]
   cues: Cue[]
 }
 

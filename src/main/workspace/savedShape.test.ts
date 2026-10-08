@@ -125,6 +125,8 @@ const fixture: Required<Workspace> = {
   lighting,
   // Moved from its defaults, as a show that chases a clock carries it.
   timecode: { rate: '29.97df', holdMs: 1500, chase: true, offsetFrames: -108000, onStop: 'continue', toleranceFrames: 12 },
+  // A destination the show's OSC cues name, as a show that sends to a desk carries it.
+  oscPatches: [{ id: 'p-desk', name: 'Lighting desk', host: '10.0.0.30', port: 8000 }],
   cues: [cue('a1', 'Walk-in'), cue('a2', 'Interval')]
 }
 
@@ -178,6 +180,7 @@ const declared: readonly WorkspaceKey[] = [
   'triggerGuard',
   'lighting',
   'timecode',
+  'oscPatches',
   'cues'
 ]
 
@@ -196,13 +199,22 @@ describe('the saved shape', () => {
 
   it('leaves an unset section out of the file rather than writing an empty one', () => {
     const bare = serialiseWorkspace(
-      { ...fixture, history: undefined, showSettings: undefined, triggerGuard: undefined, lighting: undefined, timecode: undefined },
+      {
+        ...fixture,
+        history: undefined,
+        showSettings: undefined,
+        triggerGuard: undefined,
+        lighting: undefined,
+        timecode: undefined,
+        oscPatches: undefined
+      },
       SHOWS
     )
 
     expect(Object.keys(JSON.parse(bare))).toEqual(
       declared.filter(
-        key => key !== 'history' && key !== 'showSettings' && key !== 'triggerGuard' && key !== 'lighting' && key !== 'timecode'
+        key => key !== 'history' && key !== 'showSettings' && key !== 'triggerGuard' && key !== 'lighting' &&
+          key !== 'timecode' && key !== 'oscPatches'
       )
     )
   })
@@ -521,6 +533,10 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
       { type: 'f', value: 3.5 },
       { type: 's', value: '/lx/12' },
       { type: 'T', value: true }
+    ],
+    // The list a cue that sends several carries: a message to a patch, with its own arguments.
+    messages: [
+      { patchId: 'p-desk', host: '', port: 0, address: '/eos/cue/12/fire', args: [{ type: 'f', value: 1 }] }
     ]
   },
   wait: { ...cueBase('w1'), type: 'wait' },
@@ -528,6 +544,7 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     ...cueBase('f1'),
     type: 'fade',
     targetCueId: '',
+    targetCueIds: ['a1', 'g1'],
     fadeProperty: 'volume',
     targetValue: 1,
     panTargetValue: -0.5,
@@ -538,6 +555,7 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     ...cueBase('s1'),
     type: 'stop',
     targetCueId: 'all',
+    targetCueIds: ['a1'],
     fadeOut: false,
     fadeOutDuration: 0,
     waitForFade: false
@@ -618,6 +636,18 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     artnet: false,
     artnetHost: '255.255.255.255',
     triggers: [{ id: 'tr-tc', kind: 'timecode', timecode: '00:59:50:00' }]
+  },
+  control: {
+    ...cueBase('ct1'),
+    type: 'control',
+    action: 'load',
+    targetCueIds: ['a1', 'g1'],
+    loadToMs: 12_000,
+    // The two triggers a control cue is as likely as any to carry: a key and a time of day.
+    triggers: [
+      { id: 'tr-key', kind: 'hotkey', key: 'Shift+F7' },
+      { id: 'tr-clock', kind: 'clock', time: '19:30', days: [5, 6], missed: 'fire', graceMinutes: 5 }
+    ]
   }
 }
 

@@ -67,7 +67,14 @@ import type {
   MidiFileResumeResult
 } from '../shared/ipc/midi'
 import { NETWORK_CHANNELS } from '../shared/ipc/network'
-import { OSC_CHANNELS, type OscSendPayload, type OscSendResult } from '../shared/ipc/osc'
+import {
+  OSC_CHANNELS,
+  type OscInterfaceState,
+  type OscSendPayload,
+  type OscSendResult,
+  type OscSetInterfacePayload,
+  type OscSetInterfaceResult
+} from '../shared/ipc/osc'
 import { REDUNDANCY_CHANNELS, type RedundancyConfigureResult } from '../shared/ipc/redundancy'
 import {
   TIMECODE_CHANNELS,
@@ -315,7 +322,11 @@ contextBridge.exposeInMainWorld('cuerunner', {
   },
   osc: {
     send: (cmd: OscSendPayload): Promise<OscSendResult> =>
-      invoke(OSC_CHANNELS.send, cmd)
+      invoke(OSC_CHANNELS.send, cmd),
+    interfaces: (): Promise<OscInterfaceState> =>
+      invoke(OSC_CHANNELS.interfaces),
+    setInterface: (payload: OscSetInterfacePayload): Promise<OscSetInterfaceResult> =>
+      invoke(OSC_CHANNELS.setInterface, payload)
   },
   show: {
     snapshot: (): Promise<ShowSnapshot> =>

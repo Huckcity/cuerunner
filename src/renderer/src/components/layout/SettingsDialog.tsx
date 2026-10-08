@@ -25,6 +25,7 @@ import type { SettingsTab } from '../../store'
 import { LicenseSection } from '../license/LicenseSection'
 import { RedundancySection } from '../redundancy/RedundancySection'
 import { TimecodeSection } from '../timecode/TimecodeSection'
+import { OscSettings } from '../osc/OscSettings'
 import './SettingsDialog.css'
 
 interface Props {
@@ -715,6 +716,8 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                   Addresses or ranges, comma-separated. Empty hears everyone.
                 </p>
               </ServiceBlock>
+
+              <OscSettings />
 
               {!pro && (
                 <ProHint onUnlock={() => setTab('license')}>

@@ -2,6 +2,8 @@ import { savedShape, type WorkspaceValues } from '../../../shared/workspaceSecti
 import type { Workspace } from '../../../shared/workspace'
 import { isEmptyLighting, type LightingSettings } from '../../../shared/dmx'
 import { isDefaultTimecodeShow, type TimecodeShowSettings } from '../../../shared/timecode'
+import { savedOscPatches } from '../../../shared/oscPatches'
+import type { OscPatch } from '../../../shared/cue'
 
 // The saved form of the current session. A real save and an autosave snapshot are built
 // the same way, so a recovered workspace has the shape a saved one does.
@@ -32,10 +34,15 @@ import { isDefaultTimecodeShow, type TimecodeShowSettings } from '../../../share
 // optional on the saved form, so a call site that forgot it would compile and save a show
 // that had stopped chasing. A show that leaves it at the defaults writes no section — so a
 // show saved before timecode existed, or that never touched it, stays byte-identical.
+//
+// The OSC patches are named by every caller the same way and for the same reason: a show with
+// none writes no section, and a call site that forgot them would save a show whose messages
+// name patches it no longer has.
 export function buildWorkspace(
-  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode'> & {
+  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode' | 'oscPatches'> & {
     lighting: LightingSettings | undefined
     timecode: TimecodeShowSettings | undefined
+    oscPatches: OscPatch[] | undefined
   }
 ): Workspace {
   return savedShape({
@@ -45,6 +52,7 @@ export function buildWorkspace(
     // be the key every save of every show carries for no reason.
     history: values.history && values.history.length > 0 ? values.history : undefined,
     lighting: values.lighting === undefined || isEmptyLighting(values.lighting) ? undefined : values.lighting,
-    timecode: values.timecode === undefined || isDefaultTimecodeShow(values.timecode) ? undefined : values.timecode
+    timecode: values.timecode === undefined || isDefaultTimecodeShow(values.timecode) ? undefined : values.timecode,
+    oscPatches: savedOscPatches(values.oscPatches)
   })
 }

@@ -86,6 +86,7 @@ export const WORKSPACE_SECTIONS = [
   { key: 'triggerGuard', route: 'guard', merge: 'section' },
   { key: 'lighting', route: 'lighting', merge: 'section' },
   { key: 'timecode', route: 'timecode', merge: 'section' },
+  { key: 'oscPatches', route: 'oscPatches', merge: 'section' },
   { key: 'cues', route: null, merge: 'cue' }
 ] as const satisfies readonly WorkspaceSection[]
 
@@ -298,7 +299,11 @@ export const SHOW_SETTINGS_SHAPE = {
     enabled: 'boolean',
     port: 'number',
     remote: { absent: true, of: 'boolean' },
-    allowFrom: { absent: true, of: { items: 'string' } }
+    allowFrom: { absent: true, of: { items: 'string' } },
+    feedback: {
+      absent: true,
+      of: { enabled: 'boolean', host: 'string', port: { bounded: [1, 65535] }, rateHz: { bounded: [0, 30] } }
+    }
   },
   midiIn: { enabled: 'boolean', portNames: { items: 'string' } },
   desk: {
@@ -530,15 +535,37 @@ export const CUE_FIELD_SHAPE = {
   osc: {
     ...CUE_BASE_SHAPE,
     type: 'string',
-    host: 'string',
-    port: 'number',
-    address: 'string',
+    // The one message a cue written before a cue could send several carries on itself; a cue
+    // that carries `messages` has none of these.
+    host: { absent: true, of: 'string' },
+    port: { absent: true, of: 'number' },
+    address: { absent: true, of: 'string' },
     // An argument is an object of two fields, and its value is the one field in the saved
     // form whose type allows more than one kind: a number, a string or a boolean.
     args: {
-      elements: {
-        type: 'string',
-        value: { oneOf: ['number', 'string', 'boolean'] }
+      absent: true,
+      of: {
+        elements: {
+          type: 'string',
+          value: { oneOf: ['number', 'string', 'boolean'] }
+        }
+      }
+    },
+    messages: {
+      absent: true,
+      of: {
+        elements: {
+          patchId: 'string',
+          host: 'string',
+          port: 'number',
+          address: 'string',
+          args: {
+            elements: {
+              type: 'string',
+              value: { oneOf: ['number', 'string', 'boolean'] }
+            }
+          }
+        }
       }
     }
   },
@@ -546,7 +573,9 @@ export const CUE_FIELD_SHAPE = {
   fade: {
     ...CUE_BASE_SHAPE,
     type: 'string',
-    targetCueId: 'string',
+    // One target as a show saved before lists wrote it, or the list: `fadeTargetIds` reads both.
+    targetCueId: { absent: true, of: 'string' },
+    targetCueIds: { absent: true, of: { items: 'string' } },
     fadeProperty: 'string',
     targetValue: 'number',
     panTargetValue: { absent: true, of: { nothing: true, of: { bounded: [-1, 1] } } },
@@ -556,7 +585,9 @@ export const CUE_FIELD_SHAPE = {
   stop: {
     ...CUE_BASE_SHAPE,
     type: 'string',
-    targetCueId: 'string',
+    // `'all'` or one target, or the list: `stopTargetIds` reads them.
+    targetCueId: { absent: true, of: 'string' },
+    targetCueIds: { absent: true, of: { items: 'string' } },
     fadeOut: 'boolean',
     fadeOutDuration: 'number',
     waitForFade: 'boolean'
@@ -647,6 +678,13 @@ export const CUE_FIELD_SHAPE = {
     ltcLevelDb: 'number',
     artnet: 'boolean',
     artnetHost: 'string'
+  },
+  control: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    action: 'string',
+    targetCueIds: { items: 'string' },
+    loadToMs: 'number'
   }
 } as const satisfies { readonly [K in CueType]: ShapeFields<Extract<Cue, { type: K }>> }
 

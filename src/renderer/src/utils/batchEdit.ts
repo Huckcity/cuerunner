@@ -1,5 +1,5 @@
 import { createCue, FADE_DEFAULTS } from './cueDefaults'
-import type { Cue, FadeCue, GroupCue, StopCue } from '../../../shared/cue'
+import type { Cue, FadeCue, StopCue } from '../../../shared/cue'
 
 /**
  * What a batch edit from the cue list's menu sets across the selection. A field left out is
@@ -96,52 +96,44 @@ function decimalsOf(value: number): number {
 export type TargetingKind = 'fade' | 'stop'
 
 /**
- * Whether a cue is something the kind can act on. A fade moves a sound's level, so it is
- * aimed at audio cues; a stop takes away anything that runs, which is every cue but a note.
+ * Whether a cue is something the kind can act on. A fade moves a level — a sound's, a light's
+ * intensity, everything inside a group — so it is aimed at those; a stop takes away anything
+ * that runs, which is every cue but a note.
  */
 export function canTarget(kind: TargetingKind, cue: Cue): boolean {
-  if (kind === 'fade') return cue.type === 'audio'
+  if (kind === 'fade') return cue.type === 'audio' || cue.type === 'light' || cue.type === 'group'
   return cue.type !== 'memo'
 }
 
-function aimed(kind: TargetingKind, target: Cue, number: string): FadeCue | StopCue {
+/**
+ * The cue a "fade these out" or "stop these" makes: one cue, aimed at every target in list
+ * order, named for the one it acts on or for how many. A fade or a stop names any set of cues,
+ * so one GO reaches them all from one row, with one time to edit.
+ *
+ * Several used to be a timeline group holding a cue aimed at each, because a cue could only
+ * name one. Nothing is better about that shape now: a target that needs its own fade time is a
+ * cue of its own, which is one Duplicate away, and the group cost the show a row per target.
+ */
+export function targetingBlock(kind: TargetingKind, targets: readonly Cue[], number: string): Cue[] {
+  const aimedAt = targets.filter(target => canTarget(kind, target))
+  if (aimedAt.length === 0) return []
+  const ids = aimedAt.map(target => target.id)
+  const named = aimedAt.length === 1 ? aimedAt[0].name : `${aimedAt.length} cues`
   if (kind === 'fade') {
-    return {
+    const fade: FadeCue = {
       ...(createCue('fade', number) as FadeCue),
-      name: `Fade out ${target.name}`,
-      targetCueId: target.id,
+      name: `Fade out ${named}`,
+      targetCueIds: ids,
       // A fade made from the list is the fade an operator reaches for there: to silence,
-      // and the cue taken away once it gets there.
+      // and the cues taken away once they get there.
       fadeProperty: 'volume',
       targetValue: 0,
       stopTargetWhenDone: true,
       duration: FADE_DEFAULTS.duration
     }
+    return [fade]
   }
-  return { ...(createCue('stop', number) as StopCue), name: `Stop ${target.name}`, targetCueId: target.id }
-}
-
-/**
- * The cues a "fade these out" or "stop these" makes, in list order. One target is one cue
- * aimed at it. Several are one GO's worth: a timeline group with a cue aimed at each at
- * offset zero, so they all go together and the group is the one row the show steps over.
- *
- * Fade and stop cues name one target each, which is what this app's cue model is; the group
- * is how one press reaches several, and it reads as such on the list.
- */
-export function targetingBlock(kind: TargetingKind, targets: readonly Cue[], number: string): Cue[] {
-  const aimedAt = targets.filter(target => canTarget(kind, target))
-  if (aimedAt.length === 0) return []
-  if (aimedAt.length === 1) return [aimed(kind, aimedAt[0], number)]
-  const group: GroupCue = {
-    ...(createCue('group', number) as GroupCue),
-    name: `${kind === 'fade' ? 'Fade out' : 'Stop'} ${aimedAt.length} cues`,
-    mode: 'timeline'
-  }
-  const children = aimedAt.map((target, index) => ({
-    ...aimed(kind, target, `${number}.${index + 1}`),
-    parentId: group.id,
-    timelineOffset: 0
-  }))
-  return [group, ...children]
+  const stop = createCue('stop', number) as StopCue
+  delete (stop as Partial<StopCue>).targetCueId
+  return [{ ...stop, name: `Stop ${named}`, targetCueIds: ids }]
 }

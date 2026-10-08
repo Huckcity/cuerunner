@@ -5,7 +5,8 @@ import { copyBlock, describeBlock, parseBlock, pastePlace, pastedBlock } from '.
 import { copyCues, cutCues, pasteCues } from '../hooks/useCueClipboard'
 import { createCue } from './cueDefaults'
 import { useStore } from '../store'
-import type { Cue, FadeCue } from '../../../shared/cue'
+import type { ControlCue, Cue, FadeCue, StopCue } from '../../../shared/cue'
+import { fadeTargetIds } from '../../../shared/cueTargets'
 
 function cue(type: Cue['type'], id: string, patch: Partial<Cue> = {}): Cue {
   return { ...createCue(type, id), id, name: `Cue ${id}`, ...patch } as Cue
@@ -14,7 +15,8 @@ function cue(type: Cue['type'], id: string, patch: Partial<Cue> = {}): Cue {
 const show = (): Cue[] => [
   cue('group', 'g'),
   cue('audio', 'a', { parentId: 'g' }),
-  cue('fade', 'f', { parentId: 'g', targetCueId: 'a' } as Partial<FadeCue>),
+  // A fade as a show saved before lists wrote it: one target, in the single field.
+  cue('fade', 'f', { parentId: 'g', targetCueId: 'a', targetCueIds: undefined } as Partial<FadeCue>),
   cue('wait', 'w'),
   cue('memo', 'm')
 ]
@@ -47,6 +49,26 @@ describe('pastedBlock', () => {
     const cues = show()
     const [fade] = pastedBlock(copyBlock(cues, ['f']), cues, null)
     expect((fade as FadeCue).targetCueId).toBe('a')
+  })
+
+  it('re-points every target a list names, and leaves the ones that stayed behind', () => {
+    const cues: Cue[] = [
+      cue('audio', 'a'),
+      cue('audio', 'b'),
+      cue('fade', 'f', { targetCueIds: ['a', 'b'] } as Partial<FadeCue>),
+      cue('stop', 's', { targetCueId: undefined, targetCueIds: ['a', 'b'] } as Partial<StopCue>),
+      cue('control', 'c', { targetCueIds: ['b', 'a'] } as Partial<ControlCue>)
+    ]
+    const [audio, fade, stop, control] = pastedBlock(copyBlock(cues, ['a', 'f', 's', 'c']), cues, null)
+    expect(fadeTargetIds(fade as FadeCue)).toEqual([audio.id, 'b'])
+    expect((stop as StopCue).targetCueIds).toEqual([audio.id, 'b'])
+    expect((control as ControlCue).targetCueIds).toEqual(['b', audio.id])
+  })
+
+  it('keeps a stop of everything a stop of everything', () => {
+    const cues: Cue[] = [cue('stop', 's')]
+    const [stop] = pastedBlock(copyBlock(cues, ['s']), cues, null)
+    expect((stop as StopCue).targetCueId).toBe('all')
   })
 
   it('puts the roots in the group the paste lands in', () => {
