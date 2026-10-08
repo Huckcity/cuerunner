@@ -268,6 +268,7 @@ export const GUIDES = [
             <tr><td>Show Control</td><td>MSC: GO, STOP and LOAD to a desk that speaks it.</td></tr>
             <tr><td>Script</td><td>Run JavaScript, including a system command.</td></tr>
             <tr><td>Scene<span class="pro">Pro</span></td><td>Move the sound desk to a scene you built.</td></tr>
+            <tr><td>Timecode<span class="pro">Pro</span></td><td>Run a SMPTE clock — MTC, LTC and Art-Net — for the rest of the building to follow.</td></tr>
             <tr><td>Devamp</td><td>Let a looping cue out of its loop and play on.</td></tr>
           </tbody>
         </table>
@@ -662,6 +663,44 @@ export const GUIDES = [
         A footswitch that bounces, a desk that sends twice, a key held down: Settings →
         General → <strong>Repeat guard</strong> ignores a second GO arriving within the
         window you set. 300 ms by default; 0 turns it off.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="timecode">
+      <h2>Following timecode<span class="pro">Pro</span></h2>
+      <p>
+        When the show is driven by a clock — the band's playback rig, a video server, the
+        lighting desk's own timeline — Cuerunner can follow it. Settings →
+        <strong>Timecode</strong> → <strong>Source</strong> picks the wire it arrives on:
+        <strong>MTC</strong> on a MIDI input, <strong>LTC</strong> on an audio input channel,
+        or <strong>Art-Net</strong> from the lighting network. The transport bar then shows
+        the clock, and whether it is <strong>Locked</strong>.
+      </p>
+      <p>
+        Give a cue a <strong>Timecode</strong> trigger on its Triggers tab: type the frame, or
+        play the clock to the moment and press <strong>Take</strong>. The cue fires as the
+        clock runs through that frame, exactly as GO would. A clock that skips a few frames
+        still fires what it skipped; one that jumps further has been located, and fires
+        nothing it jumped over.
+      </p>
+      <p>
+        Turn on <strong>Chase</strong> and the cue list goes where the clock goes. Locate the
+        playback rig to the second chorus and the backing track starts at the second chorus;
+        stop it and the cues it started hold, and pick up again where it starts.
+        <strong>Offset</strong> moves the show against the clock, so a show written at
+        10:00:00:00 runs against a clock that starts at 01:00:00:00.
+      </p>
+      <p>
+        A dropout is not a stop: a clock that stops arriving is carried on at its own rate
+        for the <strong>Freewheel</strong> time (a second) before it is called lost, and the
+        loss is an alarm. The rate is read from the stream, and measured where the stream
+        cannot say — 29.97 against 30, which share a code.
+      </p>
+      <p>
+        Going the other way, a <strong>Timecode</strong> cue runs a clock of its own from a
+        start time, out of any mix of MTC, LTC and Art-Net. With <strong>jam sync</strong> it
+        starts from the clock it is hearing and keeps to it, and carries on alone if that
+        clock drops out — a clean clock regenerated for the rest of the building.
       </p>
     </section>
 

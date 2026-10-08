@@ -1,3 +1,5 @@
+import type { TimecodeRate } from './timecode'
+
 /** A cue's colour label, or none. */
 export type CueColor = 'none' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink'
 
@@ -8,7 +10,8 @@ export type CueColor = 'none' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' |
  */
 export const CUE_TYPES = [
   'audio', 'midi', 'osc', 'wait', 'fade', 'stop',
-  'group', 'network', 'script', 'scene', 'devamp', 'msc', 'mic'
+  'group', 'network', 'script', 'scene', 'devamp', 'msc', 'mic',
+  'timecode'
 ] as const
 
 export type CueType = (typeof CUE_TYPES)[number]
@@ -23,8 +26,11 @@ export type CueType = (typeof CUE_TYPES)[number]
  * live equipment on the show's behalf, where a send the operator's own hand caused is not,
  * whichever socket it uses. The runner refuses these through `isProCueType` when the machine
  * is unlicensed.
+ *
+ * `timecode` too: a clock that drives the lighting desk, the video server and the band's
+ * click from the cue list is the production running the building, not a send of its own.
  */
-export const PRO_CUE_TYPES = ['scene', 'mic'] as const satisfies readonly CueType[]
+export const PRO_CUE_TYPES = ['scene', 'mic', 'timecode'] as const satisfies readonly CueType[]
 
 export type ProCueType = (typeof PRO_CUE_TYPES)[number]
 
@@ -76,6 +82,13 @@ export type CueTrigger =
       cueNumber: string
       cueList: string
     }
+  /**
+   * A frame of the incoming SMPTE clock: the cue fires when the clock runs through it. The
+   * label is read at the rate the clock arrives at, as an operator reads it off the desk.
+   * Whichever wire the clock came in on, the trigger is the same — the receiver is the
+   * machine's, the moment is the show's.
+   */
+  | { id: string; kind: 'timecode'; timecode: string }
 
 export interface CueBase {
   id: string
@@ -328,6 +341,37 @@ export interface MscCue extends CueBase {
   portName: string
 }
 
+/**
+ * A cue that runs a SMPTE clock: from a start time, to an end time or until it is stopped,
+ * out of whichever of the three wires the rest of the building listens on — MTC to a MIDI
+ * port, LTC from an output channel of the audio engine, ArtTimeCode to the lighting
+ * network. The clock is one position read by all three, so they cannot disagree.
+ */
+export interface TimecodeCue extends CueBase {
+  type: 'timecode'
+  rate: TimecodeRate
+  /** The label the clock starts from: `01:00:00:00`. */
+  startTimecode: string
+  /** The label it stops itself at, or empty to run until it is stopped. */
+  endTimecode: string
+  /**
+   * Start from the clock being received instead, keep to it while it runs, and carry on
+   * alone when it drops out: a jam sync, which is what regenerates a clock cleanly.
+   */
+  jamSync: boolean
+  mtc: boolean
+  /** The MIDI output for MTC; empty is the show's own MIDI port. */
+  mtcPortName: string
+  ltc: boolean
+  /** The engine output channel LTC is written to, zero-based: a channel of its own. */
+  ltcChannel: number
+  /** LTC's level, dBFS. */
+  ltcLevelDb: number
+  artnet: boolean
+  /** Where ArtTimeCode goes: a broadcast address, a node, or "host:port". */
+  artnetHost: string
+}
+
 export type Cue =
   | AudioCue
   | MidiCue
@@ -342,3 +386,4 @@ export type Cue =
   | DevampCue
   | MscCue
   | MicCue
+  | TimecodeCue

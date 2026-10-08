@@ -153,6 +153,26 @@
       </div>
     </section>
 
+    <section class="panel reveal delay-3" id="timecode">
+      <h2>Timecode</h2>
+      <p>Kept on the computer, not in the show: which port the clock arrives on is a fact about this rack. The receiver is part of Cuerunner Pro. The <a href="../guides/console.html#timecode">guide</a> shows it in use.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Source</td><td>None</td><td>Where the clock comes from: <strong>MTC</strong> on a MIDI input (the first one there is, if none is chosen; a port MIDI input already has open is shared with it), <strong>LTC</strong> on a channel of an audio input, read by the audio engine, or <strong>Art-Net</strong> ArtTimeCode on a UDP port (6454).</td></tr>
+            <tr><td>Rate</td><td>Detect from the stream</td><td>Takes the rate MTC and ArtTimeCode declare, and measures the rest: 29.97 non-drop is told from 30 by timing the stream (a few seconds of it), and LTC's 24, 25 and 30 by its frame numbers. A fixed rate reads every label at that rate instead.</td></tr>
+            <tr><td>Freewheel</td><td>1000 ms</td><td>How long a clock that stops arriving is carried on at its own rate before it counts as lost (0–10000). A cue on a frame inside the gap still fires.</td></tr>
+            <tr><td>Chase</td><td>off</td><td>The cue list goes where the clock goes: a locate starts each audio or wait cue whose trigger is behind the clock and whose length reaches past it, that far into itself, and stops what the clock started and has left behind. Off, a locate only arms again what the clock is now before.</td></tr>
+            <tr><td>When it stops</td><td>Hold</td><td>With chase on, what the cues the clock started do when it stops or is lost: <strong>Hold</strong> stops them and picks them up again where the clock comes back; <strong>Stop</strong> stops them; <strong>Let them run on</strong>.</td></tr>
+            <tr><td>Offset</td><td>00:00:00:00</td><td>Added to the incoming clock before any cue reads it, written in 30 fps labels; a leading minus subtracts. How a show written at 10:00:00:00 runs against a clock that starts at 01:00:00:00.</td></tr>
+            <tr><td>Tolerance</td><td>10 frames</td><td>How far the clock may skip forward and still fire the triggers it skipped (0–300). A jump further than that is a locate.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The panel under the source reads back the clock as it is heard: position, <strong>Locked</strong>, <strong>Freewheel</strong>, <strong>Stopped</strong>, <strong>Lost</strong> or <strong>Waiting</strong>, the rate and whether it was detected, and what the timecode cues are sending. The same readout is in the transport bar and the show monitor.</p>
+    </section>
+
     <section class="panel reveal delay-3" id="license">
       <h2>License</h2>
       <p>

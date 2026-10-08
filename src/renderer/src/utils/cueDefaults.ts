@@ -1,6 +1,6 @@
 import type {
   AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, DevampCue, MicCue,
-  MscCue, Cue, CueType, AudioCrosspoint
+  MscCue, Cue, CueType, AudioCrosspoint, TimecodeCue
 } from '../../../shared/cue'
 
 // Every field a new cue is born with. createCue builds on these, and the inspector's
@@ -51,6 +51,25 @@ export const OSC_DEFAULTS = {
 }
 
 export const WAIT_DEFAULTS = { duration: 2000 }
+
+/**
+ * A new clock starts at the hour, where a show's timecode conventionally starts so that
+ * pre-roll never runs back through midnight, at the European rate, sending MTC to the
+ * show's own MIDI port. LTC and Art-Net are off until a channel and an address are chosen.
+ */
+export const TIMECODE_DEFAULTS = {
+  rate: '25' as const,
+  startTimecode: '01:00:00:00',
+  endTimecode: '',
+  jamSync: false,
+  mtc: true,
+  mtcPortName: '',
+  ltc: false,
+  ltcChannel: 2,
+  ltcLevelDb: -12,
+  artnet: false,
+  artnetHost: '255.255.255.255'
+}
 
 export const FADE_DEFAULTS = {
   targetCueId: '',
@@ -238,6 +257,12 @@ export function createCue(type: CueType, number = '1'): Cue {
         label: '',
         action: 'mute'
       } satisfies MicCue
+    case 'timecode':
+      return {
+        ...base('Timecode', number),
+        type: 'timecode',
+        ...TIMECODE_DEFAULTS
+      } satisfies TimecodeCue
   }
 }
 

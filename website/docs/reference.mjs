@@ -28,6 +28,7 @@ export const SETTINGS_SECTIONS = [
   { tab: 'network', anchor: 'network' },
   { tab: 'wireless', anchor: 'wireless' },
   { tab: 'redundancy', anchor: 'backup' },
+  { tab: 'timecode', anchor: 'timecode' },
   { tab: 'license', anchor: 'license' }
 ]
 
@@ -323,6 +324,10 @@ export const REFERENCE = [
               <td><strong>Mic</strong> — the Sennheiser EW-DX channel to act on, chosen from the packs the show knows (named by the plot and who is wearing the pack, or by what the receiver calls it), and <strong>Do</strong>: <strong>Mute</strong> or <strong>Unmute</strong>. There is no toggle, because a toggle run twice leaves the mic as the first run found it, and a cue list that can be jumped around in cannot know which that was. The receiver is asked afterwards: a mute that did not happen is an error on the cue, in the log and on its row, never a mic left open in silence. With no mic chosen the cue does nothing and says so.</td>
             </tr>
             <tr>
+              <td><strong>Timecode</strong><span class="pro">Pro</span></td>
+              <td>Runs a SMPTE clock. <strong>Rate</strong> — 24, 25, 29.97 drop-frame, 29.97 non-drop or 30 fps (25 for a new cue); <strong>Start from</strong> the <strong>Start</strong> time (01:00:00:00) or the incoming timecode (<strong>jam sync</strong>: the clock starts where the received one is, keeps to it, and carries on alone if it drops out); <strong>End</strong>, or empty to run until stopped — the cue's length is the difference. Outputs, in any mix, all one clock: <strong>MTC</strong> to a MIDI port (the show's output port if none is chosen) — a full-frame message on every start, locate and pause, then quarter frames; <strong>LTC</strong> written by the audio engine to an output channel (3 for a new cue) at a level in dBFS (−12) — give it a channel of its own; <strong>Art-Net</strong> ArtTimeCode once a frame to an address (255.255.255.255), or <code>host:port</code>. While it runs the tab shows where the clock is, with <strong>Pause</strong>/<strong>Resume</strong> and <strong>Locate</strong> to any frame. With no output ticked, or a start or end that is not a frame of the rate, the cue refuses and says why.</td>
+            </tr>
+            <tr>
               <td><strong>Scene</strong><span class="pro">Pro</span></td>
               <td><strong>Scene</strong> — the one to recall. It answers for the whole show rather than for its placements: a channel the scene leaves off every fader is closed by the recall. Two facts go out, in this order — the <strong>membership</strong> (the channels the scene places on each fader, and the faders it takes them off) and then each mic's <strong>mute</strong> — and no message names a channel outside the show's own set. A mute carries the channel's own number, never a fader's. The membership goes over the route the desk takes it on — an SQ's own control service on TCP 51326, an Avantis's NRPN <code>40</code> on the desk link — and a desk with no such route reports the gap while the mutes go anyway. With no scene chosen the cue does nothing.</td>
             </tr>
@@ -451,6 +456,26 @@ export const REFERENCE = [
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section class="panel reveal delay-3" id="timecode">
+      <h2>Timecode</h2>
+      <p>Kept on the computer, not in the show: which port the clock arrives on is a fact about this rack. The receiver is part of Cuerunner Pro. The <a href="../guides/console.html#timecode">guide</a> shows it in use.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Source</td><td>None</td><td>Where the clock comes from: <strong>MTC</strong> on a MIDI input (the first one there is, if none is chosen; a port MIDI input already has open is shared with it), <strong>LTC</strong> on a channel of an audio input, read by the audio engine, or <strong>Art-Net</strong> ArtTimeCode on a UDP port (6454).</td></tr>
+            <tr><td>Rate</td><td>Detect from the stream</td><td>Takes the rate MTC and ArtTimeCode declare, and measures the rest: 29.97 non-drop is told from 30 by timing the stream (a few seconds of it), and LTC's 24, 25 and 30 by its frame numbers. A fixed rate reads every label at that rate instead.</td></tr>
+            <tr><td>Freewheel</td><td>1000 ms</td><td>How long a clock that stops arriving is carried on at its own rate before it counts as lost (0–10000). A cue on a frame inside the gap still fires.</td></tr>
+            <tr><td>Chase</td><td>off</td><td>The cue list goes where the clock goes: a locate starts each audio or wait cue whose trigger is behind the clock and whose length reaches past it, that far into itself, and stops what the clock started and has left behind. Off, a locate only arms again what the clock is now before.</td></tr>
+            <tr><td>When it stops</td><td>Hold</td><td>With chase on, what the cues the clock started do when it stops or is lost: <strong>Hold</strong> stops them and picks them up again where the clock comes back; <strong>Stop</strong> stops them; <strong>Let them run on</strong>.</td></tr>
+            <tr><td>Offset</td><td>00:00:00:00</td><td>Added to the incoming clock before any cue reads it, written in 30 fps labels; a leading minus subtracts. How a show written at 10:00:00:00 runs against a clock that starts at 01:00:00:00.</td></tr>
+            <tr><td>Tolerance</td><td>10 frames</td><td>How far the clock may skip forward and still fire the triggers it skipped (0–300). A jump further than that is a locate.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The panel under the source reads back the clock as it is heard: position, <strong>Locked</strong>, <strong>Freewheel</strong>, <strong>Stopped</strong>, <strong>Lost</strong> or <strong>Waiting</strong>, the rate and whether it was detected, and what the timecode cues are sending. The same readout is in the transport bar and the show monitor.</p>
     </section>
 
     <section class="panel reveal delay-3" id="license">
@@ -594,6 +619,7 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
           <tbody>
             <tr><td>OSC</td><td>UDP port 53000</td><td>Every message is published to the Monitor and the run log with its sender and arguments.</td></tr>
             <tr><td>MIDI</td><td>the ports you tick</td><td>With none ticked, every input is opened. An interface that disappears mid-show is reported, because a cue sending down it would otherwise play nowhere in silence.</td></tr>
+            <tr><td>Timecode</td><td>one source at a time, chosen in Settings → Timecode.</td><td>MTC quarter frames and full-frame locates (<code>F1 0n</code>, <code>F0 7F dd 01 01 hh mm ss ff F7</code>) on a MIDI input; LTC on an audio input channel; ArtTimeCode (OpCode 0x9700) on UDP 6454. Lock and loss are alarms in the Monitor and the run log.</td></tr>
           </tbody>
         </table>
       </div>
@@ -629,6 +655,7 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
             <tr><td>MIDI control change</td><td>Port, channel and controller number.</td><td>Value.</td></tr>
             <tr><td>MIDI program change</td><td>Port, channel and program number.</td><td>—</td></tr>
             <tr><td>Show control</td><td>Every field the console sent: command, format, device ID, and the cue and list where they are carried.</td><td>—</td></tr>
+            <tr><td>Timecode<span class="pro">Pro</span></td><td>The frame of the incoming clock, at the rate it is read at: the cue fires as the clock runs through it, once per pass, and again after the clock goes back before it. A skip of up to the tolerance still fires; a locate past it does not, unless chase is on.</td><td>Which wire the clock came in on.</td></tr>
           </tbody>
         </table>
       </div>
@@ -648,6 +675,7 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
             <tr><td>OSC cue</td><td>The address and its typed arguments, to the host and port on the cue.</td></tr>
             <tr><td>MIDI cue</td><td>Its list of messages, on the cue's port or the show's default output.</td></tr>
             <tr><td>Show Control cue</td><td>An MSC message: command, equipment format, device ID (127 reaches everything), and cue and list where the command carries them.</td></tr>
+            <tr><td>Timecode cue<span class="pro">Pro</span></td><td>MTC: a full-frame message (device 7F) where the clock starts, pauses or is located, then four quarter frames a frame, each set of eight starting on an even frame. LTC: the 80-bit SMPTE word, biphase-mark, at the cue's level on its output channel, with the drop-frame flag set at 29.97 drop-frame. ArtTimeCode: one 19-byte datagram a frame. 29.97 non-drop has no code of its own in MTC or Art-Net and is sent as 30.</td></tr>
             <tr><td>Mic cue<span class="pro">Pro</span></td><td>One request to the receiver: <code>{ "mute": true }</code> or <code>false</code>, for one channel, and nothing else — no name, no gain, no level. Then a read of that channel to confirm it took. Muting a channel that is already muted is not an error; it is the state asked for.</td></tr>
             <tr><td>Scene cue<span class="pro">Pro</span></td><td>The scene's membership first — which channels it places on which faders, and the faders it takes them off — then each mic's mute, for the channels a recall moves and no others. Nothing outside the show's own channels is named: a mute carries the channel's own number, never a fader's, and a channel the scene leaves off every fader is closed. A mic that changes fader is never muted by the move: it keeps playing and takes the new fader's position. The membership goes over the desk's own route — an SQ's control service on TCP 51326, an Avantis's NRPN <code>40</code> on the desk link — and a desk with no membership route reports the gap while the mutes go anyway.</td></tr>
           </tbody>

@@ -2,6 +2,7 @@ import { useStore } from '../../store'
 import { useCueEngine, useKeyboard } from '../../hooks/useCueEngine'
 import MidiStatusBadge from '../midi/MidiStatusBadge'
 import { AudioStatusBadge } from './AudioStatusBadge'
+import { TimecodeChip } from '../timecode/TimecodeDisplay'
 import { AlertChip } from './AlertChip'
 import { PlaybackWarnings } from './PlaybackWarnings'
 import { formatShortcut } from '../../utils/shortcuts'
@@ -47,6 +48,7 @@ export function TransportBar({ onShowStrip }: Props) {
           <AlertChip onShow={onShowStrip} />
           <AudioStatusBadge />
           <MidiStatusBadge />
+          <TimecodeChip />
           <PlaybackWarnings className="transport-warning" compact />
         </div>
       </div>

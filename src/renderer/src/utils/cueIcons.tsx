@@ -36,7 +36,9 @@ const PATHS: Record<CueType, string[]> = {
   // A command leaving this desk for another one.
   msc: ['M2.4 4.2h6.4v7.6H2.4z', 'M4.6 7.4v1.2', 'M6.6 7.4v1.2', 'M10.4 8h3.2', 'M12.2 6.4 13.8 8l-1.6 1.6'],
   // A microphone: the capsule, the cradle it sits in, and the stand.
-  mic: ['M8 2a2 2 0 0 0-2 2v3.6a2 2 0 0 0 4 0V4a2 2 0 0 0-2-2z', 'M4.4 7.4a3.6 3.6 0 0 0 7.2 0', 'M8 11v2.6', 'M5.8 13.6h4.4']
+  mic: ['M8 2a2 2 0 0 0-2 2v3.6a2 2 0 0 0 4 0V4a2 2 0 0 0-2-2z', 'M4.4 7.4a3.6 3.6 0 0 0 7.2 0', 'M8 11v2.6', 'M5.8 13.6h4.4'],
+  // A timecode display: two pairs of digits either side of the colon.
+  timecode: ['M1.8 4.4h12.4v7.2H1.8z', 'M4.2 6.4v3.2', 'M6 6.4v3.2', 'M10 6.4v3.2', 'M11.8 6.4v3.2', 'M8 6.9v.01', 'M8 9.1v.01']
 }
 
 interface Props {

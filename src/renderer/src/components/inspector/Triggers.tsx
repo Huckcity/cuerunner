@@ -4,6 +4,7 @@ import { cueTriggers } from '../../engine/triggers'
 import { MSC_COMMANDS, MSC_COMMAND_NAME, MSC_FORMATS, MSC_FORMAT_NAME, describeMsc, parseMsc } from '../../utils/msc'
 import type { Cue, CueTrigger, MidiMessageKind, MscCommand, MscFormat, TriggerMidiMessage } from '../../../../shared/cue'
 import type { ShowEvent } from '../../../../shared/show'
+import { TimecodeTriggerSection } from './TimecodeTrigger'
 import './Triggers.css'
 
 /** The three MIDI messages a cue can answer to, in the order the picker offers them. */
@@ -47,6 +48,7 @@ export function describeTrigger(trigger: CueTrigger): string {
     })
     return `Show Control ${command} from "${trigger.device}"`
   }
+  if (trigger.kind === 'timecode') return `Timecode ${trigger.timecode}`
 
   const { message, device } = trigger
   const detail =
@@ -423,6 +425,8 @@ export function Triggers({ cue }: Props) {
           </div>
           {learning === 'msc' && <LearningStrip onCancel={() => setLearning(null)} />}
         </div>
+
+        <TimecodeTriggerSection onAdd={addTrigger} />
       </div>
     </>
   )

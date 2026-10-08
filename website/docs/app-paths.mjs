@@ -158,6 +158,11 @@ export const APP_PATHS = [
     names: [{ tab: 'general' }]
   },
   {
+    page: 'guides/console.html',
+    printed: `${prose(SETTINGS_ITEM)} → Timecode`,
+    names: [{ tab: 'timecode' }]
+  },
+  {
     page: 'guides/desk.html',
     printed: `${prose(SHOW_SETTINGS)} → Channels`,
     names: [{ showTab: 'channels' }]
@@ -211,6 +216,11 @@ export const APP_PATHS = [
     page: 'reference/control.html',
     printed: `${prose(SHOW_SETTINGS)} → Channels`,
     names: [{ showTab: 'channels' }]
+  },
+  {
+    page: 'reference/control.html',
+    printed: `${prose(SETTINGS_ITEM)} → Timecode`,
+    names: [{ tab: 'timecode' }]
   },
   // The formats page's own-file note now sends a reader whose show refused to the tab the cast
   // and the faders are set up in, so the same path is declared for it.

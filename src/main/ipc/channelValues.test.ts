@@ -75,6 +75,13 @@ const FROZEN_CHANNELS = [
   'show:ewdx-trust-again',
   'show:restart',
   'show:snapshot',
+  'timecode:configure',
+  'timecode:control',
+  'timecode:events',
+  'timecode:generate',
+  'timecode:inputs',
+  'timecode:settings',
+  'timecode:status',
   'workspace:autosave',
   'workspace:clearRecovery',
   'workspace:compare',
@@ -101,7 +108,8 @@ const FROZEN_EVENTS = [
   'audio:events',
   'license:changed',
   'playback:panic',
-  'show:events'
+  'show:events',
+  'timecode:events'
 ] as const
 
 describe('the declared channel values', () => {

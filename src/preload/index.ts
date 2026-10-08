@@ -57,6 +57,13 @@ import { NETWORK_CHANNELS } from '../shared/ipc/network'
 import { OSC_CHANNELS, type OscSendPayload, type OscSendResult } from '../shared/ipc/osc'
 import { REDUNDANCY_CHANNELS, type RedundancyConfigureResult } from '../shared/ipc/redundancy'
 import {
+  TIMECODE_CHANNELS,
+  type TimecodeControlPayload,
+  type TimecodeGenerateResult,
+  type TimecodeInputs
+} from '../shared/ipc/timecode'
+import type { TimecodeGenerateRequest, TimecodeSettings, TimecodeStatus } from '../shared/timecode'
+import {
   SCRIPT_CHANNELS,
   type ScriptReadDocumentPayload,
   type ScriptReadFilePayload,
@@ -387,5 +394,22 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invoke(WORKSPACE_CHANNELS.setTitle, title),
     confirmClose: (workspaceName: string): Promise<0 | 1 | 2> =>
       invoke(WORKSPACE_CHANNELS.confirmClose, workspaceName)
+  },
+  /** SMPTE timecode: the clock this machine follows, and the clocks its cues run. */
+  timecode: {
+    settings: (): Promise<TimecodeSettings> =>
+      invoke(TIMECODE_CHANNELS.settings),
+    configure: (patch: Partial<TimecodeSettings>): Promise<TimecodeSettings> =>
+      invoke(TIMECODE_CHANNELS.configure, patch),
+    status: (): Promise<TimecodeStatus> =>
+      invoke(TIMECODE_CHANNELS.status),
+    inputs: (): Promise<TimecodeInputs> =>
+      invoke(TIMECODE_CHANNELS.inputs),
+    generate: (request: TimecodeGenerateRequest): Promise<TimecodeGenerateResult> =>
+      invoke(TIMECODE_CHANNELS.generate, request),
+    control: (payload: TimecodeControlPayload): Promise<boolean> =>
+      invoke(TIMECODE_CHANNELS.control, payload),
+    onEvents: (callback: (status: TimecodeStatus) => void): (() => void) =>
+      subscribe(TIMECODE_CHANNELS.events, callback)
   }
 } satisfies CuerunnerBridge)

@@ -22,6 +22,9 @@ export function matchesTrigger(trigger: CueTrigger, event: ShowEvent): boolean {
   if (trigger.kind === 'osc') {
     return event.kind === 'osc' && event.address === trigger.address
   }
+  // A timecode trigger answers the clock, not a message: the follower fires it
+  // (engine/timecodeFollow.ts).
+  if (trigger.kind === 'timecode') return false
 
   if (event.kind !== 'midi') return false
   if (event.device !== trigger.device) return false

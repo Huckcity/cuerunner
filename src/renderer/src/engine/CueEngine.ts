@@ -1,7 +1,8 @@
 import type {
   Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, ScriptCue, SceneCue, NetworkCue, DevampCue,
   MscCue,
-  MicCue
+  MicCue,
+  TimecodeCue
 } from '../../../shared/cue'
 import { isProCueType } from '../../../shared/cue'
 import { audioEngine } from './audioEngineClient'
@@ -19,6 +20,7 @@ import { scriptHost, ScriptCancelledError } from './scriptHost'
 import { recallScene } from './scenes'
 import { sendMsc } from './showControl'
 import { sendMic } from './mic'
+import { releaseTimecode, startTimecode, timecodeLengthMs, timecodeRequest, watchTimecodeEnd } from './timecodeCue'
 import { network } from './networkClient'
 import { playRegion } from '../utils/silenceTrim'
 import type { RunningCue, CueRunResult, LogEntryInput } from '../store'
@@ -700,7 +702,39 @@ export class CueEngine {
       case 'script':
         this.executeScript(cue as ScriptCue, finish)
         break
+      case 'timecode':
+        this.executeTimecode(cue as TimecodeCue, run, at, finish)
+        break
     }
+  }
+
+  /**
+   * Starts the cue's clock in main. A clock with an end runs that long on this clock too,
+   * so the show moves on from it exactly as from a wait; one without an end runs until it
+   * is stopped, and a jam-synced one ends when main says it has.
+   */
+  private executeTimecode(cue: TimecodeCue, run: CueRun, at: number, finish: Finish): void {
+    const label = this.cueLabel(cue)
+    const request = timecodeRequest(cue, this.deps!.getMidiDefaultPort())
+    if (typeof request === 'string') {
+      this.log({ level: 'error', message: request, label })
+      finish(this.now(), { outcome: 'error', error: request })
+      return
+    }
+    void startTimecode(request).then(result => {
+      if (!result.ok) {
+        finish(this.now(), { outcome: 'error', error: result.error })
+        return
+      }
+      if (run.cancelled) {
+        // Stopped while main was starting it: the clock must not outlive the run.
+        releaseTimecode(cue.id)
+        return
+      }
+      const lengthMs = timecodeLengthMs(cue)
+      if (lengthMs !== null) this.scheduleRunEnd(run, at + lengthMs, finish)
+      else if (cue.endTimecode.trim() !== '') watchTimecodeEnd(cue.id, () => finish(this.now()))
+    })
   }
 
   /**
@@ -1257,6 +1291,8 @@ export class CueEngine {
     if (run.endTask !== null) { this.scheduler!.cancel(run.endTask); run.endTask = null }
     if (run.releaseTask !== null) { this.scheduler!.cancel(run.releaseTask); run.releaseTask = null }
     if (run.requestId) network.cancel(run.requestId)
+    // A timecode cue's clock runs in main, and stops with its run.
+    releaseTimecode(cueId)
     if (this.runs.get(cueId) === run) this.runs.delete(cueId)
 
     const released = run.releasedRun

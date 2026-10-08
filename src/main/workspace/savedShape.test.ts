@@ -536,6 +536,22 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     channelId: 'ew-dx:5364000906:0',
     label: 'Aldonza (37)',
     action: 'mute'
+  },
+  timecode: {
+    ...cueBase('tc1'),
+    type: 'timecode',
+    rate: '29.97df',
+    startTimecode: '01:00:00;00',
+    endTimecode: '01:10:00;00',
+    jamSync: false,
+    mtc: true,
+    mtcPortName: '',
+    ltc: true,
+    ltcChannel: 2,
+    ltcLevelDb: -12,
+    artnet: false,
+    artnetHost: '255.255.255.255',
+    triggers: [{ id: 'tr-tc', kind: 'timecode', timecode: '00:59:50:00' }]
   }
 }
 

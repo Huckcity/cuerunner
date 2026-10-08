@@ -170,6 +170,17 @@ export const PRO_ROWS = [
     }
   },
   {
+    label: 'Timecode',
+    free: {
+      prose: '—'
+    },
+    pro: {
+      identifiers: ['timecode', 'timecode:generate'],
+      cues: ['timecode'],
+      prose: `SMPTE timecode in and out: follow MTC, LTC or Art-Net with the cue list firing on its frames and chasing a locate, and run a clock of its own — MTC, LTC and Art-Net at once, or jam-synced to the incoming one.`
+    }
+  },
+  {
     label: 'The network',
     free: {
       prose: '—'
@@ -245,6 +256,33 @@ export const PRO_MARKS = [
     page: 'reference/control.html',
     words: 'Mic cue',
     cues: ['mic']
+  },
+  {
+    page: 'guides/cue-list.html',
+    words: 'Timecode',
+    cues: ['timecode']
+  },
+  {
+    page: 'guides/console.html',
+    words: 'Following timecode',
+    identifiers: ['timecode'],
+    cues: ['timecode']
+  },
+  {
+    page: 'reference/cue-types.html',
+    words: 'Timecode',
+    cues: ['timecode']
+  },
+  {
+    page: 'reference/control.html',
+    words: 'Timecode',
+    identifiers: ['timecode']
+  },
+  {
+    page: 'reference/control.html',
+    words: 'Timecode cue',
+    cues: ['timecode'],
+    identifiers: ['timecode:generate']
   },
   {
     page: 'reference/formats.html',

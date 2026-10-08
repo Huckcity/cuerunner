@@ -36,6 +36,9 @@ import { WirelessService } from './WirelessService'
 import { PresenceService, type PresenceSocket } from './PresenceService'
 import { CompanionService } from './CompanionService'
 import { RedundancyService } from './RedundancyService'
+import { TimecodeService } from './TimecodeService'
+import { TimecodeHub } from '../timecode/hub'
+import { MidiTimecodeTap } from '../timecode/midiTap'
 
 const DESK = '10.0.0.5'
 const DESK_PORT = 51325
@@ -73,6 +76,8 @@ const KEEP_ALIVE_MS = 60_000
 const HEARTBEAT_MS = 61_000
 const CHECK_MS = 62_000
 const RETRY_MS = 63_000
+// The timecode hub's push to the window, as the literal it is.
+const TIMECODE_PUSH_MS = 40
 
 // ─── What each case holds on to, and lets go of ────────────────────────────────
 
@@ -549,6 +554,45 @@ function redundancyDriver(): Driver {
   }
 }
 
+function timecodeDriver(): Driver {
+  let refuseBind = (): void => {}
+  return {
+    // The push that tells the window where the clock is, armed as the receiver starts.
+    arms: [TIMECODE_PUSH_MS],
+    names: 'EADDRINUSE',
+    async start(h) {
+      // The bind answers when the drive says: the port is found taken after the mark.
+      const bind = Promise.withResolvers<never>()
+      refuseBind = () => bind.reject(new Error('bind EADDRINUSE 0.0.0.0:6454'))
+      const hub = new TimecodeHub({
+        filePath: 'timecode.json',
+        // A machine set to hear ArtTimeCode, on a port another program already holds.
+        readFile: () => JSON.stringify({ source: 'artnet', artnetPort: 6454 }),
+        receiver: {
+          now: () => Date.now(),
+          tap: new MidiTimecodeTap(),
+          listMidiInputs: () => [],
+          openMidiInput: () => {
+            throw new Error('no MIDI here')
+          },
+          ltc: null,
+          bindUdp: () => bind.promise
+        },
+        generators: { now: () => Date.now(), sendMidi: () => ({ ok: true }), ltc: null, sendArtnet: () => {} },
+        broadcast: () => {},
+        restartReceiver: async () => {}
+      })
+      const service = new TimecodeService(() => hub)
+      void service.start(h.context, h.settings())
+      return service
+    },
+    async crash(h) {
+      refuseBind()
+      await turns(() => h.reported().length > 0)
+    }
+  }
+}
+
 function sqNativeDriver(): Driver {
   // The desk this drive owns: a real server the engine's dial reaches, so the session really
   // comes up and the two cadences are really armed. The ports are the desk's own, so the
@@ -625,7 +669,8 @@ const DRIVERS: Record<string, () => Driver> = {
   WirelessService: wirelessDriver,
   PresenceService: presenceDriver,
   CompanionService: companionDriver,
-  RedundancyService: redundancyDriver
+  RedundancyService: redundancyDriver,
+  TimecodeService: timecodeDriver
 }
 
 describe('service hygiene', () => {

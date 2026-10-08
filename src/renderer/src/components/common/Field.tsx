@@ -114,6 +114,8 @@ type TextProps = {
   value: string
   when?: 'typed' | 'leave'
   onValue: (text: string) => void
+  /** Why the text cannot be taken, or null when it can (see the shell). */
+  validate?: (text: string) => string | null
 } & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'onBlur' | 'onFocus' | 'type'>
 
 /** A text box that says when what was typed into it took. */

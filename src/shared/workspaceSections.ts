@@ -584,6 +584,21 @@ export const CUE_FIELD_SHAPE = {
     cueList: 'string',
     destination: 'string',
     portName: 'string'
+  },
+  timecode: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    rate: 'string',
+    startTimecode: 'string',
+    endTimecode: 'string',
+    jamSync: 'boolean',
+    mtc: 'boolean',
+    mtcPortName: 'string',
+    ltc: 'boolean',
+    ltcChannel: 'number',
+    ltcLevelDb: 'number',
+    artnet: 'boolean',
+    artnetHost: 'string'
   }
 } as const satisfies { readonly [K in CueType]: ShapeFields<Extract<Cue, { type: K }>> }
 

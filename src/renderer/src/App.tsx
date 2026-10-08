@@ -24,6 +24,7 @@ import { useDeskButtons } from './hooks/useDeskButtons'
 import { useHighestWins } from './hooks/useHighestWins'
 import { useCompanionPublisher } from './hooks/useCompanionPublisher'
 import { useRedundancy } from './hooks/useRedundancy'
+import { useTimecodeFollow } from './hooks/useTimecodeFollow'
 import { Dock, type DockTab } from './components/layout/Dock'
 import type { AppView } from './components/layout/Toolbar'
 import { ScenesView } from './components/scenes/ScenesView'
@@ -61,6 +62,8 @@ export function App() {
   // The other machine on the desk: what it is doing with the show, and what to do with
   // the show it hands over.
   useRedundancy()
+  // The incoming SMPTE clock: its status for the window, and the cues it fires.
+  useTimecodeFollow()
   const settingsTab = useStore(s => s.settingsTab)
   const openSettings = useStore(s => s.openSettings)
   const closeSettings = useStore(s => s.closeSettings)

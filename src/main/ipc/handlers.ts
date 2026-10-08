@@ -46,6 +46,14 @@ import { OSC_CHANNELS, type OscSendPayload, type OscSendResult } from '../../sha
 import { PLAYBACK_CHANNELS } from '../../shared/ipc/playback'
 import { REDUNDANCY_CHANNELS, type RedundancyConfigureResult } from '../../shared/ipc/redundancy'
 import {
+  TIMECODE_CHANNELS,
+  type TimecodeControlPayload,
+  type TimecodeGenerateResult,
+  type TimecodeInputs
+} from '../../shared/ipc/timecode'
+import type { TimecodeGenerateRequest, TimecodeSettings } from '../../shared/timecode'
+import { createTimecodeHub } from '../timecode/main'
+import {
   SCRIPT_CHANNELS,
   type ScriptReadDocumentPayload,
   type ScriptReadFilePayload,
@@ -162,8 +170,25 @@ function discoverReceivers(): Promise<EwDxDiscoverResult> {
 // show — a show is copied between machines and a pack is not — so it is kept here, beside the licence.
 const batteryLog = new BatteryLog({ filePath: path.join(app.getPath('userData'), 'rf-battery.json') })
 
+// SMPTE timecode: the clock this machine follows and the clocks its cues run. Its settings
+// are the machine's, kept beside the licence like the pair's: which port the clock arrives
+// on is a fact about this rack. The receiver is a show service, restarted on its own when
+// those settings change.
+const timecodeHub = createTimecodeHub({
+  filePath: path.join(app.getPath('userData'), 'timecode.json'),
+  sendMidi: (port, messages) => midi.sendRaw(port, messages),
+  listMidiInputs: () => midi.listInputPorts(),
+  ltc: (verb, params) => audioEngine.ltc(verb, params),
+  broadcast: status => broadcastToWindows(TIMECODE_CHANNELS.events, status),
+  restartReceiver: async () => {
+    if (settingsReceived) await show.restart('timecode')
+    else await show.configure(lastShowSettings)
+  }
+})
+
 const show = createShowRuntime(
   defaultServices({
+    timecode: () => timecodeHub,
     redundancy: () => machineRedundancy.current(),
     ewDx: ewDxCredentials,
     discoverReceivers,
@@ -592,6 +617,30 @@ export function registerIpcHandlers(): void {
     else await show.configure(lastShowSettings)
     return { ok: true, settings }
   })
+
+  // Timecode. The settings are the machine's and free to read and write — they only say
+  // where to listen, and the receiver that listens is a Pro service the host answers for.
+  // Starting a clock is the Pro half, refused here where the licence is known.
+  ipcMain.handle(TIMECODE_CHANNELS.settings, (): TimecodeSettings => timecodeHub.current())
+  ipcMain.handle(TIMECODE_CHANNELS.configure, (_, patch: Partial<TimecodeSettings>): Promise<TimecodeSettings> =>
+    timecodeHub.update(patch))
+  ipcMain.handle(TIMECODE_CHANNELS.status, () => timecodeHub.status())
+  ipcMain.handle(TIMECODE_CHANNELS.inputs, async (): Promise<TimecodeInputs> => {
+    // An engine that is not running has no capture devices to offer; the MIDI ports remain.
+    const audio = await timecodeHub.ltcInputs().catch(() => [])
+    return { midi: midi.listInputPorts(), audio }
+  })
+  ipcMain.handle(TIMECODE_CHANNELS.generate, (_, request: TimecodeGenerateRequest): Promise<TimecodeGenerateResult> =>
+    refusalValue(async () => {
+      if (!isPro(license.status())) throw new Refusal('Cuerunner Pro is required to generate timecode')
+      const result = await timecodeHub.generate(request)
+      if (!result.ok) throw new Refusal(result.error)
+      return result
+    }))
+  ipcMain.handle(TIMECODE_CHANNELS.control, (_, payload: TimecodeControlPayload): Promise<boolean> =>
+    timecodeHub.control(payload.cueId, payload.action))
+  // The clocks a cue started stop with the app, and so does the reader.
+  app.on('will-quit', () => timecodeHub.dispose())
 
   // License. The window reads the status, asks for a key to be checked, and is told
   // when it changes — including the change it asked for.

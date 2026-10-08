@@ -23,6 +23,7 @@ import type { RfThresholds, TelemetrySource, TelemetrySourceKind } from '../../.
 import type { SettingsTab } from '../../store'
 import { LicenseSection } from '../license/LicenseSection'
 import { RedundancySection } from '../redundancy/RedundancySection'
+import { TimecodeSection } from '../timecode/TimecodeSection'
 import './SettingsDialog.css'
 
 interface Props {
@@ -77,6 +78,7 @@ const SETTINGS_TABS: { id: SettingsTab; label: string; scope: 'show' | 'machine'
   { id: 'network', label: 'Network', scope: 'show' },
   { id: 'wireless', label: 'Wireless', scope: 'show' },
   { id: 'redundancy', label: 'Backup machine', scope: 'machine' },
+  { id: 'timecode', label: 'Timecode', scope: 'machine' },
   { id: 'license', label: 'License', scope: 'machine' }
 ]
 
@@ -88,7 +90,8 @@ const TAB_BLURB: Record<SettingsTab, string> = {
   network: 'How consoles, tablets and other gear reach this show.',
   wireless: 'Where pack readings come from, and when to warn about them.',
   redundancy: 'A second computer, ready to take the show over.',
-  license: 'Cuerunner Pro on this machine.'
+  license: 'Cuerunner Pro on this machine.',
+  timecode: 'The SMPTE clock this machine follows, and how the cue list follows it.'
 }
 
 /** Which service reports for a tab, so the sidebar can show whether it is on. */
@@ -96,7 +99,8 @@ const TAB_SERVICE: Partial<Record<SettingsTab, string>> = {
   midi: 'midi-in',
   network: 'osc-in',
   wireless: 'rf',
-  redundancy: 'redundancy'
+  redundancy: 'redundancy',
+  timecode: 'timecode'
 }
 
 /**
@@ -858,6 +862,8 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
           {tab === 'redundancy' && <RedundancySection />}
 
           {tab === 'license' && <LicenseSection />}
+
+          {tab === 'timecode' && <TimecodeSection />}
         </div>
       </div>
     </div>

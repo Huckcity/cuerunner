@@ -17,9 +17,10 @@ import { StopInspector } from './StopInspector'
 import { DevampInspector } from './DevampInspector'
 import { MscInspector } from './MscInspector'
 import { MicInspector } from './MicInspector'
+import { TimecodeInspector } from './TimecodeInspector'
 import type {
   Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue, DevampCue,
-  MscCue, MicCue
+  MscCue, MicCue, TimecodeCue
 } from '../../../../shared/cue'
 import { isProCueType } from '../../../../shared/cue'
 import './Inspector.css'
@@ -40,7 +41,8 @@ const TYPE_TABS: Record<string, string[]> = {
   scene: ['Basics', 'Scene'],
   devamp: ['Basics', 'Devamp'],
   msc: ['Basics', 'Show Control'],
-  mic: ['Basics', 'Mic']
+  mic: ['Basics', 'Mic'],
+  timecode: ['Basics', 'Timecode']
 }
 
 const TRIGGERS_TAB = 'Triggers'
@@ -81,6 +83,17 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
         variant="inspector"
         feature="Mic cues"
         blurb="A cue that mutes or unmutes a radio mic at its receiver, so a pack is closed by the cue list and not by a hand on a fader."
+      />
+    )
+  }
+  if (tab === 'Timecode') {
+    return pro ? (
+      <TimecodeInspector cue={cue as TimecodeCue} />
+    ) : (
+      <ProLock
+        variant="inspector"
+        feature="Timecode cues"
+        blurb="A cue that runs a SMPTE clock — MTC, LTC and Art-Net — so the lighting desk, the video and the band follow the cue list."
       />
     )
   }

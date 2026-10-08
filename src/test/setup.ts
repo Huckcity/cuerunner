@@ -24,6 +24,8 @@ import type {
   WorkspaceSaveResult
 } from '../shared/ipc/workspace'
 import type { RedundancySettings } from '../shared/redundancy'
+import { defaultTimecodeSettings, idleReceiverStatus, type TimecodeSettings, type TimecodeStatus } from '../shared/timecode'
+import type { TimecodeGenerateResult } from '../shared/ipc/timecode'
 import type { ScriptDocument } from '../shared/show'
 import type { Workspace } from '../shared/workspace'
 
@@ -254,6 +256,16 @@ Object.defineProperty(window, 'cuerunner', {
       clearRecovery: vi.fn(() => Promise.resolve()),
       setTitle: vi.fn(() => Promise.resolve()),
       confirmClose: vi.fn((): Promise<0 | 1 | 2> => Promise.resolve(0))
+    },
+    // No clock arriving and none running: what a machine with nothing plugged in has.
+    timecode: {
+      settings: vi.fn(() => Promise.resolve(defaultTimecodeSettings())),
+      configure: vi.fn((patch: Partial<TimecodeSettings>) => Promise.resolve({ ...defaultTimecodeSettings(), ...patch })),
+      status: vi.fn((): Promise<TimecodeStatus> => Promise.resolve({ receiver: idleReceiverStatus(), generators: [] })),
+      inputs: vi.fn(() => Promise.resolve({ midi: [], audio: [] })),
+      generate: vi.fn((): Promise<TimecodeGenerateResult> => Promise.resolve({ ok: true, startFrames: 0 })),
+      control: vi.fn(() => Promise.resolve(true)),
+      onEvents: vi.fn(() => () => {})
     }
   } satisfies CuerunnerBridge,
   writable: true
