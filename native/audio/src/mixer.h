@@ -5,6 +5,7 @@
 #pragma once
 
 #include "cache.h"
+#include "live_input.h"
 #include "ring.h"
 #include "snapshot_cell.h"
 #include "stream.h"
@@ -12,6 +13,8 @@
 
 #include <atomic>
 #include <cstdint>
+#include <mutex>
+#include <vector>
 
 namespace ws {
 
@@ -22,11 +25,36 @@ struct ReclaimItem {
 
 struct FadeRamp {
   bool active = false;
+  // Beside `active`, in what was its padding, so a ramp is no bigger for carrying a shape.
+  Curve curve = Curve::Linear;
   double from = 0.0;
   double to = 0.0;
   int64_t startFrame = 0;
   int64_t endFrame = 0;
-  Curve curve = Curve::Linear;
+  /** The drawn shape when `curve` is `Table`: kept beside the voices rather than in them
+   *  (`Mixer::rampTables_`), so the voices the render loop walks every frame stay small. */
+  const CurveTable* table = nullptr;
+};
+
+/** One slice of a voice's file, in source frames: a region and how often it plays. */
+struct VoiceSlice {
+  double startFrame = 0.0;
+  double endFrame = 0.0;
+  int playCount = 1;  // -1: until released
+};
+
+/**
+ * An output patch as the mixer holds it: a bus with its own channels, mapped onto device
+ * outputs, with its own fader and meter. Voices routed through a patch are mixed into the
+ * bus first; the bus is faded, metered and then summed onto the outputs its map names.
+ */
+struct Bus {
+  bool defined = false;
+  int channels = 0;
+  int map[kMaxOutputChannels] = {};  // patch channel -> device output, -1 for none
+  double gainTarget = 1.0;
+  double gainCurrent = 1.0;
+  float peak[kMaxOutputChannels] = {};
 };
 
 // One destination gain for the explicit matrix. The output channel is not stored: the
@@ -97,12 +125,42 @@ struct Voice {
   // rather than drifting through the frames before it in silence.
   int64_t resumeAt = -1;
   FadeRamp holdRamp;
+
+  // Kept last, after everything the render loop reads for every voice on every frame.
+
+  /** The output patch this voice is mixed into, or -1 for the device's own channels. */
+  int patch = -1;
+  /** A live voice's input feed, or -1 for a file; the feed channel behind each of its own
+   *  channels is `Mixer::inputMaps_`. */
+  int inputFeed = -1;
+
+  // A sliced voice plays its slices in order: `sliceIndex` is the one sounding, and
+  // `slicePlays` how many passes of it are done. A release lets the slice finish the pass it
+  // is in and moves on — or ends the voice there, when the release asked for that.
+  int sliceCount = 0;
+  int sliceIndex = 0;
+  int slicePlays = 0;
+  bool sliceRelease = false;
+  bool stopAtPassEnd = false;
 };
 
 class Mixer {
  public:
   Mixer(DecodedCache& cache, StreamPool& streams, SpscQueue<Event, 1024>& events,
         SpscQueue<ReclaimItem, 512>& reclaim);
+
+  /** The live inputs live voices read; pulled once per block whether a voice reads them or not. */
+  void attachInputs(InputFeeds* inputs) { inputs_ = inputs; }
+
+  /**
+   * Allocates the patches' mixing space, once, on the calling (control) thread — before the
+   * first patch is defined, so a show with no patches never pays for it and the audio thread
+   * never allocates. The render thread only touches it for a defined patch, and a patch is
+   * only defined by a command queued after this returns.
+   */
+  void prepareBuses() {
+    std::call_once(busesPrepared_, [this] { busScratch_.assign(kBusStride * static_cast<size_t>(kMaxPatches), 0.0f); });
+  }
 
   void configure(int deviceChannels, int sampleRate);
   void reset();
@@ -170,6 +228,15 @@ class Mixer {
   double paramValue(const Voice& voice, int param, int64_t frame) const;
   static double rampValue(const FadeRamp& ramp, int64_t frame);
   static double curveShape(double t, Curve curve);
+  static double shapeAt(const FadeRamp& ramp, double t);
+  /** Moves a sliced voice on past the end of its slice: another pass, the next slice, or the end. */
+  void advanceSlices(Voice& voice, int64_t frame);
+  void mixBuses(float* out, int frames, int channels);
+  template <bool Special>
+  void mixVoiceFrame(Voice& voice, int64_t frame, int64_t blockStart, float* outFrame, int channels);
+  float* busData(int slot) { return busScratch_.data() + static_cast<size_t>(slot) * kBusStride; }
+  int voiceIndex(const Voice& voice) const { return static_cast<int>(&voice - voices_); }
+  VoiceSlice* slicesOf(const Voice& voice) { return voiceSlices_[voiceIndex(voice)]; }
   bool sampleOf(const Voice& voice, int64_t frame, int channel, float& out) const;
 
   void emit(const Event& event);
@@ -198,6 +265,23 @@ class Mixer {
   // Each output channel's peak over the block last rendered, for the snapshot's meter.
   int meterChannels_ = 0;
   float blockPeak_[kMaxOutputChannels] = {};
+
+  // The output patches' buses, their mixing space (one block of every channel a bus can
+  // have, per bus, allocated once), and each device output's own fader.
+  static constexpr size_t kBusStride = static_cast<size_t>(kMaxOutputFrames) * static_cast<size_t>(kMaxOutputChannels);
+  Bus buses_[kMaxPatches];
+  std::vector<float> busScratch_;
+  std::once_flag busesPrepared_;
+  double outputGainTarget_[kMaxOutputChannels] = {};
+  double outputGainCurrent_[kMaxOutputChannels] = {};
+  bool outputsAtUnity_ = true;
+  InputFeeds* inputs_ = nullptr;
+  // What a voice holds that the render loop reads only at an edge — a slice boundary, a drawn
+  // fade — kept out of `Voice` and indexed by its slot, so the per-frame walk over the voices
+  // touches as little memory as it did before slices and shapes existed.
+  VoiceSlice voiceSlices_[kMaxVoices][kMaxSlices] = {};
+  int inputMaps_[kMaxVoices][kMaxOutputChannels] = {};
+  CurveTable rampTables_[kMaxVoices][kMaxRampParams + 1] = {};
 };
 
 }  // namespace ws

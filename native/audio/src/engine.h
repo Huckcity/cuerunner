@@ -6,6 +6,8 @@
 
 #include "cache.h"
 #include "capture.h"
+#include "live_input.h"
+#include "loudness.h"
 #include "ltc.h"
 #include "mixer.h"
 #include "snapshot_cell.h"
@@ -51,6 +53,9 @@ struct EngineOptions {
    */
   int64_t scheduleHorizonMs = limitValue(LimitId::ScheduleHorizonMs);
   bool offline = false;
+  /** Offer the synthetic live inputs (`test:tone`, `test:ramp`) beside the real ones. The
+   *  offline backend always offers them; a device backend only when asked, for the tests. */
+  bool testInputs = false;
 };
 
 struct EngineError {
@@ -262,9 +267,38 @@ class Engine {
    * operator aimed at rather than at a seam.
    */
   bool releaseCue(const std::string& cueId, double whenMs, bool hasEnd, double endMs, CommandResultDTO& out,
-                  EngineError& error);
+                  EngineError& error, bool stopAtSliceEnd = false);
+
+  // ── Live inputs (live_input.h) ─────────────────────────────────────────────────────
+  /** The capture devices a live input can be taken from, and the synthetic ones when offered. */
+  bool inputDevices(std::vector<InputDeviceInfo>& out, EngineError& error) const;
+  /** Opens a feed (or finds it open) so a cue that goes live later starts at once. */
+  bool openInput(const InputOpenOptions& options, InputFeedStatus& out, EngineError& error);
+  /** Closes a feed; voices reading it fall silent. `closed` is false when none was open. */
+  bool closeInput(const std::string& device, bool& closed, EngineError& error);
+  std::vector<InputFeedStatus> inputStatus();
+  /**
+   * Starts a live voice: `channels` of the feed `input.device` (opened if it is not) as the
+   * voice's channels, with the level, pan, routing, patch and fade-in of `options`. The
+   * voice is a mixer voice like any other: stop, fade, pause, routing and panic reach it.
+   */
+  bool startInput(const std::string& cueId, double whenMs, const InputOpenOptions& input,
+                  const std::vector<int>& channels, StartOptions options, StartResultDTO& out, EngineError& error);
+
+  // ── Output patches and the mixer ──────────────────────────────────────────────────
+  /** Defines (or clears) output patch `slot`: its channels onto device outputs, and its fader. */
+  bool setPatch(int slot, bool defined, const std::vector<int>& outputs, double gain, CommandResultDTO& out,
+                EngineError& error);
+  /** Every device output's own fader, linear, in output order; outputs not named are at unity. */
+  bool setOutputGains(const std::vector<double>& gains, CommandResultDTO& out, EngineError& error);
+  /** Each patch's meter as the last block left it: its channel count and each channel's peak. */
+  void busMeters(int* channels, float (*peaks)[kMaxOutputChannels]) const;
+
+  /** A file's integrated loudness and true peak (loudness.h), from a scan of its samples. */
+  bool loudness(const std::string& filePath, LoudnessDTO& out, EngineError& error);
+  /** `shape`, when it carries a table, is the fade's drawn curve, and `curve` is `Table`. */
   bool fadeCue(const std::string& cueId, int param, double value, double durationMs, int curve, double whenMs,
-               CommandResultDTO& out, EngineError& error);
+               CommandResultDTO& out, EngineError& error, const CurveTable* shape = nullptr);
   bool routeCue(const std::string& cueId, bool automatic, const std::vector<Crosspoint>& points,
                 CommandResultDTO& out, EngineError& error);
   bool panic(double fadeMs, PanicResultDTO& out, EngineError& error);
@@ -419,6 +453,7 @@ class Engine {
   CaptureWriter capture_;
   LtcOutputs ltcOutputs_;
   LtcInput ltcInput_;
+  InputFeeds inputs_;
 
   std::unique_ptr<DeviceState> device_;
   mutable std::mutex deviceMutex_;
@@ -473,6 +508,13 @@ class Engine {
   std::vector<WaveformCacheEntry> waveformCache_;
   std::vector<OnsetCacheEntry> onsetCache_;
   std::vector<SilenceCacheEntry> silenceCache_;
+  struct LoudnessCacheEntry {
+    std::string filePath;
+    FileStamp stamp;
+    LoudnessDTO result;
+    uint64_t lastUse = 0;
+  };
+  std::vector<LoudnessCacheEntry> loudnessCache_;
   uint64_t analysisCacheClock_ = 0;
 
   struct PreparedFile {

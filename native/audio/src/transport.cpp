@@ -331,7 +331,7 @@ void SocketServer::handleClient(Client* client) {
         // the verbs that run the show to get to, and reading a long file is not their
         // business. The reply still comes back on this connection.
         const std::string verb = requestVerb(line);
-        if (verb == "waveform" || verb == "onsets") {
+        if (verb == "waveform" || verb == "onsets" || verb == "loudness") {
           enqueueFileWork(scans_, client, std::move(line));
         } else if (verb == "probe") {
           enqueueFileWork(probes_, client, std::move(line));

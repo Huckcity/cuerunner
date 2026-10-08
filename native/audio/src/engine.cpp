@@ -63,6 +63,53 @@ constexpr int64_t kSampleWindowMs = 1000;
  *  windows inside them. */
 constexpr size_t kMaxAnalysisCacheEntries = 64;
 
+/** A drawn fade shape the engine can play: two points or more, each a share from 0 to 1. */
+bool validCurveTable(const CurveTable& table, EngineError& error) {
+  if (table.count == 0) return true;
+  if (table.count < 2 || table.count > kMaxCurvePoints) {
+    error = {"invalid", "a fade shape has 2 to " + std::to_string(kMaxCurvePoints) + " points"};
+    return false;
+  }
+  for (int i = 0; i < table.count; i++) {
+    const double value = static_cast<double>(table.values[i]);
+    if (!std::isfinite(value) || value < 0.0 || value > 1.0) {
+      error = {"invalid", "a fade shape's points are shares from 0 to 1"};
+      return false;
+    }
+  }
+  return true;
+}
+
+/** What a start carries beyond the file's region: its patch, its fade-in shape and its slices. */
+bool validStartExtras(const StartOptions& options, EngineError& error) {
+  if (options.patch < -1 || options.patch >= kMaxPatches) {
+    error = {"invalid", "there is no output patch " + std::to_string(options.patch)};
+    return false;
+  }
+  if (!validCurveTable(options.fadeInShape, error)) return false;
+  if (options.sliceCount < 0 || options.sliceCount > kMaxSlices) {
+    error = {"invalid", "a cue has at most " + std::to_string(kMaxSlices) + " slices"};
+    return false;
+  }
+  for (int i = 0; i < options.sliceCount; i++) {
+    const SliceSpec& slice = options.slices[i];
+    if (!std::isfinite(slice.startMs) || !std::isfinite(slice.endMs) || slice.startMs < 0.0 ||
+        slice.endMs <= slice.startMs) {
+      error = {"invalid", "slice " + std::to_string(i + 1) + " must end after it starts"};
+      return false;
+    }
+    if (i > 0 && slice.startMs < options.slices[i - 1].startMs) {
+      error = {"invalid", "slices must be in the order they play"};
+      return false;
+    }
+    if (slice.playCount < -1 || slice.playCount == 0) {
+      error = {"invalid", "a slice plays once or more, or -1 until it is released"};
+      return false;
+    }
+  }
+  return true;
+}
+
 int64_t msFrame(double ms, int sampleRate) {
   if (!(ms > 0.0) || sampleRate <= 0) return 0;
   return static_cast<int64_t>(ms * static_cast<double>(sampleRate) / 1000.0 + 0.5);
@@ -240,6 +287,7 @@ void deviceNotificationCallback(const ma_device_notification* notification) {
 }  // namespace
 
 Engine::Engine() : mixer_(cache_, streams_, events_, reclaim_) {
+  mixer_.attachInputs(&inputs_);
   cache_.configure(options_.cacheMaxBytes, options_.cacheMaxFiles, options_.cacheMaxFileBytes);
   sessionId_ = mintSessionId();
 }
@@ -500,6 +548,7 @@ bool Engine::start(const EngineOptions& options, EngineError& error) {
   if (running_.load()) return true;
   options_ = options;
   cache_.configure(options_.cacheMaxBytes, options_.cacheMaxFiles, options_.cacheMaxFileBytes);
+  inputs_.configure(options_.backend == "offline", options_.testInputs);
 
   if (options_.backend == "offline") {
     const int channels = options_.channels > 0 ? options_.channels : 2;
@@ -542,6 +591,7 @@ void Engine::stop() {
   silentStarted_ = false;
   capture_.stop();
   stopAudioThreads();
+  inputs_.closeAll();
   deviceStarted_ = false;
   {
     std::lock_guard<std::mutex> lock(ackMutex_);
@@ -1021,6 +1071,7 @@ bool Engine::startCue(const std::string& cueId, double whenMs, const StartOption
     error = {"invalid", "start time cannot be negative"};
     return false;
   }
+  if (!validStartExtras(options, error)) return false;
 
   PreparedFile file;
   {
@@ -1158,7 +1209,7 @@ bool Engine::seekCue(const std::string& cueId, double positionMs, double whenMs,
  * vamping, so neither is released; the caller is told which it got.
  */
 bool Engine::releaseCue(const std::string& cueId, double whenMs, bool hasEnd, double endMs, CommandResultDTO& out,
-                        EngineError& error) {
+                        EngineError& error, bool stopAtSliceEnd) {
   if (!finiteNumber(whenMs)) {
     error = {"invalid", "release needs a finite time"};
     return false;
@@ -1173,6 +1224,7 @@ bool Engine::releaseCue(const std::string& cueId, double whenMs, bool hasEnd, do
   command.whenMs = whenMs;
   command.hasEndMs = hasEnd;
   command.endMs = endMs;
+  command.stopAtSliceEnd = stopAtSliceEnd;
   AckResult ack;
   if (!submitCommand(command, ack, error)) return false;
   out.atMs = clockMs();
@@ -1244,7 +1296,7 @@ bool Engine::cancelCue(const std::string& cueId, double whenMs, CancelResultDTO&
 }
 
 bool Engine::fadeCue(const std::string& cueId, int param, double value, double durationMs, int curve, double whenMs,
-                     CommandResultDTO& out, EngineError& error) {
+                     CommandResultDTO& out, EngineError& error, const CurveTable* shape) {
   if (param < 0 || param >= kMaxRampParams) {
     error = {"invalid", "unknown fade parameter"};
     return false;
@@ -1257,10 +1309,12 @@ bool Engine::fadeCue(const std::string& cueId, int param, double value, double d
     error = {"invalid", "rate must be greater than zero"};
     return false;
   }
-  if (curve < 0 || curve > 2) {
+  if (curve < 0 || curve > static_cast<int>(Curve::Table) ||
+      (curve == static_cast<int>(Curve::Table) && (shape == nullptr || shape->count < 2))) {
     error = {"invalid", "unknown fade curve"};
     return false;
   }
+  if (shape != nullptr && !validCurveTable(*shape, error)) return false;
   Command command;
   command.kind = Command::Fade;
   copyStr(command.cueId, sizeof(command.cueId), cueId);
@@ -1268,6 +1322,7 @@ bool Engine::fadeCue(const std::string& cueId, int param, double value, double d
   command.value = value;
   command.durationMs = durationMs;
   command.curve = static_cast<Curve>(curve);
+  if (shape != nullptr && curve == static_cast<int>(Curve::Table)) command.shape = *shape;
   command.whenMs = whenMs;
   AckResult ack;
   if (!submitCommand(command, ack, error)) return false;
@@ -2207,6 +2262,277 @@ bool Engine::silence(const std::string& filePath, double thresholdDb, SilenceDTO
     result.endMs = frameMs(lastFrame + 1, sampleRate);
   }
   cacheSilence(filePath, thresholdDb, stamp, result);
+  out = std::move(result);
+  return true;
+}
+
+// ── Live inputs ─────────────────────────────────────────────────────────────────────
+
+bool Engine::inputDevices(std::vector<InputDeviceInfo>& out, EngineError& error) const {
+  std::string listError;
+  if (!inputs_.list(out, listError)) {
+    error = {"device", listError};
+    return false;
+  }
+  return true;
+}
+
+bool Engine::openInput(const InputOpenOptions& options, InputFeedStatus& out, EngineError& error) {
+  if (!running_.load(std::memory_order_acquire)) {
+    error = {"engine", "audio engine is not running"};
+    return false;
+  }
+  if (!std::isfinite(options.skewPpm) || !std::isfinite(options.latencyMs) || options.latencyMs < 0.0 ||
+      options.latencyMs > 1000.0) {
+    error = {"invalid", "an input's buffer is between 0 and 1000 ms"};
+    return false;
+  }
+  std::string openError;
+  const int slot = inputs_.open(options, mixer_.sampleRate(), openError);
+  if (slot < 0) {
+    error = {"device", openError};
+    return false;
+  }
+  for (const InputFeedStatus& status : inputs_.status()) {
+    if (status.slot == slot) out = status;
+  }
+  return true;
+}
+
+bool Engine::closeInput(const std::string& device, bool& closed, EngineError& error) {
+  (void)error;
+  closed = inputs_.close(device);
+  return true;
+}
+
+std::vector<InputFeedStatus> Engine::inputStatus() { return inputs_.status(); }
+
+bool Engine::startInput(const std::string& cueId, double whenMs, const InputOpenOptions& input,
+                        const std::vector<int>& channels, StartOptions options, StartResultDTO& out,
+                        EngineError& error) {
+  if (cueId.empty() || cueId.size() >= kMaxCueIdLen) {
+    error = {"invalid", "missing or over-long cue id"};
+    return false;
+  }
+  if (!finiteNumber(whenMs) || !finiteNumber(options.volume) || !finiteNumber(options.pan) ||
+      !finiteNumber(options.trim) || !finiteNumber(options.fadeInMs) || options.fadeInMs < 0.0) {
+    error = {"invalid", "start options contain a non-finite value"};
+    return false;
+  }
+  if (channels.empty() || channels.size() > static_cast<size_t>(kMaxOutputChannels)) {
+    error = {"invalid", "a live input takes 1 to " + std::to_string(kMaxOutputChannels) + " channels"};
+    return false;
+  }
+  if (options.crosspointCount < 0 || options.crosspointCount > kMaxCrosspoints) {
+    error = {"invalid", "too many crosspoints"};
+    return false;
+  }
+  options.sliceCount = 0;
+  if (!validStartExtras(options, error)) return false;
+
+  InputFeedStatus feed;
+  if (!openInput(input, feed, error)) return false;
+  for (int channel : channels) {
+    if (channel < 0 || channel >= feed.channels) {
+      error = {"invalid", feed.name + " has no channel " + std::to_string(channel + 1)};
+      return false;
+    }
+  }
+  for (int i = 0; i < options.crosspointCount; i++) {
+    const Crosspoint& point = options.crosspoints[i];
+    if (point.inputChannel < 0 || point.inputChannel >= static_cast<int>(channels.size()) || point.outputChannel < 0 ||
+        point.outputChannel >= kMaxOutputChannels || !finiteNumber(point.gain)) {
+      error = {"invalid", "crosspoint is outside the input or device channel range"};
+      return false;
+    }
+  }
+
+  Command command;
+  command.kind = Command::Start;
+  copyStr(command.cueId, sizeof(command.cueId), cueId);
+  command.whenMs = whenMs;
+  options.inputFeed = feed.slot;
+  options.inputChannelCount = static_cast<int>(channels.size());
+  for (size_t i = 0; i < channels.size(); i++) options.inputChannels[i] = channels[i];
+  // A live voice has no region and no loop: it runs until it is stopped.
+  options.startTimeMs = 0.0;
+  options.endTimeMs = -1.0;
+  options.loopCount = 0;
+  options.rate = 1.0;
+  command.options = options;
+
+  const unsigned long long runNumber = nextRunId_.fetch_add(1, std::memory_order_relaxed);
+  std::snprintf(command.runId, sizeof(command.runId), "run-%llu", runNumber);
+  AckResult ack;
+  if (!submitCommand(command, ack, error)) return false;
+  if (!ack.applied) {
+    error = {"limit", "no free voice for this cue"};
+    return false;
+  }
+  out.cueId = cueId;
+  out.runId = command.runId;
+  out.state = ack.state == static_cast<int>(VoiceState::Scheduled) ? "scheduled" : "playing";
+  out.startAtMs = std::max(whenMs, clockMs());
+  return true;
+}
+
+// ── Output patches and the mixer ──────────────────────────────────────────────────────
+
+bool Engine::setPatch(int slot, bool defined, const std::vector<int>& outputs, double gain, CommandResultDTO& out,
+                      EngineError& error) {
+  if (slot < 0 || slot >= kMaxPatches) {
+    error = {"invalid", "a patch slot is 0 to " + std::to_string(kMaxPatches - 1)};
+    return false;
+  }
+  if (outputs.size() > static_cast<size_t>(kMaxOutputChannels)) {
+    error = {"invalid", "a patch has at most " + std::to_string(kMaxOutputChannels) + " channels"};
+    return false;
+  }
+  if (!finiteNumber(gain) || gain < 0.0) {
+    error = {"invalid", "a patch needs a level of zero or more"};
+    return false;
+  }
+  mixer_.prepareBuses();
+  Command command;
+  command.kind = Command::Bus;
+  command.busSlot = slot;
+  command.busDefined = defined && !outputs.empty();
+  command.busChannels = static_cast<int>(outputs.size());
+  for (size_t i = 0; i < outputs.size(); i++) {
+    // An output past the device's own is kept, and carries nothing until a device that has
+    // it is opened: a show patched for a bigger interface still loads on a laptop.
+    command.busMap[i] = outputs[i] < 0 || outputs[i] >= kMaxOutputChannels ? -1 : outputs[i];
+  }
+  command.value = gain;
+  AckResult ack;
+  if (!submitCommand(command, ack, error)) return false;
+  out.atMs = clockMs();
+  out.applied = ack.applied;
+  return true;
+}
+
+bool Engine::setOutputGains(const std::vector<double>& gains, CommandResultDTO& out, EngineError& error) {
+  if (gains.size() > static_cast<size_t>(kMaxOutputChannels)) {
+    error = {"invalid", "the engine has at most " + std::to_string(kMaxOutputChannels) + " outputs"};
+    return false;
+  }
+  Command command;
+  command.kind = Command::OutputGains;
+  for (int output = 0; output < kMaxOutputChannels; output++) command.outputGains[output] = 1.0f;
+  for (size_t i = 0; i < gains.size(); i++) {
+    if (!finiteNumber(gains[i]) || gains[i] < 0.0) {
+      error = {"invalid", "an output needs a level of zero or more"};
+      return false;
+    }
+    command.outputGains[i] = static_cast<float>(gains[i]);
+  }
+  AckResult ack;
+  if (!submitCommand(command, ack, error)) return false;
+  out.atMs = clockMs();
+  out.applied = ack.applied;
+  return true;
+}
+
+void Engine::busMeters(int* channels, float (*peaks)[kMaxOutputChannels]) const {
+  auto snapshot = std::make_unique<MixSnapshot>();
+  snapshotCell_.read(*snapshot);
+  for (int slot = 0; slot < kMaxPatches; slot++) {
+    channels[slot] = snapshot->busChannels[slot];
+    for (int channel = 0; channel < kMaxOutputChannels; channel++) peaks[slot][channel] = snapshot->busPeak[slot][channel];
+  }
+}
+
+// ── Loudness ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * A file's integrated loudness and true peak, in one pass over its samples — what
+ * normalising a cue to the show's target reads. A file the show has already decoded is
+ * measured straight out of the cache; the answer is kept per file and its stamp, so a
+ * batch over a selection that shares files reads each one once.
+ */
+bool Engine::loudness(const std::string& filePath, LoudnessDTO& out, EngineError& error) {
+  const FileStamp stamp = fileStampOf(filePath);
+  {
+    std::lock_guard<std::mutex> lock(analysisCacheMutex_);
+    for (LoudnessCacheEntry& entry : loudnessCache_) {
+      if (entry.filePath == filePath && entry.stamp.bytes == stamp.bytes && entry.stamp.modified == stamp.modified) {
+        entry.lastUse = ++analysisCacheClock_;
+        out = entry.result;
+        return true;
+      }
+    }
+  }
+
+  LoudnessDTO result;
+  result.filePath = filePath;
+  int64_t frames = -1;
+  int64_t consumed = 0;
+  std::unique_ptr<LoudnessMeter> meter;
+
+  CacheEntry* resident = nullptr;
+  if (cache_.isResident(filePath)) {
+    bool cacheHit = false;
+    bool bypassed = false;
+    std::string cacheError;
+    resident = cache_.pin(filePath, cacheHit, bypassed, cacheError);
+  }
+  if (resident != nullptr && (resident->channels <= 0 || resident->sampleRate <= 0)) {
+    cache_.release(resident);
+    resident = nullptr;
+  }
+  if (resident != nullptr) {
+    result.channels = resident->channels;
+    result.sampleRate = resident->sampleRate;
+    frames = resident->frames;
+    meter = std::make_unique<LoudnessMeter>(result.sampleRate, result.channels);
+    meter->feed(resident->data.data(), frames);
+    consumed = frames;
+    cache_.release(resident);
+  } else {
+    std::string openError;
+    std::unique_ptr<Source> source = openSource(filePath, openError);
+    if (source == nullptr) {
+      error = {"decode", openError};
+      return false;
+    }
+    const SourceInfo info = source->info();
+    result.channels = info.channels;
+    result.sampleRate = info.sampleRate;
+    frames = info.frames;
+    if (result.channels <= 0 || result.sampleRate <= 0) {
+      error = {"decode", "media file reports an invalid format"};
+      return false;
+    }
+    meter = std::make_unique<LoudnessMeter>(result.sampleRate, result.channels);
+    std::vector<float> chunk(static_cast<size_t>(8192) * static_cast<size_t>(result.channels));
+    for (;;) {
+      if (analysisCancelled()) return cancelledScan(error);
+      const int64_t got = source->readFrames(chunk.data(), 8192);
+      if (got <= 0) break;
+      meter->feed(chunk.data(), got);
+      consumed += got;
+    }
+  }
+
+  result.durationMs = frameMs(frames > 0 ? frames : consumed, result.sampleRate);
+  double lufs = 0.0;
+  result.silent = !meter->integrated(lufs);
+  result.integratedLufs = result.silent ? -70.0 : lufs;
+  const auto db = [](double linear) { return linear > 0.0 ? 20.0 * std::log10(linear) : -200.0; };
+  result.truePeakDb = db(meter->truePeak());
+  result.samplePeakDb = db(meter->samplePeak());
+
+  {
+    std::lock_guard<std::mutex> lock(analysisCacheMutex_);
+    if (loudnessCache_.size() >= kMaxAnalysisCacheEntries) {
+      auto oldest = std::min_element(loudnessCache_.begin(), loudnessCache_.end(),
+                                     [](const LoudnessCacheEntry& a, const LoudnessCacheEntry& b) {
+                                       return a.lastUse < b.lastUse;
+                                     });
+      loudnessCache_.erase(oldest);
+    }
+    loudnessCache_.push_back({filePath, stamp, result, ++analysisCacheClock_});
+  }
   out = std::move(result);
   return true;
 }

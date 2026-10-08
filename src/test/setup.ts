@@ -171,6 +171,23 @@ Object.defineProperty(window, 'cuerunner', {
         filePath: '', format: 'wav', durationMs: 0, sampleRate: 48000, channels: 2,
         frames: null, fileBytes: 0, decodedBytes: null, streaming: false, resident: false
       })),
+      loudness: vi.fn(() => Promise.resolve({
+        filePath: '', integratedLufs: -23, truePeakDb: -6, samplePeakDb: -6, silent: false,
+        durationMs: 0, sampleRate: 48000, channels: 2
+      })),
+      inputs: vi.fn(() => Promise.resolve([])),
+      inputOpen: vi.fn(() => Promise.resolve({
+        slot: 0, device: 'test:tone', name: 'Test tone', channels: 2, sampleRate: 48000, running: true,
+        synthetic: true, latencyMs: 0, targetMs: 0, ratioPpm: 0, periodFrames: 0, underruns: 0,
+        overruns: 0, resyncs: 0, capturedFrames: 0, peaks: [0, 0]
+      })),
+      inputClose: vi.fn(() => Promise.resolve({ closed: true })),
+      inputStatus: vi.fn(() => Promise.resolve([])),
+      startInput: vi.fn((): Promise<AudioStartResult> => Promise.resolve({
+        cueId: 'cue', runId: 'run', state: 'playing', startAtMs: 0
+      })),
+      patch: vi.fn((): Promise<AudioCommandResult> => Promise.resolve({ ok: true, at: 0, applied: true })),
+      outputGains: vi.fn((): Promise<AudioCommandResult> => Promise.resolve({ ok: true, at: 0, applied: true })),
       onEvents: vi.fn(() => () => {}),
       pickFile: vi.fn(() => Promise.resolve(null))
     },

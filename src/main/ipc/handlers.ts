@@ -23,6 +23,12 @@ import {
   type AudioMasterPayload,
   type AudioOnsetsPayload,
   type AudioSilencePayload,
+  type AudioLoudnessPayload,
+  type AudioInputOpenPayload,
+  type AudioInputClosePayload,
+  type AudioStartInputPayload,
+  type AudioPatchPayload,
+  type AudioOutputGainsPayload,
   type AudioConfigurePayload,
   type AudioEngineEvent,
   type AudioFadePayload,
@@ -435,7 +441,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(AUDIO_CHANNELS.seek, (_, payload: AudioSeekPayload) =>
     audioVerb(() => audioEngine.seek(payload.cueId, payload.positionMs, payload.whenMs)))
   ipcMain.handle(AUDIO_CHANNELS.release, (_, payload: AudioReleasePayload) =>
-    audioVerb(() => audioEngine.release(payload.cueId, payload.whenMs, payload.endMs)))
+    audioVerb(() => audioEngine.release(payload.cueId, payload.whenMs, payload.endMs, payload.stopAtSliceEnd)))
   ipcMain.handle(AUDIO_CHANNELS.cancel, (_, payload: AudioCancelPayload) =>
     audioVerb(() => audioEngine.cancel(payload.cueId, payload.whenMs)))
   ipcMain.handle(AUDIO_CHANNELS.pause, (_, payload: AudioHoldPayload) =>
@@ -449,7 +455,9 @@ export function registerIpcHandlers(): void {
     audioVerb(() => audioEngine.routing(payload.cueId, payload.outputs)))
   ipcMain.handle(AUDIO_CHANNELS.fade, (_, payload: AudioFadePayload) =>
     audioVerb(() =>
-      audioEngine.fade(payload.cueId, payload.param, payload.value, payload.durationMs, payload.curve, payload.whenMs)
+      audioEngine.fade(
+        payload.cueId, payload.param, payload.value, payload.durationMs, payload.curve, payload.whenMs, payload.shape
+      )
     ))
   ipcMain.handle(AUDIO_CHANNELS.progress, (_, payload: AudioProgressPayload) =>
     audioVerb(() => audioEngine.progress(payload.cueId)))
@@ -470,6 +478,22 @@ export function registerIpcHandlers(): void {
     audioVerb(() => audioEngine.silence(payload.filePath, payload.thresholdDb)))
   ipcMain.handle(AUDIO_CHANNELS.probe, (_, payload: AudioProbePayload) =>
     audioVerb(() => audioEngine.probe(payload.filePath)))
+  // Loudness, live inputs and the mixer's patches and faders.
+  ipcMain.handle(AUDIO_CHANNELS.loudness, (_, payload: AudioLoudnessPayload) =>
+    audioVerb(() => audioEngine.loudness(payload.filePath)))
+  ipcMain.handle(AUDIO_CHANNELS.inputs, () => audioVerb(() => audioEngine.inputs()))
+  ipcMain.handle(AUDIO_CHANNELS.inputOpen, (_, payload: AudioInputOpenPayload) =>
+    audioVerb(() => audioEngine.inputOpen(payload)))
+  ipcMain.handle(AUDIO_CHANNELS.inputClose, (_, payload: AudioInputClosePayload) =>
+    audioVerb(() => audioEngine.inputClose(payload.device)))
+  ipcMain.handle(AUDIO_CHANNELS.inputStatus, () => audioVerb(() => audioEngine.inputStatus()))
+  ipcMain.handle(AUDIO_CHANNELS.startInput, (_, payload: AudioStartInputPayload) =>
+    audioVerb(() =>
+      audioEngine.startInput(payload.cueId, payload.whenMs, payload.device, payload.channels, payload.options)))
+  ipcMain.handle(AUDIO_CHANNELS.patch, (_, payload: AudioPatchPayload) =>
+    audioVerb(() => audioEngine.patch(payload.slot, payload.outputs, payload.gain)))
+  ipcMain.handle(AUDIO_CHANNELS.outputGains, (_, payload: AudioOutputGainsPayload) =>
+    audioVerb(() => audioEngine.outputGains(payload.gains)))
 
   // Every engine event is both forwarded to the window and kept for the safety net: a
   // burst — a panic stopping twenty voices at once — is one message rather than twenty,

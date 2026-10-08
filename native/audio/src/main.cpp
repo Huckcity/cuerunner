@@ -65,6 +65,7 @@ void usage() {
                "                             total streaming budget (0 = no budget)\n"
                "  --schedule-horizon-ms <n>  how far ahead a stamped verb may be scheduled\n"
                "  --frames <n>               offline: render exactly this many frames\n"
+               "  --test-inputs              offer the synthetic live inputs (test:tone, test:ramp)\n"
                "  --protocol                 print the wire declaration: the protocol, every verb, every event and the shared bounds\n"
                "  --version\n",
                ws::kEngineVersion);
@@ -132,6 +133,8 @@ bool parseArgs(int argc, char** argv, ws::EngineOptions& engine, std::string& so
     } else if (arg == "--frames") {
       if (!nextValue(argc, argv, i, value)) return false;
       frames = std::atoll(value.c_str());
+    } else if (arg == "--test-inputs") {
+      engine.testInputs = true;
     } else if (arg == "--list-devices") {
       listDevices = true;
     } else if (arg == "--protocol") {

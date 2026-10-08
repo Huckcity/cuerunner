@@ -35,6 +35,10 @@ import type {
   AudioProbe,
   AudioOnsets,
   AudioSilence,
+  AudioLoudness,
+  AudioInputDevice,
+  AudioInputOpenOptions,
+  AudioInputStatus,
   AudioProgress,
   AudioSeekResult,
   AudioStartOptions,
@@ -74,6 +78,12 @@ const SLOW_VERBS: Partial<Record<AudioWireVerb, number>> = {
   // analysed frame by frame to its last one, which the default deadline cuts off —
   // silently, because the waveform panel treats a failed onsets request as "no ticks".
   onsets: SLOW_REQUEST_TIMEOUT_MS,
+  // A loudness scan is the same whole-file pass, through a four-times oversampler.
+  loudness: SLOW_REQUEST_TIMEOUT_MS,
+  // Opening a capture device is the device's own business and can take as long as a configure.
+  inputs: SLOW_REQUEST_TIMEOUT_MS,
+  inputOpen: SLOW_REQUEST_TIMEOUT_MS,
+  startInput: SLOW_REQUEST_TIMEOUT_MS,
   configure: SLOW_REQUEST_TIMEOUT_MS,
   devices: SLOW_REQUEST_TIMEOUT_MS
 }
@@ -352,8 +362,8 @@ export class NativeAudioEngine {
     return this.request('seek', { cueId, positionMs, whenMs }) as Promise<AudioSeekResult>
   }
 
-  release(cueId: string, whenMs?: number, endMs?: number): Promise<AudioCommandResult> {
-    return this.request('release', { cueId, whenMs, endMs }) as Promise<AudioCommandResult>
+  release(cueId: string, whenMs?: number, endMs?: number, stopAtSliceEnd?: boolean): Promise<AudioCommandResult> {
+    return this.request('release', { cueId, whenMs, endMs, stopAtSliceEnd }) as Promise<AudioCommandResult>
   }
 
   cancel(cueId: string, whenMs?: number): Promise<AudioCancelResult> {
@@ -382,9 +392,12 @@ export class NativeAudioEngine {
     value: number,
     durationMs: number,
     curve: AudioFadeCurve,
-    whenMs?: number
+    whenMs?: number,
+    shape?: number[] | null
   ): Promise<AudioCommandResult> {
-    return this.request('fade', { cueId, param, value, durationMs, curve, whenMs }) as Promise<AudioCommandResult>
+    return this.request('fade', {
+      cueId, param, value, durationMs, curve, whenMs, shape: shape ?? undefined
+    }) as Promise<AudioCommandResult>
   }
 
   routing(cueId: string, outputs: AudioCrosspoint[] | null): Promise<AudioCommandResult> {
@@ -443,6 +456,47 @@ export class NativeAudioEngine {
 
   silence(filePath: string, thresholdDb?: number): Promise<AudioSilence> {
     return this.request('silence', { filePath, thresholdDb }, SLOW_VERBS.silence) as Promise<AudioSilence>
+  }
+
+  loudness(filePath: string): Promise<AudioLoudness> {
+    return this.request('loudness', { filePath }, SLOW_VERBS.loudness) as Promise<AudioLoudness>
+  }
+
+  async inputs(): Promise<AudioInputDevice[]> {
+    const result = (await this.request('inputs', {}, SLOW_VERBS.inputs)) as { inputs: AudioInputDevice[] }
+    return result.inputs
+  }
+
+  inputOpen(options: AudioInputOpenOptions): Promise<AudioInputStatus> {
+    return this.request('inputOpen', { ...options }, SLOW_VERBS.inputOpen) as Promise<AudioInputStatus>
+  }
+
+  inputClose(device: string): Promise<{ closed: boolean }> {
+    return this.request('inputClose', { device }) as Promise<{ closed: boolean }>
+  }
+
+  async inputStatus(): Promise<AudioInputStatus[]> {
+    const result = (await this.request('inputStatus', {})) as { feeds: AudioInputStatus[] }
+    return result.feeds
+  }
+
+  startInput(
+    cueId: string,
+    whenMs: number,
+    device: string,
+    channels: number[],
+    options: Partial<AudioStartOptions>
+  ): Promise<AudioStartResult> {
+    return this.request('startInput', { cueId, whenMs, device, channels, options }, SLOW_VERBS.startInput) as
+      Promise<AudioStartResult>
+  }
+
+  patch(slot: number, outputs: number[] | null, gain: number): Promise<AudioCommandResult> {
+    return this.request('patch', { slot, outputs, gain }) as Promise<AudioCommandResult>
+  }
+
+  outputGains(gains: number[]): Promise<AudioCommandResult> {
+    return this.request('outputGains', { gains }) as Promise<AudioCommandResult>
   }
 
   waveform(filePath: string, points: number, region?: AudioRegion): Promise<AudioWaveform> {

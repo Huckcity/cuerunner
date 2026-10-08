@@ -31,7 +31,11 @@
  * 4 adds a voice held where it is and let go again (`pause`, `resume`), the master level and
  * the meters, and the engine's linear timecode: its LTC voices and its reader (`ltcStart`
  * through `ltcUnlisten`). They arrived together and none of them shipped under 3, so they
- * are one meaning of one number rather than two.
+ * are one meaning of one number rather than two. The live inputs (`inputs` through
+ * `startInput`), the output patches and output faders (`patch`, `outputGains`, a start's
+ * `patch`), slices and drawn fade shapes (a start's `slices` and `fadeInShape`, a fade's
+ * `shape`, a release's `stopAtSliceEnd`) and the loudness meter (`loudness`) joined the same
+ * table before 4 shipped, for the same reason.
  */
 export const AUDIO_PROTOCOL_VERSION = 4
 
@@ -71,6 +75,14 @@ const AUDIO_WIRE_CROSSPOINT = {
   gain: { type: 'number', required: false, default: 1 }
 } as const satisfies Record<string, AudioWireField>
 
+/** One slice of a file, as a start carries it: a region in file ms and how often it plays. */
+const AUDIO_WIRE_SLICE = {
+  startTime: { type: 'number', required: false, default: 0 },
+  endTime: { type: 'number', required: false, default: 0 },
+  /** Passes before the voice moves on; -1 plays it until a release moves the voice on. */
+  playCount: { type: 'number', required: false, default: 1 }
+} as const satisfies Record<string, AudioWireField>
+
 /** What a `start` asks the engine to play, field for field. */
 const AUDIO_WIRE_START_OPTIONS = {
   startTime: { type: 'number', required: false, default: 0 },
@@ -83,7 +95,13 @@ const AUDIO_WIRE_START_OPTIONS = {
   pan: { type: 'number', required: false, default: 0 },
   fadeInDuration: { type: 'number', required: false, default: 0 },
   /** Null/absent is automatic routing; `[]` is a deliberately silent voice. */
-  outputs: { type: 'array', required: false, nullable: true, default: null, fields: AUDIO_WIRE_CROSSPOINT }
+  outputs: { type: 'array', required: false, nullable: true, default: null, fields: AUDIO_WIRE_CROSSPOINT },
+  /** The output patch slot the voice plays through; -1 is the device's own channels. */
+  patch: { type: 'number', required: false, default: -1 },
+  /** The fade-in's drawn shape (`AUDIO_CURVE_POINTS` shares, 0–1); null is a straight line. */
+  fadeInShape: { type: 'array', required: false, nullable: true, default: null },
+  /** The file cut into slices, played in order; null is the one region and its loop count. */
+  slices: { type: 'array', required: false, nullable: true, default: null, fields: AUDIO_WIRE_SLICE }
 } as const satisfies Record<string, AudioWireField>
 
 /** What `configure()` accepts: null, and every sub-field of it, means leave as it is. */
@@ -257,7 +275,9 @@ export const AUDIO_WIRE = {
       cueId: { type: 'string', required: true },
       whenMs: { type: 'number', required: false, default: 0 },
       /** A time in the file; null (or absent) plays the release out to the end of it. */
-      endMs: { type: 'number', required: false, nullable: true, default: null }
+      endMs: { type: 'number', required: false, nullable: true, default: null },
+      /** End the voice at the end of the pass (or slice) it is in, rather than play on. */
+      stopAtSliceEnd: { type: 'boolean', required: false, default: false }
     },
     cancel: {
       cueId: { type: 'string', required: true },
@@ -285,7 +305,9 @@ export const AUDIO_WIRE = {
       value: { type: 'number', required: false, default: 0 },
       durationMs: { type: 'number', required: false, default: 0 },
       curve: { type: 'string', required: false, default: 'linear' },
-      whenMs: { type: 'number', required: false, default: 0 }
+      whenMs: { type: 'number', required: false, default: 0 },
+      /** A drawn shape (shares of the change, 0–1, evenly spaced); it is the curve when present. */
+      shape: { type: 'array', required: false, nullable: true, default: null }
     },
     routing: {
       cueId: { type: 'string', required: true },
@@ -323,6 +345,10 @@ export const AUDIO_WIRE = {
       filePath: { type: 'string', required: true },
       thresholdDb: { type: 'number', required: false, default: -60 }
     },
+    /** A file's integrated loudness (EBU R128) and true peak, from a scan of its samples. */
+    loudness: {
+      filePath: { type: 'string', required: true }
+    },
     /** Test hook: runs the real device-notification classification without hardware. */
     simulateDeviceNotification: {
       type: { type: 'string', required: true },
@@ -358,7 +384,51 @@ export const AUDIO_WIRE = {
     ltcRead: {
       limit: { type: 'number', required: false, default: 256 }
     },
-    ltcUnlisten: {}
+    ltcUnlisten: {},
+    // ── Live inputs and the mixer (native/audio/src/live_input.h) ──────────────
+    /** The capture devices a live input can be taken from, and the test inputs when offered. */
+    inputs: {},
+    /** Opens a live input (or finds it open) so a cue that goes live starts at once. */
+    inputOpen: {
+      device: { type: 'string', required: true },
+      /** A test input's rate; 0 is the engine's. A device keeps its own. */
+      sampleRate: { type: 'number', required: false, default: 0 },
+      /** A test input's channels. A device keeps its own. */
+      channels: { type: 'number', required: false, default: 2 },
+      /** How far a test input's clock is off its rate, ppm. */
+      skewPpm: { type: 'number', required: false, default: 0 },
+      /** A test input's delivery size, frames; 0 is 10 ms. */
+      periodFrames: { type: 'number', required: false, default: 0 },
+      /** The buffer the drift controller holds, ms; 0 sizes it from the device. */
+      latencyMs: { type: 'number', required: false, default: 0 },
+      /** How late a test input's deliveries may each be, ms. */
+      jitterMs: { type: 'number', required: false, default: 0 }
+    },
+    inputClose: {
+      device: { type: 'string', required: true }
+    },
+    /** Every open input: its buffer, the controller's nudge, its counters and its meter. */
+    inputStatus: {},
+    /** Starts a live voice: channels of an input, with a start's level, routing and patch. */
+    startInput: {
+      cueId: { type: 'string', required: true },
+      whenMs: { type: 'number', required: false, default: 0 },
+      device: { type: 'string', required: true },
+      /** The input's channels, zero-based, that are the voice's channels in order. */
+      channels: { type: 'array', required: true },
+      latencyMs: { type: 'number', required: false, default: 0 },
+      options: { type: 'object', required: false, nullable: true, default: null, fields: AUDIO_WIRE_START_OPTIONS }
+    },
+    /** Defines output patch `slot` — its channels onto device outputs, and its fader — or clears it (null). */
+    patch: {
+      slot: { type: 'number', required: true },
+      outputs: { type: 'array', required: false, nullable: true, default: null },
+      gain: { type: 'number', required: false, default: 1 }
+    },
+    /** Every device output's own fader, linear, in output order. */
+    outputGains: {
+      gains: { type: 'array', required: true }
+    }
   },
   events: AUDIO_WIRE_EVENTS
 } as const satisfies {
@@ -510,6 +580,17 @@ export const AUDIO_CHANNELS = {
   onsets: 'audio:onsets',
   /** Where a file's sound starts and stops, for trimming the silence at its edges. */
   silence: 'audio:silence',
+  /** A file's loudness and true peak, for normalising a cue to the show's target. */
+  loudness: 'audio:loudness',
+  /** Live inputs: the devices, opening and closing one, their state, and a live voice. */
+  inputs: 'audio:inputs',
+  inputOpen: 'audio:inputOpen',
+  inputClose: 'audio:inputClose',
+  inputStatus: 'audio:inputStatus',
+  startInput: 'audio:startInput',
+  /** The mixer: an output patch's map and fader, and the per-output faders. */
+  patch: 'audio:patch',
+  outputGains: 'audio:outputGains',
   pickFile: 'audio:pickFile',
   /** Main pushes AudioEngineEvent[] here; preload subscribes with `onEvents`. */
   events: 'audio:events'
@@ -526,8 +607,11 @@ export const AUDIO_CHANNELS = {
  */
 export const AUDIO_SILENCE_THRESHOLD_DB = -60
 
-/** Fade shapes, matching the Web Audio behaviour the renderer was built against. */
-export type AudioFadeCurve = 'linear' | 'sCurve' | 'logarithmic'
+/**
+ * Fade shapes, matching the Web Audio behaviour the renderer was built against — and
+ * `custom`, a fade that carries a drawn shape (`shape`) instead of a name.
+ */
+export type AudioFadeCurve = 'linear' | 'sCurve' | 'logarithmic' | 'custom'
 
 /** A live parameter a `fade()` can move. */
 export type AudioFadeParam = 'volume' | 'pan' | 'trim' | 'rate'
@@ -568,7 +652,29 @@ export interface AudioStartOptions {
   /** Fade-in length in ms; 0 means the voice starts at its level. */
   fadeInDuration: number
   outputs: AudioCrosspoint[] | null
+  /** The output patch slot the voice plays through; absent or -1 is the device's own channels. */
+  patch?: number
+  /** The fade-in's drawn shape, `AUDIO_CURVE_POINTS` shares; absent or null is a straight line. */
+  fadeInShape?: number[] | null
+  /** The file cut into slices, played in order; absent or null is the region and its loops. */
+  slices?: AudioSlice[] | null
 }
+
+/** One slice as the engine plays it: a region of the file and how often it plays. */
+export interface AudioSlice {
+  /** File ms. */
+  startTime: number
+  endTime: number
+  /** Passes before the voice moves on; -1 plays it until a release moves it on. */
+  playCount: number
+}
+
+/** Points in a drawn fade shape on the wire: the engine's table size. */
+export const AUDIO_CURVE_POINTS = 65
+/** Output patch slots the engine holds. */
+export const AUDIO_PATCH_SLOTS = 16
+/** Slices one cue's file can carry. */
+export const AUDIO_MAX_SLICES = 32
 
 export function defaultAudioStartOptions(): AudioStartOptions {
   return {
@@ -985,6 +1091,82 @@ export interface AudioSilence {
 }
 
 /**
+ * A file's loudness the way a broadcast meter reads it (ITU-R BS.1770 / EBU R128): the
+ * integrated loudness of the whole file, gated, and the highest level its waveform reaches
+ * between samples as well as at them.
+ */
+export interface AudioLoudness {
+  filePath: string
+  /** LUFS; meaningless when `silent`. */
+  integratedLufs: number
+  /** dBTP: the inter-sample peak, read by oversampling. */
+  truePeakDb: number
+  /** dBFS: the highest sample. */
+  samplePeakDb: number
+  /** Nothing in the file reached the absolute gate (−70 LUFS): there is nothing to normalise. */
+  silent: boolean
+  durationMs: number
+  sampleRate: number
+  channels: number
+}
+
+/** A capture device a live input can be taken from. */
+export interface AudioInputDevice {
+  /** What `inputOpen` and `startInput` name it by. */
+  id: string
+  name: string
+  /** 0 when the backend does not say before it is opened. */
+  channels: number
+  sampleRate: number
+  isDefault: boolean
+  /** One of the engine's test inputs (`test:tone`, `test:ramp`), not hardware. */
+  synthetic: boolean
+}
+
+/** What opening a live input asks for. Everything but the device applies to a test input only. */
+export interface AudioInputOpenOptions {
+  device: string
+  sampleRate?: number
+  channels?: number
+  skewPpm?: number
+  periodFrames?: number
+  /** The buffer the drift controller holds, ms; absent or 0 sizes it from the device. */
+  latencyMs?: number
+  jitterMs?: number
+}
+
+/** An open live input, as the engine reports it. */
+export interface AudioInputStatus {
+  slot: number
+  device: string
+  name: string
+  channels: number
+  sampleRate: number
+  running: boolean
+  synthetic: boolean
+  /** How old what it plays is when it is played, ms (a one-second average). */
+  latencyMs: number
+  /** The buffer the controller holds the input at, ms. */
+  targetMs: number
+  /** How far the controller has moved the resampler off the nominal ratio, ppm. */
+  ratioPpm: number
+  /** The largest delivery the device has made, frames. */
+  periodFrames: number
+  underruns: number
+  overruns: number
+  resyncs: number
+  capturedFrames: number
+  /** Each channel's peak since the last status read, linear. */
+  peaks: number[]
+}
+
+/** One output patch's meter: each of its channels' peak, after its fader. */
+export interface AudioBusMeter {
+  slot: number
+  peaks: number[]
+}
+
+/**
  * A window into a file, in ms from its start. Both ends together, because half a window
  * is not one: a request with no region is the whole file.
  */
@@ -1038,7 +1220,7 @@ export interface AudioEngineBridge {
    * or its file has no stated length: there was nothing to release, and the caller is
    * told rather than having a change reported that did not happen.
    */
-  release(cueId: string, whenMs?: number, endMs?: number): Promise<AudioCommandResult>
+  release(cueId: string, whenMs?: number, endMs?: number, stopAtSliceEnd?: boolean): Promise<AudioCommandResult>
   /** Drop the cue's future-dated verbs (a scheduled start, a scheduled stop/fade). */
   cancel(cueId: string, whenMs?: number): Promise<AudioCancelResult>
   /**
@@ -1066,7 +1248,9 @@ export interface AudioEngineBridge {
     value: number,
     durationMs: number,
     curve: AudioFadeCurve,
-    whenMs?: number
+    whenMs?: number,
+    /** A drawn shape, `AUDIO_CURVE_POINTS` shares of the change; it is the curve when given. */
+    shape?: number[] | null
   ): Promise<AudioCommandResult>
   progress(cueId: string): Promise<AudioProgress | null>
   /** Fade every voice to silence and stop it. The main-process panic path calls this directly. */
@@ -1100,6 +1284,31 @@ export interface AudioEngineBridge {
    * clamped rather than refused, the way an oversized point count is.
    */
   silence(filePath: string, thresholdDb?: number): Promise<AudioSilence>
+  /** A file's integrated loudness and true peak: a pass over the whole file, kept per file. */
+  loudness(filePath: string): Promise<AudioLoudness>
+  /** The capture devices a live input can be taken from. */
+  inputs(): Promise<AudioInputDevice[]>
+  /** Opens a live input ahead of the cue that uses it, so GO is instant. */
+  inputOpen(options: AudioInputOpenOptions): Promise<AudioInputStatus>
+  inputClose(device: string): Promise<{ closed: boolean }>
+  /** Every open live input: its latency, its drift correction, its counters and its meter. */
+  inputStatus(): Promise<AudioInputStatus[]>
+  /**
+   * Start a live voice: `channels` of the input `device` (opened if it is not) as the
+   * voice's own channels, with a start's level, pan, routing, patch and fade-in. It runs
+   * until stopped, and stop, fade, pause, routing and panic reach it like any voice.
+   */
+  startInput(
+    cueId: string,
+    whenMs: number,
+    device: string,
+    channels: number[],
+    options: Partial<AudioStartOptions>
+  ): Promise<AudioStartResult>
+  /** Define output patch `slot` (its channels onto device outputs, and its fader), or clear it with null. */
+  patch(slot: number, outputs: number[] | null, gain: number): Promise<AudioCommandResult>
+  /** Every device output's own fader, linear, in output order. */
+  outputGains(gains: number[]): Promise<AudioCommandResult>
   /** Subscribe to engine events. Returns the unsubscribe function. */
   onEvents(callback: (events: AudioEngineEvent[]) => void): () => void
   /** File dialog for choosing a cue's media. */
@@ -1137,6 +1346,8 @@ export interface AudioReleasePayload {
   whenMs?: number
   /** Where to play out to, in file ms; absent is the end of the file. */
   endMs?: number
+  /** End at the end of the pass (or slice) the voice is in. */
+  stopAtSliceEnd?: boolean
 }
 export interface AudioMasterPayload {
   gain: number
@@ -1151,6 +1362,8 @@ export interface AudioMeters {
   at: number
   master: number
   peaks: number[]
+  /** Each defined output patch's meter, after its fader. Absent from an engine without patches. */
+  buses?: AudioBusMeter[]
 }
 
 export interface AudioHoldPayload {
@@ -1173,6 +1386,7 @@ export interface AudioFadePayload {
   durationMs: number
   curve: AudioFadeCurve
   whenMs?: number
+  shape?: number[] | null
 }
 export interface AudioProgressPayload {
   cueId: string
@@ -1203,4 +1417,26 @@ export interface AudioSilencePayload {
   filePath: string
   /** dBFS below which a sample is silence; absent leaves the decision to the engine. */
   thresholdDb?: number
+}export interface AudioLoudnessPayload {
+  filePath: string
+}
+export type AudioInputOpenPayload = AudioInputOpenOptions
+export interface AudioInputClosePayload {
+  device: string
+}
+export interface AudioStartInputPayload {
+  cueId: string
+  whenMs: number
+  device: string
+  channels: number[]
+  options: Partial<AudioStartOptions>
+}
+export interface AudioPatchPayload {
+  slot: number
+  /** Device outputs, one per patch channel; null clears the patch. */
+  outputs: number[] | null
+  gain: number
+}
+export interface AudioOutputGainsPayload {
+  gains: number[]
 }

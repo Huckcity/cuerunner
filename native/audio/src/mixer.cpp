@@ -30,6 +30,10 @@ Mixer::Mixer(DecodedCache& cache, StreamPool& streams, SpscQueue<Event, 1024>& e
              SpscQueue<ReclaimItem, 512>& reclaim)
     : cache_(cache), streams_(streams), events_(events), reclaim_(reclaim) {
   reset();
+  for (int output = 0; output < kMaxOutputChannels; output++) {
+    outputGainTarget_[output] = 1.0;
+    outputGainCurrent_[output] = 1.0;
+  }
 }
 
 void Mixer::configure(int deviceChannels, int sampleRate) {
@@ -96,13 +100,19 @@ double Mixer::curveShape(double t, Curve curve) {
   }
 }
 
+/** The share of a ramp done at `t`: its named curve, or the table it was drawn as. */
+double Mixer::shapeAt(const FadeRamp& ramp, double t) {
+  if (ramp.curve == Curve::Table) return ramp.table != nullptr ? curveTableValue(*ramp.table, t) : t;
+  return curveShape(t, ramp.curve);
+}
+
 double Mixer::rampValue(const FadeRamp& ramp, int64_t frame) {
   if (!ramp.active) return 1.0;
   if (frame >= ramp.endFrame) return ramp.to;
   if (frame <= ramp.startFrame) return ramp.from;
   const double span = static_cast<double>(ramp.endFrame - ramp.startFrame);
   const double t = span > 0.0 ? static_cast<double>(frame - ramp.startFrame) / span : 1.0;
-  return ramp.from + (ramp.to - ramp.from) * curveShape(t, ramp.curve);
+  return ramp.from + (ramp.to - ramp.from) * shapeAt(ramp, t);
 }
 
 double Mixer::paramValue(const Voice& voice, int param, int64_t frame) const {
@@ -119,7 +129,7 @@ double Mixer::paramValue(const Voice& voice, int param, int64_t frame) const {
   if (frame <= ramp.startFrame) return ramp.from;
   const double span = static_cast<double>(ramp.endFrame - ramp.startFrame);
   const double t = span > 0.0 ? static_cast<double>(frame - ramp.startFrame) / span : 1.0;
-  return ramp.from + (ramp.to - ramp.from) * curveShape(t, ramp.curve);
+  return ramp.from + (ramp.to - ramp.from) * shapeAt(ramp, t);
 }
 
 bool Mixer::sampleOf(const Voice& voice, int64_t frame, int channel, float& out) const {
@@ -294,6 +304,17 @@ Voice* Mixer::startVoice(const Command& cmd) {
     voice->channels = cmd.cacheChannels;
     voice->sampleRate = cmd.cacheSampleRate;
     voice->sourceFrames = cmd.cacheFrames;
+  } else if (cmd.options.inputFeed >= 0) {
+    // A live voice: its samples are the feed's, already at the output's rate, and it has
+    // no end of its own — it runs until it is stopped.
+    voice->inputFeed = cmd.options.inputFeed;
+    voice->channels = std::min(cmd.options.inputChannelCount, kMaxOutputChannels);
+    for (int channel = 0; channel < voice->channels; channel++) {
+      inputMaps_[voiceIndex(*voice)][channel] = cmd.options.inputChannels[channel];
+    }
+    voice->sampleRate = sampleRate_;
+    voice->sourceFrames = -1;
+    voice->lengthUnknown = true;
   } else if (cmd.streamSlot >= 0) {
     const StreamSlot* slot = streams_.at(cmd.streamSlot);
     voice->streamSlot = cmd.streamSlot;
@@ -339,12 +360,43 @@ Voice* Mixer::startVoice(const Command& cmd) {
   voice->segmentStartFrame = segmentStart;
   voice->segmentEndFrame = segmentEnd;
   voice->position = segmentStart;
+
+  // Slices replace the one region and its loop count: the voice starts in the slice that
+  // holds its start (a seek can start it part-way through the cue) and plays them in order.
+  if (options.sliceCount > 0 && voice->inputFeed < 0) {
+    int kept = 0;
+    for (int i = 0; i < options.sliceCount && i < kMaxSlices; i++) {
+      const SliceSpec& spec = options.slices[i];
+      double start = spec.startMs * static_cast<double>(voice->sampleRate) / 1000.0;
+      double end = spec.endMs * static_cast<double>(voice->sampleRate) / 1000.0;
+      start = std::max(0.0, std::min(start, sourceEnd));
+      end = std::max(start, std::min(end, sourceEnd));
+      if (end <= start) continue;
+      VoiceSlice* slices = slicesOf(*voice);
+      slices[kept].startFrame = start;
+      slices[kept].endFrame = end;
+      slices[kept].playCount = spec.playCount < 0 ? -1 : std::max(1, spec.playCount);
+      kept++;
+    }
+    voice->sliceCount = kept;
+    if (kept > 0) {
+      int index = 0;
+      const VoiceSlice* slices = slicesOf(*voice);
+      while (index < kept - 1 && slices[index].endFrame <= segmentStart) index++;
+      voice->sliceIndex = index;
+      voice->segmentStartFrame = slices[index].startFrame;
+      voice->segmentEndFrame = slices[index].endFrame;
+      voice->position = std::max(segmentStart, slices[index].startFrame);
+      if (voice->position >= voice->segmentEndFrame) voice->position = voice->segmentStartFrame;
+    }
+  }
+
   if (voice->streamSlot >= 0) {
     // A freshly acquired ring holds nothing yet, so the voice is positioning until the
     // first fill covers the frame it is asking for — whether or not it starts at an
     // offset. Counting those frames as starvation made an ordinary streamed start read
     // as "the audio waited for the disk".
-    if (segmentStart > 0.0) requestStreamSeek(*voice, static_cast<int64_t>(segmentStart));
+    if (voice->position > 0.0) requestStreamSeek(*voice, static_cast<int64_t>(voice->position));
     else voice->awaitingSeek = true;
   }
   voice->loopCount = options.loopCount;
@@ -353,6 +405,7 @@ Voice* Mixer::startVoice(const Command& cmd) {
   voice->trim = options.trim;
   voice->rate = options.rate > 0.0 ? options.rate : 1.0;
   voice->automaticRouting = options.automatic;
+  voice->patch = options.patch >= 0 && options.patch < kMaxPatches ? options.patch : -1;
   indexRouting(*voice, options.crosspoints, options.crosspointCount);
 
   voice->startFrame = atOrNow(cmd.whenMs, sampleRate_, clockFrames_);
@@ -363,6 +416,12 @@ Voice* Mixer::startVoice(const Command& cmd) {
     voice->fadeIn.startFrame = voice->startFrame;
     voice->fadeIn.endFrame = voice->startFrame + frameForMs(options.fadeInMs, sampleRate_);
     voice->fadeIn.curve = Curve::Linear;
+    if (options.fadeInShape.count >= 2) {
+      voice->fadeIn.curve = Curve::Table;
+      CurveTable& table = rampTables_[voiceIndex(*voice)][kMaxRampParams];
+      table = options.fadeInShape;
+      voice->fadeIn.table = &table;
+    }
   }
   emitState(voice, true);
   return voice;
@@ -584,6 +643,23 @@ void Mixer::apply(const Command& cmd) {
     }
     case Command::Release: {
       Voice* voice = findVoice(cmd.cueId);
+      if (voice != nullptr && voice->sliceCount > 0) {
+        // A sliced voice is released a slice at a time: the slice it is in finishes the pass
+        // it is on, and the voice goes on into the next one — at the boundary, to the
+        // sample — or ends there, when the release asked for that.
+        voice->sliceRelease = true;
+        voice->stopAtPassEnd = cmd.stopAtSliceEnd;
+        applied = true;
+        ackVoices = activeVoiceCount();
+        break;
+      }
+      if (voice != nullptr && cmd.stopAtSliceEnd && voice->loopCount != 0) {
+        // A loop asked to end where its pass does: this pass is its last.
+        voice->loopCount = voice->loopsCompleted;
+        applied = true;
+        ackVoices = activeVoiceCount();
+        break;
+      }
       // A voice that is not looping is not vamping, and one whose file has no stated
       // length has no later to play to: either way there is nothing to release, and the
       // caller is told so rather than being told a change happened.
@@ -697,6 +773,11 @@ void Mixer::apply(const Command& cmd) {
             ramp.startFrame = start;
             ramp.endFrame = start + static_cast<int64_t>(frameForMs(cmd.durationMs, sampleRate_));
             ramp.curve = cmd.curve;
+            if (cmd.curve == Curve::Table) {
+              CurveTable& table = rampTables_[voiceIndex(*voice)][param];
+              table = cmd.shape;
+              ramp.table = &table;
+            }
           }
           applied = true;
         }
@@ -710,6 +791,34 @@ void Mixer::apply(const Command& cmd) {
         indexRouting(*voice, cmd.routing, cmd.routingCount);
         applied = true;
       }
+      break;
+    }
+    case Command::Bus: {
+      if (cmd.busSlot >= 0 && cmd.busSlot < kMaxPatches) {
+        Bus& bus = buses_[cmd.busSlot];
+        const bool wasDefined = bus.defined;
+        bus.defined = cmd.busDefined;
+        bus.channels = std::max(0, std::min(kMaxOutputChannels, cmd.busChannels));
+        for (int channel = 0; channel < kMaxOutputChannels; channel++) {
+          bus.map[channel] = channel < bus.channels ? cmd.busMap[channel] : -1;
+        }
+        // Bounded where the mixer's faders are: silence up to +12 dB.
+        bus.gainTarget = std::min(4.0, std::max(0.0, cmd.value));
+        // A patch that has just come into being starts at its level; one that is moved
+        // ramps to it over the next block, so a fader does not click.
+        if (!wasDefined) bus.gainCurrent = bus.gainTarget;
+        applied = true;
+      }
+      break;
+    }
+    case Command::OutputGains: {
+      for (int output = 0; output < kMaxOutputChannels; output++) {
+        outputGainTarget_[output] = std::min(4.0, std::max(0.0, static_cast<double>(cmd.outputGains[output])));
+      }
+      // The plain path is left until every output has arrived where it was sent, so a fader
+      // brought back to 0 dB still ramps there.
+      outputsAtUnity_ = false;
+      applied = true;
       break;
     }
     case Command::Panic: {
@@ -768,10 +877,198 @@ void Mixer::requestStreamSeek(Voice& voice, int64_t frame) {
   voice.awaitingSeek = true;
 }
 
+/**
+ * One voice's frame: its sample, its gain and pan, and its routing into the device's outputs
+ * or its patch's bus, then its position moved on. `Special` is a voice with something a plain
+ * file voice does not have — a patch, a live input, slices — and the plain case is compiled
+ * without them, so the matrix a show plays most of the time costs what it always did.
+ */
+template <bool Special>
+void Mixer::mixVoiceFrame(Voice& voice, int64_t frame, int64_t blockStart, float* outFrame, int channels) {
+  // Where this voice is mixed: the device's outputs, or the bus of the patch it plays
+  // through. A patch that has gone (deleted while the voice played) leaves the voice on
+  // the device's outputs rather than silent — a mis-patched cue stays audible.
+  float* dest = outFrame;
+  int destChannels = channels;
+  if (Special && voice.patch >= 0) {
+    const Bus& bus = buses_[voice.patch];
+    if (bus.defined && bus.channels > 0) {
+      dest = busData(voice.patch) + static_cast<size_t>(frame - blockStart) * static_cast<size_t>(bus.channels);
+      destChannels = bus.channels;
+    }
+  }
+
+  float sample[kMaxOutputChannels] = {};
+  double ratio = 1.0;
+  if (Special && voice.inputFeed >= 0) {
+    // A live voice reads the block its feed delivered, already at the output's rate. A
+    // feed that is not delivering is silence; the voice keeps its time.
+    const float* block = inputs_ != nullptr ? inputs_->block(voice.inputFeed) : nullptr;
+    const int stride = inputs_ != nullptr ? inputs_->channels(voice.inputFeed) : 0;
+    if (block == nullptr || stride <= 0) {
+      voice.position += 1.0;
+      return;
+    }
+    const float* row = block + static_cast<size_t>(frame - blockStart) * static_cast<size_t>(stride);
+    for (int channel = 0; channel < voice.channels; channel++) {
+      const int source = inputMaps_[voiceIndex(voice)][channel];
+      sample[channel] = source >= 0 && source < stride ? row[source] : 0.0f;
+    }
+  } else {
+    const double rate = paramValue(voice, static_cast<int>(Param::Rate), frame);
+    ratio = static_cast<double>(voice.sampleRate) / static_cast<double>(sampleRate_) * (rate > 0.0 ? rate : 1.0);
+    const int64_t base = static_cast<int64_t>(std::floor(voice.position));
+    const double frac = voice.position - static_cast<double>(base);
+
+    // Once the ring covers the frame the voice is asking for, the reposition is done
+    // and later starvation is starvation again.
+    if (voice.awaitingSeek) {
+      const StreamSlot* slot = streams_.at(voice.streamSlot);
+      if (slot != nullptr && base >= slot->ring.readFrame() && base < slot->ring.writeFrame()) {
+        voice.awaitingSeek = false;
+      }
+    }
+
+    bool have = true;
+    for (int channel = 0; channel < voice.channels; channel++) {
+      float first = 0.0f;
+      if (!sampleOf(voice, base, channel, first)) {
+        have = false;
+        break;
+      }
+      float second = first;
+      if (frac > 0.0) {
+        if (!sampleOf(voice, base + 1, channel, second)) {
+          bool atEnd = false;
+          if (voice.cachedData != nullptr) {
+            atEnd = base + 1 >= voice.cachedFrames;
+          } else if (voice.streamSlot >= 0) {
+            const StreamSlot* slot = streams_.at(voice.streamSlot);
+            atEnd = slot != nullptr && slot->eof.load(std::memory_order_acquire) &&
+                    base + 1 >= slot->ring.writeFrame();
+          }
+          if (atEnd) {
+            second = first;
+          } else {
+            have = false;
+            break;
+          }
+        }
+      }
+      sample[channel] = static_cast<float>(static_cast<double>(first) +
+                                           (static_cast<double>(second) - static_cast<double>(first)) * frac);
+    }
+
+    if (!have) {
+      if (voice.streamSlot >= 0 && !voice.awaitingSeek) {
+        StreamSlot* slot = streams_.at(voice.streamSlot);
+        if (slot != nullptr) slot->underruns.fetch_add(1, std::memory_order_relaxed);
+        underruns_.fetch_add(1, std::memory_order_relaxed);
+      }
+      return;
+    }
+
+    if (voice.streamSlot >= 0) {
+      StreamSlot* slot = streams_.at(voice.streamSlot);
+      // Release the frame just played, not the next one: below rate 1 the same source
+      // frame is played across several output frames, and releasing past it left the
+      // voice asking for a frame the window had already dropped — silence and an
+      // underrun per output frame, for good, on any cue playing a long file slower
+      // than real time (a rate below 1, or a rate fade on the way down).
+      if (slot != nullptr) slot->ring.release(base);
+    }
+  }
+
+  const double gain = paramValue(voice, static_cast<int>(Param::Volume), frame) *
+                      paramValue(voice, static_cast<int>(Param::Trim), frame) * rampValue(voice.fadeIn, frame) *
+                      rampValue(voice.stopFade, frame) * rampValue(voice.holdRamp, frame);
+
+  double panLeft = 1.0;
+  double panRight = 1.0;
+  if (destChannels >= 2) {
+    double pan = paramValue(voice, static_cast<int>(Param::Pan), frame);
+    pan = std::max(-1.0, std::min(1.0, pan));
+    if (voice.channels == 1) {
+      const double x = (pan + 1.0) * 0.5;
+      panLeft = std::cos(x * kHalfPi);
+      panRight = std::sin(x * kHalfPi);
+    } else if (pan <= 0.0) {
+      panLeft = 1.0;
+      panRight = std::sin((pan + 1.0) * kHalfPi);
+    } else {
+      panLeft = std::cos(pan * kHalfPi);
+      panRight = 1.0;
+    }
+  }
+
+  for (int output = 0; output < destChannels; output++) {
+    double contribution = 0.0;
+    if (voice.automaticRouting) {
+      const int input = voice.channels == 1
+                            ? (output < 2 ? 0 : -1)
+                            : (output < voice.channels ? output : -1);
+      if (input >= 0) contribution = sample[input];
+      // Pan belongs to automatic routing. An explicit crosspoint list states its
+      // own destinations and levels, so nothing is applied on top of it.
+      if (output == 0) contribution *= panLeft;
+      else if (output == 1) contribution *= panRight;
+    } else {
+      // The taps are grouped by output when the routing is applied, so this walks
+      // only the crosspoints that feed the output being written.
+      const int begin = voice.tapStart[output];
+      const int end = voice.tapStart[output + 1];
+      for (int t = begin; t < end; t++) {
+        const Tap& tap = voice.taps[t];
+        contribution += static_cast<double>(sample[tap.inputChannel]) * static_cast<double>(tap.gain);
+      }
+    }
+    dest[output] += static_cast<float>(contribution * gain);
+  }
+
+  voice.position += ratio;
+  if constexpr (Special) {
+    if (voice.inputFeed >= 0) return;
+    if (voice.sliceCount > 0) {
+      if (voice.position >= voice.segmentEndFrame) advanceSlices(voice, frame);
+      return;
+    }
+  }
+  const double length = voice.segmentEndFrame - voice.segmentStartFrame;
+  if (length > 0.0 && voice.position >= voice.segmentEndFrame) {
+    const double overshoot = voice.position - voice.segmentStartFrame;
+    const int64_t wraps = static_cast<int64_t>(std::floor(overshoot / length));
+    if (voice.loopCount < 0) {
+      voice.loopsCompleted += static_cast<int>(wraps);
+      voice.position -= static_cast<double>(wraps) * length;
+    } else {
+      const int64_t remaining = static_cast<int64_t>(voice.loopCount) - voice.loopsCompleted;
+      if (wraps <= remaining) {
+        voice.loopsCompleted += static_cast<int>(wraps);
+        voice.position -= static_cast<double>(wraps) * length;
+      } else {
+        finishVoice(voice, frame + 1, EndReason::Complete);
+      }
+    }
+    // A streamed voice wraps back to frames the ring has long since passed, so the
+    // window has to follow it back or the rest of the run plays nothing.
+    if (voice.active) requestStreamSeek(voice, static_cast<int64_t>(voice.position));
+  }
+}
+
 void Mixer::render(float* out, int frames, int channels) {
   retryReclaims();
   const int64_t blockStart = clockFrames_;
   const int64_t blockEnd = blockStart + frames;
+
+  // The live inputs deliver this block first — every feed that is open, whether a voice
+  // reads it or not, so each one's controller stays locked to its device.
+  if (inputs_ != nullptr) inputs_->pullAll(frames, sampleRate_, blockStart);
+  // Each defined patch's bus starts the block empty.
+  for (int slot = 0; slot < kMaxPatches; slot++) {
+    const Bus& bus = buses_[slot];
+    if (!bus.defined || bus.channels <= 0) continue;
+    std::memset(busData(slot), 0, static_cast<size_t>(frames) * static_cast<size_t>(bus.channels) * sizeof(float));
+  }
 
   for (int64_t frame = blockStart; frame < blockEnd; frame++) {
     float* outFrame = out + static_cast<size_t>(frame - blockStart) * static_cast<size_t>(channels);
@@ -810,147 +1107,89 @@ void Mixer::render(float* out, int frames, int channels) {
         }
       }
 
-      const double rate = paramValue(voice, static_cast<int>(Param::Rate), frame);
-      const double ratio = static_cast<double>(voice.sampleRate) / static_cast<double>(sampleRate_) *
-                           (rate > 0.0 ? rate : 1.0);
-      const int64_t base = static_cast<int64_t>(std::floor(voice.position));
-      const double frac = voice.position - static_cast<double>(base);
-
-      // Once the ring covers the frame the voice is asking for, the reposition is done
-      // and later starvation is starvation again.
-      if (voice.awaitingSeek) {
-        const StreamSlot* slot = streams_.at(voice.streamSlot);
-        if (slot != nullptr && base >= slot->ring.readFrame() && base < slot->ring.writeFrame()) {
-          voice.awaitingSeek = false;
-        }
-      }
-
-      float sample[kMaxOutputChannels] = {};
-      bool have = true;
-      for (int channel = 0; channel < voice.channels; channel++) {
-        float first = 0.0f;
-        if (!sampleOf(voice, base, channel, first)) {
-          have = false;
-          break;
-        }
-        float second = first;
-        if (frac > 0.0) {
-          if (!sampleOf(voice, base + 1, channel, second)) {
-            bool atEnd = false;
-            if (voice.cachedData != nullptr) {
-              atEnd = base + 1 >= voice.cachedFrames;
-            } else if (voice.streamSlot >= 0) {
-              const StreamSlot* slot = streams_.at(voice.streamSlot);
-              atEnd = slot != nullptr && slot->eof.load(std::memory_order_acquire) &&
-                      base + 1 >= slot->ring.writeFrame();
-            }
-            if (atEnd) {
-              second = first;
-            } else {
-              have = false;
-              break;
-            }
-          }
-        }
-        sample[channel] = static_cast<float>(static_cast<double>(first) +
-                                             (static_cast<double>(second) - static_cast<double>(first)) * frac);
-      }
-
-      if (!have) {
-        if (voice.streamSlot >= 0 && !voice.awaitingSeek) {
-          StreamSlot* slot = streams_.at(voice.streamSlot);
-          if (slot != nullptr) slot->underruns.fetch_add(1, std::memory_order_relaxed);
-          underruns_.fetch_add(1, std::memory_order_relaxed);
-        }
-        continue;
-      }
-
-      if (voice.streamSlot >= 0) {
-        StreamSlot* slot = streams_.at(voice.streamSlot);
-        // Release the frame just played, not the next one: below rate 1 the same source
-        // frame is played across several output frames, and releasing past it left the
-        // voice asking for a frame the window had already dropped — silence and an
-        // underrun per output frame, for good, on any cue playing a long file slower
-        // than real time (a rate below 1, or a rate fade on the way down).
-        if (slot != nullptr) slot->ring.release(base);
-      }
-
-      const double gain = paramValue(voice, static_cast<int>(Param::Volume), frame) *
-                          paramValue(voice, static_cast<int>(Param::Trim), frame) * rampValue(voice.fadeIn, frame) *
-                          rampValue(voice.stopFade, frame) * rampValue(voice.holdRamp, frame);
-
-      double panLeft = 1.0;
-      double panRight = 1.0;
-      if (channels >= 2) {
-        double pan = paramValue(voice, static_cast<int>(Param::Pan), frame);
-        pan = std::max(-1.0, std::min(1.0, pan));
-        if (voice.channels == 1) {
-          const double x = (pan + 1.0) * 0.5;
-          panLeft = std::cos(x * kHalfPi);
-          panRight = std::sin(x * kHalfPi);
-        } else if (pan <= 0.0) {
-          panLeft = 1.0;
-          panRight = std::sin((pan + 1.0) * kHalfPi);
-        } else {
-          panLeft = std::cos(pan * kHalfPi);
-          panRight = 1.0;
-        }
-      }
-
-      for (int output = 0; output < channels; output++) {
-        double contribution = 0.0;
-        if (voice.automaticRouting) {
-          const int input = voice.channels == 1
-                                ? (output < 2 ? 0 : -1)
-                                : (output < voice.channels ? output : -1);
-          if (input >= 0) contribution = sample[input];
-          // Pan belongs to automatic routing. An explicit crosspoint list states its
-          // own destinations and levels, so nothing is applied on top of it.
-          if (output == 0) contribution *= panLeft;
-          else if (output == 1) contribution *= panRight;
-        } else {
-          // The taps are grouped by output when the routing is applied, so this walks
-          // only the crosspoints that feed the output being written.
-          const int begin = voice.tapStart[output];
-          const int end = voice.tapStart[output + 1];
-          for (int t = begin; t < end; t++) {
-            const Tap& tap = voice.taps[t];
-            contribution += static_cast<double>(sample[tap.inputChannel]) * static_cast<double>(tap.gain);
-          }
-        }
-        outFrame[output] += static_cast<float>(contribution * gain);
-      }
-
-      voice.position += ratio;
-      const double length = voice.segmentEndFrame - voice.segmentStartFrame;
-      if (length > 0.0 && voice.position >= voice.segmentEndFrame) {
-        const double overshoot = voice.position - voice.segmentStartFrame;
-        const int64_t wraps = static_cast<int64_t>(std::floor(overshoot / length));
-        if (voice.loopCount < 0) {
-          voice.loopsCompleted += static_cast<int>(wraps);
-          voice.position -= static_cast<double>(wraps) * length;
-        } else {
-          const int64_t remaining = static_cast<int64_t>(voice.loopCount) - voice.loopsCompleted;
-          if (wraps <= remaining) {
-            voice.loopsCompleted += static_cast<int>(wraps);
-            voice.position -= static_cast<double>(wraps) * length;
-          } else {
-            finishVoice(voice, frame + 1, EndReason::Complete);
-          }
-        }
-        // A streamed voice wraps back to frames the ring has long since passed, so the
-        // window has to follow it back or the rest of the run plays nothing.
-        if (voice.active) requestStreamSeek(voice, static_cast<int64_t>(voice.position));
+      // Plain file voices take the path compiled without patches, live inputs or slices.
+      if (voice.patch >= 0 || voice.inputFeed >= 0 || voice.sliceCount > 0) {
+        mixVoiceFrame<true>(voice, frame, blockStart, outFrame, channels);
+      } else {
+        mixVoiceFrame<false>(voice, frame, blockStart, outFrame, channels);
       }
     }
   }
+  mixBuses(out, frames, channels);
   applyMaster(out, frames, channels);
 }
 
 /**
- * The master level and the meter, over a block every voice has already been mixed into: the
- * level is ramped from where the last block left it to where it is asked to be, and each
- * channel's peak is taken after it, so the meter reads what leaves the engine.
+ * A sliced voice has run past the end of its slice. The slice plays again while it has
+ * passes left (for ever, for a vamp) unless a release asked it to make this pass its last;
+ * then the voice goes on into the next slice — straight on, sample for sample, when the next
+ * slice starts where this one ended — or ends, at the last slice or when the release said so.
+ */
+void Mixer::advanceSlices(Voice& voice, int64_t frame) {
+  // A slice shorter than one step could otherwise be passed over many times in one frame;
+  // a voice moves at most a slice's worth of passes per frame, which is all a frame can hold.
+  for (int guard = 0; guard < kMaxSlices * 4 && voice.active && voice.position >= voice.segmentEndFrame; guard++) {
+    const double over = voice.position - voice.segmentEndFrame;
+    const VoiceSlice& slice = slicesOf(voice)[voice.sliceIndex];
+    voice.slicePlays++;
+    const bool again = !voice.sliceRelease && (slice.playCount < 0 || voice.slicePlays < slice.playCount);
+    if (again) {
+      voice.loopsCompleted++;
+      voice.position = slice.startFrame + over;
+      requestStreamSeek(voice, static_cast<int64_t>(voice.position));
+      continue;
+    }
+    const bool stop = voice.sliceRelease && voice.stopAtPassEnd;
+    voice.sliceRelease = false;
+    if (stop || voice.sliceIndex + 1 >= voice.sliceCount) {
+      finishVoice(voice, frame + 1, EndReason::Complete);
+      return;
+    }
+    voice.sliceIndex++;
+    voice.slicePlays = 0;
+    const VoiceSlice& next = slicesOf(voice)[voice.sliceIndex];
+    const bool contiguous = next.startFrame == slice.endFrame;
+    voice.segmentStartFrame = next.startFrame;
+    voice.segmentEndFrame = next.endFrame;
+    voice.position = next.startFrame + over;
+    if (!contiguous) requestStreamSeek(voice, static_cast<int64_t>(voice.position));
+  }
+}
+
+/**
+ * Each patch's bus onto the device outputs its map names: ramped from where its fader was to
+ * where it is, metered after the fader, and summed — two patches on one output add up there,
+ * as two cues on one output always have.
+ */
+void Mixer::mixBuses(float* out, int frames, int channels) {
+  for (int slot = 0; slot < kMaxPatches; slot++) {
+    Bus& bus = buses_[slot];
+    if (!bus.defined || bus.channels <= 0) continue;
+    for (int channel = 0; channel < bus.channels; channel++) bus.peak[channel] = 0.0f;
+    const float* data = busData(slot);
+    const double from = bus.gainCurrent;
+    const double to = bus.gainTarget;
+    for (int frame = 0; frame < frames; frame++) {
+      const double gain = from == to ? to : from + (to - from) * static_cast<double>(frame + 1) / static_cast<double>(frames);
+      const float* row = data + static_cast<size_t>(frame) * static_cast<size_t>(bus.channels);
+      float* outFrame = out + static_cast<size_t>(frame) * static_cast<size_t>(channels);
+      for (int channel = 0; channel < bus.channels; channel++) {
+        const float value = static_cast<float>(static_cast<double>(row[channel]) * gain);
+        const float level = std::fabs(value);
+        if (level > bus.peak[channel]) bus.peak[channel] = level;
+        const int output = bus.map[channel];
+        if (output >= 0 && output < channels) outFrame[output] += value;
+      }
+    }
+    bus.gainCurrent = to;
+  }
+}
+
+/**
+ * The output faders, the master level and the meter, over a block every voice and patch has
+ * already been mixed into: each level is ramped from where the last block left it to where it
+ * is asked to be, and each channel's peak is taken after them, so the meter reads what leaves
+ * the engine.
  */
 void Mixer::applyMaster(float* out, int frames, int channels) {
   const int metered = std::min(channels, kMaxOutputChannels);
@@ -959,11 +1198,33 @@ void Mixer::applyMaster(float* out, int frames, int channels) {
   const double from = masterCurrent_;
   const double to = masterTarget_;
   const bool flat = from == to;
+  if (outputsAtUnity_) {
+    for (int frame = 0; frame < frames; frame++) {
+      const double gain = flat ? to : from + (to - from) * static_cast<double>(frame + 1) / static_cast<double>(frames);
+      float* outFrame = out + static_cast<size_t>(frame) * static_cast<size_t>(channels);
+      for (int channel = 0; channel < channels; channel++) {
+        if (gain != 1.0) outFrame[channel] = static_cast<float>(static_cast<double>(outFrame[channel]) * gain);
+        if (channel < metered) {
+          const float level = std::fabs(outFrame[channel]);
+          if (level > blockPeak_[channel]) blockPeak_[channel] = level;
+        }
+      }
+    }
+    masterCurrent_ = to;
+    return;
+  }
   for (int frame = 0; frame < frames; frame++) {
-    const double gain = flat ? to : from + (to - from) * static_cast<double>(frame + 1) / static_cast<double>(frames);
+    const double progress = static_cast<double>(frame + 1) / static_cast<double>(frames);
+    const double master = flat ? to : from + (to - from) * progress;
     float* outFrame = out + static_cast<size_t>(frame) * static_cast<size_t>(channels);
     for (int channel = 0; channel < channels; channel++) {
-      if (gain != 1.0) outFrame[channel] = static_cast<float>(static_cast<double>(outFrame[channel]) * gain);
+      double gain = master;
+      if (channel < kMaxOutputChannels) {
+        const double a = outputGainCurrent_[channel];
+        const double b = outputGainTarget_[channel];
+        gain *= a == b ? b : a + (b - a) * progress;
+      }
+      outFrame[channel] = static_cast<float>(static_cast<double>(outFrame[channel]) * gain);
       if (channel < metered) {
         const float level = std::fabs(outFrame[channel]);
         if (level > blockPeak_[channel]) blockPeak_[channel] = level;
@@ -971,6 +1232,12 @@ void Mixer::applyMaster(float* out, int frames, int channels) {
     }
   }
   masterCurrent_ = to;
+  bool unity = true;
+  for (int channel = 0; channel < kMaxOutputChannels; channel++) {
+    outputGainCurrent_[channel] = outputGainTarget_[channel];
+    if (outputGainTarget_[channel] != 1.0) unity = false;
+  }
+  outputsAtUnity_ = unity;
 }
 
 void Mixer::snapshotVoice(const Voice& voice, VoiceSnapshot& out) const {
@@ -991,7 +1258,9 @@ void Mixer::snapshotVoice(const Voice& voice, VoiceSnapshot& out) const {
   out.fraction = out.durationMs > 0.0 ? std::min(positionMs / out.durationMs, 1.0) : 0.0;
 
   const double length = voice.segmentEndFrame - voice.segmentStartFrame;
-  if (voice.loopCount == 0 || length <= 0.0) {
+  // A sliced voice's progress is where it is in its file: a vamp holds the bar where the
+  // music is, rather than sweeping it round each pass.
+  if (voice.sliceCount > 0 || voice.loopCount == 0 || length <= 0.0) {
     out.runFraction = out.fraction;
   } else {
     const double consumed = static_cast<double>(voice.loopsCompleted) * length + (voice.position - voice.segmentStartFrame);
@@ -1025,6 +1294,13 @@ void Mixer::writeSnapshot(MixSnapshot& staging, SnapshotCell<MixSnapshot>& cell,
     staging.meterPeak[channel] = channel < meterChannels_ ? blockPeak_[channel] : 0.0f;
   }
   staging.masterGain = masterTarget_;
+  for (int slot = 0; slot < kMaxPatches; slot++) {
+    const Bus& bus = buses_[slot];
+    staging.busChannels[slot] = bus.defined ? bus.channels : 0;
+    for (int channel = 0; channel < kMaxOutputChannels; channel++) {
+      staging.busPeak[slot][channel] = bus.defined && channel < bus.channels ? bus.peak[channel] : 0.0f;
+    }
+  }
   cell.publish(staging);
 }
 

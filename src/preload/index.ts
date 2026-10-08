@@ -30,6 +30,16 @@ import {
   type AudioProbePayload,
   type AudioRegion,
   type AudioSilencePayload,
+  type AudioLoudness,
+  type AudioLoudnessPayload,
+  type AudioInputDevice,
+  type AudioInputOpenOptions,
+  type AudioInputOpenPayload,
+  type AudioInputClosePayload,
+  type AudioInputStatus,
+  type AudioStartInputPayload,
+  type AudioPatchPayload,
+  type AudioOutputGainsPayload,
   type AudioSilence,
   type AudioOnsetsPayload,
   type AudioOnsets,
@@ -219,8 +229,8 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invokeAudio(AUDIO_CHANNELS.stopAll, { fadeMs } satisfies AudioStopAllPayload),
     seek: (cueId: string, positionMs: number, whenMs?: number): Promise<AudioSeekResult> =>
       invokeAudio(AUDIO_CHANNELS.seek, { cueId, positionMs, whenMs } satisfies AudioSeekPayload),
-    release: (cueId: string, whenMs?: number, endMs?: number): Promise<AudioCommandResult> =>
-      invokeAudio(AUDIO_CHANNELS.release, { cueId, whenMs, endMs } satisfies AudioReleasePayload),
+    release: (cueId: string, whenMs?: number, endMs?: number, stopAtSliceEnd?: boolean): Promise<AudioCommandResult> =>
+      invokeAudio(AUDIO_CHANNELS.release, { cueId, whenMs, endMs, stopAtSliceEnd } satisfies AudioReleasePayload),
     cancel: (cueId: string, whenMs?: number): Promise<AudioCancelResult> =>
       invokeAudio(AUDIO_CHANNELS.cancel, { cueId, whenMs } satisfies AudioCancelPayload),
     pause: (cueId: string, whenMs?: number): Promise<AudioCommandResult> =>
@@ -240,9 +250,12 @@ contextBridge.exposeInMainWorld('cuerunner', {
       value: number,
       durationMs: number,
       curve: AudioFadeCurve,
-      whenMs?: number
+      whenMs?: number,
+      shape?: number[] | null
     ): Promise<AudioCommandResult> =>
-      invokeAudio(AUDIO_CHANNELS.fade, { cueId, param, value, durationMs, curve, whenMs } satisfies AudioFadePayload),
+      invokeAudio(AUDIO_CHANNELS.fade, {
+        cueId, param, value, durationMs, curve, whenMs, shape
+      } satisfies AudioFadePayload),
     progress: (cueId: string): Promise<AudioProgress | null> =>
       invokeAudio(AUDIO_CHANNELS.progress, { cueId } satisfies AudioProgressPayload),
     panic: (fadeMs: number): Promise<AudioPanicResult> =>
@@ -270,6 +283,26 @@ contextBridge.exposeInMainWorld('cuerunner', {
     /** Headers only: a workspace footprint asks about every cue without decoding one. */
     probe: (filePath: string): Promise<AudioProbe> =>
       invokeAudio(AUDIO_CHANNELS.probe, { filePath } satisfies AudioProbePayload),
+    loudness: (filePath: string): Promise<AudioLoudness> =>
+      invokeAudio(AUDIO_CHANNELS.loudness, { filePath } satisfies AudioLoudnessPayload),
+    inputs: (): Promise<AudioInputDevice[]> =>
+      invokeAudio(AUDIO_CHANNELS.inputs),
+    inputOpen: (options: AudioInputOpenOptions): Promise<AudioInputStatus> =>
+      invokeAudio(AUDIO_CHANNELS.inputOpen, options satisfies AudioInputOpenPayload),
+    inputClose: (device: string): Promise<{ closed: boolean }> =>
+      invokeAudio(AUDIO_CHANNELS.inputClose, { device } satisfies AudioInputClosePayload),
+    inputStatus: (): Promise<AudioInputStatus[]> =>
+      invokeAudio(AUDIO_CHANNELS.inputStatus),
+    startInput: (
+      cueId: string, whenMs: number, device: string, channels: number[], options: Partial<AudioStartOptions>
+    ): Promise<AudioStartResult> =>
+      invokeAudio(AUDIO_CHANNELS.startInput, {
+        cueId, whenMs, device, channels, options
+      } satisfies AudioStartInputPayload),
+    patch: (slot: number, outputs: number[] | null, gain: number): Promise<AudioCommandResult> =>
+      invokeAudio(AUDIO_CHANNELS.patch, { slot, outputs, gain } satisfies AudioPatchPayload),
+    outputGains: (gains: number[]): Promise<AudioCommandResult> =>
+      invokeAudio(AUDIO_CHANNELS.outputGains, { gains } satisfies AudioOutputGainsPayload),
     /** Engine events, batched by main. Returns the unsubscribe function. */
     onEvents: (callback: (events: AudioEngineEvent[]) => void): (() => void) =>
       subscribe(AUDIO_CHANNELS.events, callback),
