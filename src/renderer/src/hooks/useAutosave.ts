@@ -44,6 +44,7 @@ export function useAutosave(): void {
         timecode,
         videoOutputs: useStore.getState().videoOutputs,
         cueLists,
+        pictures: useStore.getState().pictures,
         oscPatches,
         cues
       })

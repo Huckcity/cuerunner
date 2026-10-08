@@ -184,6 +184,7 @@ export async function findQLabMediaInFolder(): Promise<void> {
     timecode: store.timecode,
     videoOutputs: store.videoOutputs,
     cueLists: store.cueLists,
+    pictures: store.pictures,
     oscPatches: store.oscPatches,
     cues: store.cues
   })

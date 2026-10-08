@@ -7,7 +7,16 @@ import type { ShowHistoryEntry } from '../../../shared/showfile'
 import type { MergeNote, MergeTally } from '../../../shared/showfileMerge'
 import type { AudioSettings, LoadNote, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../../../shared/workspace'
 import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard, UNTITLED_SHOW } from '../../../shared/workspace'
-import { MAX_OUTPUTS, carriesMediaFile, createOutput, normalizeVideoOutputs, type VideoOutput } from '../../../shared/visual'
+import {
+  MAX_OUTPUTS,
+  carriesMediaFile,
+  createOutput,
+  defaultPictureSettings,
+  normalizePictureSettings,
+  normalizeVideoOutputs,
+  type PictureSettings,
+  type VideoOutput
+} from '../../../shared/visual'
 import { defaultShowSettings } from '../../../shared/show'
 import type { RedundancySettings, RedundancyStatus } from '../../../shared/redundancy'
 import type {
@@ -378,6 +387,9 @@ interface CueListState {
   addVideoOutput: () => string
   updateVideoOutput: (id: string, patch: Partial<Omit<VideoOutput, 'id'>>) => void
   removeVideoOutput: (id: string) => void
+  /** What the show says about its pictures as a whole (src/shared/visual.ts). Workspace content. */
+  pictures: PictureSettings
+  setPictures: (patch: Partial<PictureSettings>) => void
 
   /**
    * The show's named OSC destinations: workspace content, so an edit dirties the show and
@@ -636,6 +648,7 @@ interface CueListState {
     timecode?: TimecodeShowSettings,
     videoOutputs?: VideoOutput[],
     cueLists?: CueListInfo[],
+    pictures?: PictureSettings,
     oscPatches?: OscPatch[]
   ) => void
   /** A save that reached the disk: its path, and the history it wrote into the file. */
@@ -660,6 +673,7 @@ interface EditSnapshot {
   timecode: TimecodeShowSettings
   videoOutputs: VideoOutput[]
   cueLists: CueListInfo[]
+  pictures: PictureSettings
   oscPatches: OscPatch[]
 }
 
@@ -674,6 +688,7 @@ function snapshotOf(state: CueListState): EditSnapshot {
     timecode: state.timecode,
     videoOutputs: state.videoOutputs,
     cueLists: state.cueLists,
+    pictures: state.pictures,
     oscPatches: state.oscPatches
   }
 }
@@ -931,6 +946,7 @@ export const useStore = create<CueListState>()(withCueLists<CueListState>((set, 
   cueLists: defaultCueLists(),
   activeListId: MAIN_CUE_LIST_ID,
   listCursors: {},
+  pictures: defaultPictureSettings(),
   oscPatches: [],
   showServices: [],
   showDevices: [],
@@ -1269,6 +1285,7 @@ export const useStore = create<CueListState>()(withCueLists<CueListState>((set, 
       timecode: snapshot.timecode,
       videoOutputs: snapshot.videoOutputs,
       cueLists: snapshot.cueLists,
+      pictures: snapshot.pictures,
       oscPatches: snapshot.oscPatches,
       past,
       future: [snapshotOf(s), ...s.future.slice(0, HISTORY_LIMIT - 1)],
@@ -1289,6 +1306,7 @@ export const useStore = create<CueListState>()(withCueLists<CueListState>((set, 
       timecode: snapshot.timecode,
       videoOutputs: snapshot.videoOutputs,
       cueLists: snapshot.cueLists,
+      pictures: snapshot.pictures,
       oscPatches: snapshot.oscPatches,
       future,
       past: pushPast(s.past, snapshotOf(s)),
@@ -1767,7 +1785,7 @@ export const useStore = create<CueListState>()(withCueLists<CueListState>((set, 
 
   markDirty: () => set({ isDirty: true }),
 
-  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history, lighting, timecode, videoOutputs, cueLists, oscPatches) => set(() => {
+  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history, lighting, timecode, videoOutputs, cueLists, pictures, oscPatches) => set(() => {
     // A show opens on its first list — the first tab — and on that list's first cue: where the
     // operator was standing when the file was saved is not in the file.
     const lists = heldCueLists(cueLists)
@@ -1812,6 +1830,8 @@ export const useStore = create<CueListState>()(withCueLists<CueListState>((set, 
       timecode: heldTimecode(timecode),
       // A show with no outputs has none; one that has them has them held to their ranges.
       videoOutputs: normalizeVideoOutputs(videoOutputs),
+      // A show that says nothing about its pictures leaves them up until they are stopped.
+      pictures: normalizePictureSettings(pictures),
       // A show with no OSC patches opens with none.
       oscPatches: heldOscPatches(oscPatches),
       // The file's own record of its saves. A file that has never been saved has none.
@@ -1894,7 +1914,15 @@ export const useStore = create<CueListState>()(withCueLists<CueListState>((set, 
   })),
 
   removeVideoOutput: (id) => set(s => ({
-    videoOutputs: s.videoOutputs.filter(output => output.id !== id),
+    // An output that mirrored the one going shows its own pictures again.
+    videoOutputs: normalizeVideoOutputs(s.videoOutputs.filter(output => output.id !== id)),
+    isDirty: true,
+    past: pushPast(s.past, snapshotOf(s)),
+    future: []
+  })),
+
+  setPictures: (patch) => set(s => ({
+    pictures: normalizePictureSettings({ ...s.pictures, ...patch }),
     isDirty: true,
     past: pushPast(s.past, snapshotOf(s)),
     future: []

@@ -3,6 +3,7 @@ import type { Workspace } from '../../../shared/workspace'
 import { isEmptyLighting, type LightingSettings } from '../../../shared/dmx'
 import { isDefaultTimecodeShow, type TimecodeShowSettings } from '../../../shared/timecode'
 import { canonicalCueList, isDefaultCueLists, type CueListInfo } from '../../../shared/cueLists'
+import { isDefaultPictureSettings, type PictureSettings } from '../../../shared/visual'
 import { savedOscPatches } from '../../../shared/oscPatches'
 import type { OscPatch } from '../../../shared/cue'
 
@@ -44,15 +45,18 @@ import type { OscPatch } from '../../../shared/cue'
 // funnel would then repair into one list. A show with only its main list under its own name
 // writes no section, so a show saved before lists existed stays byte-identical.
 //
+// And the show's picture settings: named at every call, and a show that leaves them at the
+// defaults writes no section.
 // The OSC patches are named by every caller for the same reason: a show with none writes no
 // section, and a call site that forgot them would save a show whose messages name patches it
 // no longer has.
 export function buildWorkspace(
-  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode' | 'videoOutputs' | 'cueLists' | 'oscPatches'> & {
+  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode' | 'videoOutputs' | 'cueLists' | 'pictures' | 'oscPatches'> & {
     lighting: LightingSettings | undefined
     timecode: TimecodeShowSettings | undefined
     videoOutputs: WorkspaceValues['videoOutputs']
     cueLists: CueListInfo[] | undefined
+    pictures: PictureSettings | undefined
     oscPatches: OscPatch[] | undefined
   }
 ): Workspace {
@@ -70,6 +74,8 @@ export function buildWorkspace(
     cueLists: values.cueLists === undefined || isDefaultCueLists(values.cueLists)
       ? undefined
       : values.cueLists.map(canonicalCueList),
+    // And for a show whose pictures stay up until they are stopped, as they always did.
+    pictures: values.pictures === undefined || isDefaultPictureSettings(values.pictures) ? undefined : values.pictures,
     oscPatches: savedOscPatches(values.oscPatches)
   })
 }

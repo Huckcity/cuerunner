@@ -1,5 +1,6 @@
 import type { IntensityRule, LightEffect, LightLevel } from './dmx'
 import type { TimecodeRate } from './timecode'
+import type { GeometryTarget } from './visualKeyframes'
 
 /** A cue's colour label, or none. */
 export type CueColor = 'none' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink'
@@ -15,6 +16,7 @@ export const CUE_TYPES = [
   'memo', 'midiFile', 'light',
   'timecode',
   'video', 'image', 'text',
+  'camera',
   'control'
 ] as const
 
@@ -313,9 +315,10 @@ export interface FadeCue extends CueBase {
   targetCueIds?: string[]
   /**
    * What the fade moves. `opacity` is a picture's: a video, image or text cue's layer on its
-   * output, 0–1 (see src/shared/visual.ts). A video's sound is still `volume`.
+   * output, 0–1 (see src/shared/visual.ts). A video's sound is still `volume`. `geometry` is a
+   * picture's place alone — `geometryTarget` — with its opacity left where it is.
    */
-  fadeProperty: 'volume' | 'pan' | 'opacity'
+  fadeProperty: 'volume' | 'pan' | 'opacity' | 'geometry'
   targetValue: number
   /**
    * Where a volume fade takes the pan as well, −1 to 1, over the same time and curve — the
@@ -323,6 +326,13 @@ export interface FadeCue extends CueBase {
    * fade of the one property, which is what a show saved before it existed did.
    */
   panTargetValue?: number | null
+  /**
+   * Where a picture fade moves the picture to — its position, scale, rotation, crop — over the
+   * same time and curve as its opacity (src/shared/visualKeyframes.ts). A property it does not
+   * name stays where it is. Optional on disk, and absent or null is a fade that moves no
+   * geometry, which is what every show saved before it existed did.
+   */
+  geometryTarget?: GeometryTarget | null
   curve: FadeCurve
   stopTargetWhenDone: boolean
 }
@@ -552,6 +562,8 @@ export interface TimecodeCue extends CueBase {
 // layers — in src/shared/visual.ts, which imports nothing from here but `CueBase`.
 import type { VideoCue, ImageCue, TextCue } from './visual'
 export type { VideoCue, ImageCue, TextCue } from './visual'
+import type { CameraCue } from './visual'
+export type { CameraCue } from './visual'
 
 /**
  * What a Control cue does to the cues it names. `goto` moves the playhead rather than touching
@@ -601,4 +613,5 @@ export type Cue =
   | VideoCue
   | ImageCue
   | TextCue
+  | CameraCue
   | ControlCue

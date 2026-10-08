@@ -107,6 +107,7 @@ export function RecoveryNotice() {
             timecode: store.timecode,
             videoOutputs: store.videoOutputs,
             cueLists: store.cueLists,
+            pictures: store.pictures,
             oscPatches: store.oscPatches,
             cues: store.cues
           })
@@ -163,6 +164,8 @@ export function RecoveryNotice() {
       snapshot.workspace.videoOutputs,
       // And its lists: without them every list's cues would come back in the main one.
       snapshot.workspace.cueLists,
+      // And what it says about its pictures: whether the next GO takes them down.
+      snapshot.workspace.pictures,
       snapshot.workspace.oscPatches
     )
     // The place, not just the cues: standing where the session stood means the next GO

@@ -89,6 +89,7 @@ export const WORKSPACE_SECTIONS = [
   { key: 'timecode', route: 'timecode', merge: 'section' },
   { key: 'videoOutputs', route: 'outputs', merge: 'section' },
   { key: 'cueLists', route: 'lists', merge: 'section' },
+  { key: 'pictures', route: 'pictures', merge: 'section' },
   { key: 'oscPatches', route: 'oscPatches', merge: 'section' },
   { key: 'cues', route: null, merge: 'cue' }
 ] as const satisfies readonly WorkspaceSection[]
@@ -410,7 +411,7 @@ export const SHOW_SETTINGS_SHAPE = {
  * guard of the wrong kind is read as the default rather than refused — or `version`, whose
  * one value the check reads as the literal it is.
  */
-type KindOnlySectionKey = 'id' | 'name' | 'createdAt' | 'history' | 'audioSettings' | 'midiSettings' | 'videoOutputs'
+type KindOnlySectionKey = 'id' | 'name' | 'createdAt' | 'history' | 'audioSettings' | 'midiSettings' | 'videoOutputs' | 'pictures'
 
 /**
  * The kind a section of the form is read as, from the field's own type: the leaf a primitive
@@ -445,7 +446,9 @@ export const WORKSPACE_SECTION_SHAPE = {
   midiSettings: 'object',
   // A list of outputs; the window reads each one through `normalizeVideoOutputs`, which
   // holds its numbers to their ranges.
-  videoOutputs: { items: 'object' }
+  videoOutputs: { items: 'object' },
+  // The show's picture settings; the window reads them through `normalizePictureSettings`.
+  pictures: 'object'
 } as const satisfies {
   readonly [K in KindOnlySectionKey]: SectionKindOf<NonNullable<Workspace[K]>>
 }
@@ -503,7 +506,24 @@ const VISUAL_CUE_SHAPE = {
     scale: 'number',
     rotation: 'number',
     crop: { top: 'number', right: 'number', bottom: 'number', left: 'number' }
-  }
+  },
+  // The fields the types mark `?:` — a show saved before them has none of them.
+  blendMode: { absent: true, of: 'string' },
+  keyframes: {
+    absent: true,
+    of: {
+      elements: {
+        atMs: 'number',
+        x: 'number',
+        y: 'number',
+        scale: 'number',
+        rotation: 'number',
+        crop: { top: 'number', right: 'number', bottom: 'number', left: 'number' },
+        easing: 'string'
+      }
+    }
+  },
+  stopOnNextGo: { absent: true, of: { nothing: true, of: 'boolean' } }
 } as const satisfies ShapeFields<VisualCueBase>
 
 /**
@@ -608,6 +628,20 @@ export const CUE_FIELD_SHAPE = {
     fadeProperty: 'string',
     targetValue: 'number',
     panTargetValue: { absent: true, of: { nothing: true, of: { bounded: [-1, 1] } } },
+    // A picture fade's geometry: each property optional, the crop moved as one.
+    geometryTarget: {
+      absent: true,
+      of: {
+        nothing: true,
+        of: {
+          x: { absent: true, of: 'number' },
+          y: { absent: true, of: 'number' },
+          scale: { absent: true, of: 'number' },
+          rotation: { absent: true, of: 'number' },
+          crop: { absent: true, of: { top: 'number', right: 'number', bottom: 'number', left: 'number' } }
+        }
+      }
+    },
     curve: 'string',
     stopTargetWhenDone: 'boolean'
   },
@@ -737,6 +771,9 @@ export const CUE_FIELD_SHAPE = {
     italic: 'boolean',
     position: 'string'
   },
+  // A live picture: its source, by the name the show carries — the machine's own id for a device
+  // is userData's, never the file's.
+  camera: { ...VISUAL_CUE_SHAPE, type: 'string', source: 'string', deviceName: 'string', url: 'string' },
   control: {
     ...CUE_BASE_SHAPE,
     type: 'string',

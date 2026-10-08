@@ -19,9 +19,14 @@ import { refuseNavigation } from '../safety/navigation'
 import { reportMainError } from '../errors'
 import { OutputRegistry } from './registry'
 import type { MachinePlacements } from './placements'
+import type { MachineCameraChoices } from './cameraChoices'
+import type { StreamAllowance } from './streamProtocol'
+import { streamUrl, type CameraDevice } from '../../shared/camera'
 import { OUTPUT_WINDOW_CHANNELS } from '../../shared/ipc/outputWindow'
 import {
+  type CameraSnapshot,
   type LayerCommand,
+  type LayerSpec,
   type OutputCommandResult,
   type OutputEvent,
   type OutputSnapshot,
@@ -63,10 +68,22 @@ interface OutputWindow {
   displayMissing: { label: string } | null
   testPattern: boolean
   settle: ReturnType<typeof setTimeout> | null
+  /** The output whose pictures it shows, when it was opened as a mirror of one. */
+  mirrorOf: string | null
+  /** The mask it could not read, or null. */
+  maskMissing: string | null
+  /** Its camera pictures that cannot show, by cue: the line each one draws. */
+  cameraProblems: Map<string, string>
+  /** The capture devices it can see, once it has looked. */
+  cameras: CameraDevice[] | null
 }
 
 export interface OutputManagerDeps {
   placements: MachinePlacements
+  /** This machine's device for each camera cue. */
+  cameraChoices: MachineCameraChoices
+  /** The network streams main may fetch for a camera picture. */
+  streams: StreamAllowance
   /** The engine's clock, for the windows to keep their pictures on; null when it cannot answer. */
   clock(): Promise<AudioClockReading | null>
   /** Hands events to the control window. */
@@ -109,13 +126,62 @@ export class OutputManager {
     for (const output of change.changed) {
       const entry = this.windows.get(output.id)
       if (entry === undefined) continue
-      const size = this.sizeFor(output, this.deps.placements.placement(output.id))
-      entry.width = size.width
-      entry.height = size.height
-      if (!entry.win.isDestroyed()) entry.win.setTitle(`${output.name} — Cuerunner`)
-      this.send(entry, { kind: 'output', output, width: size.width, height: size.height, displayMissing: entry.displayMissing })
-      this.publishStatus(entry)
+      // An output that starts or stops mirroring another is showing other pictures: it is made
+      // again, and handed the record of the ones it shows now.
+      if (entry.mirrorOf !== this.mirrorSourceId(output)) {
+        this.closeWindow(output.id)
+        this.openOutput(output)
+        continue
+      }
+      this.sendOutput(entry)
     }
+    // A mirror composes at its source's size, with its source's mask where it has none of its
+    // own: an edit to the source reaches the outputs that show it.
+    for (const output of change.changed) {
+      for (const mirror of this.mirrorsOf(output.id)) {
+        const entry = this.windows.get(mirror.id)
+        if (entry !== undefined && entry.mirrorOf === output.id) this.sendOutput(entry)
+      }
+    }
+  }
+
+  /** Tells a window what its output is now, at the size it composes at. */
+  private sendOutput(entry: OutputWindow): void {
+    const output = this.registry.get(entry.outputId)
+    if (output === null) return
+    const size = this.compositionFor(output)
+    entry.width = size.width
+    entry.height = size.height
+    if (!entry.win.isDestroyed()) entry.win.setTitle(`${output.name} — Cuerunner`)
+    this.send(entry, { kind: 'output', output: this.drawnOutput(output), width: size.width, height: size.height, displayMissing: entry.displayMissing })
+    this.publishStatus(entry)
+  }
+
+  /** The output a mirror shows, or null for one with pictures of its own. */
+  private mirrorSourceId(output: VideoOutput): string | null {
+    if (output.mirrorOf === undefined) return null
+    const source = this.registry.get(output.mirrorOf)
+    return source !== null && source.mirrorOf === undefined && source.id !== output.id ? source.id : null
+  }
+
+  /** The outputs that show this one's pictures. */
+  private mirrorsOf(outputId: string): VideoOutput[] {
+    return this.registry.list().filter(output => output.id !== outputId && this.mirrorSourceId(output) === outputId)
+  }
+
+  /** What a window draws as: a mirror with its source's mask when it has none of its own. */
+  private drawnOutput(output: VideoOutput): VideoOutput {
+    const sourceId = this.mirrorSourceId(output)
+    if (sourceId === null || output.mask !== undefined) return output
+    const source = this.registry.get(sourceId)
+    return source?.mask === undefined ? output : { ...output, mask: source.mask }
+  }
+
+  /** The size an output composes at: a mirror's is its source's, so the two are one picture. */
+  private compositionFor(output: VideoOutput): { width: number; height: number } {
+    const sourceId = this.mirrorSourceId(output)
+    const source = sourceId === null ? output : this.registry.get(sourceId) ?? output
+    return this.sizeFor(source, this.deps.placements.placement(source.id))
   }
 
   /**
@@ -150,6 +216,15 @@ export class OutputManager {
   // ── Pictures ────────────────────────────────────────────────────────────────
 
   layer(command: LayerCommand): OutputCommandResult {
+    if (command.op === 'play' || command.op === 'prepare') {
+      const target = this.registry.resolve(command.layer.outputId)
+      const sourceId = target === null ? null : this.mirrorSourceId(target)
+      if (target !== null && sourceId !== null) {
+        const source = this.registry.get(sourceId)
+        return { ok: false, error: `${target.name} mirrors ${source?.name ?? 'another output'} — put the picture on that one` }
+      }
+      command = { ...command, layer: this.withCamera(command.layer) }
+    }
     const routed = this.registry.route(command)
     switch (routed.kind) {
       case 'refused':
@@ -161,16 +236,62 @@ export class OutputManager {
         return { ok: true }
       case 'output': {
         if (routed.takeDownFrom !== undefined && command.op === 'play') {
-          const from = this.windows.get(routed.takeDownFrom)
-          if (from !== undefined) {
-            this.send(from, { kind: 'layer', command: { op: 'stop', cueId: command.layer.cueId, fadeMs: 0, at: command.layer.at } })
+          for (const entry of this.windowsShowing(routed.takeDownFrom)) {
+            this.send(entry, { kind: 'layer', command: { op: 'stop', cueId: command.layer.cueId, fadeMs: 0, at: command.layer.at } })
           }
         }
-        const entry = this.windows.get(routed.outputId)
-        if (entry !== undefined) this.send(entry, { kind: 'layer', command: routed.command })
+        for (const entry of this.windowsShowing(routed.outputId)) this.send(entry, { kind: 'layer', command: routed.command })
         return { ok: true }
       }
     }
+  }
+
+  /** The windows that draw an output's pictures: its own, and every mirror of it. */
+  private windowsShowing(outputId: string): OutputWindow[] {
+    const windows: OutputWindow[] = []
+    const own = this.windows.get(outputId)
+    if (own !== undefined) windows.push(own)
+    for (const entry of this.windows.values()) {
+      if (entry.mirrorOf === outputId) windows.push(entry)
+    }
+    return windows
+  }
+
+  /**
+   * A camera picture as its output is told it: this machine's device for the cue, and a
+   * network stream's address as the output reads it, through main — which is allowed, from
+   * here, to fetch it.
+   */
+  private withCamera(layer: LayerSpec): LayerSpec {
+    if (layer.kind !== 'camera' || layer.camera === undefined || layer.camera === null) return layer
+    const camera = layer.camera
+    if (camera.source === 'url') {
+      this.deps.streams.allow(camera.url)
+      return { ...layer, camera: { ...camera, url: streamUrl(camera.url) ?? camera.url } }
+    }
+    const choice = this.deps.cameraChoices.choice(layer.cueId)
+    return { ...layer, camera: { ...camera, deviceId: choice?.deviceId ?? '' } }
+  }
+
+  // ── Cameras ─────────────────────────────────────────────────────────────────
+
+  /** The devices this machine's outputs can see, and the device each camera cue uses here. */
+  cameras(): CameraSnapshot {
+    const devices = new Map<string, CameraDevice>()
+    let listed = false
+    for (const entry of this.windows.values()) {
+      if (entry.cameras === null) continue
+      listed = true
+      for (const device of entry.cameras) if (!devices.has(device.deviceId)) devices.set(device.deviceId, device)
+    }
+    return { devices: [...devices.values()], listed, choices: this.deps.cameraChoices.all() }
+  }
+
+  async chooseCamera(cueId: string, device: CameraDevice | null): Promise<CameraSnapshot> {
+    await this.deps.cameraChoices.choose(cueId, device)
+    const snapshot = this.cameras()
+    this.publish([{ kind: 'cameras', cameras: snapshot }])
+    return snapshot
   }
 
   /** Everything off every output: a panic, from whichever surface raised it. */
@@ -249,6 +370,11 @@ export class OutputManager {
     return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
   }
 
+  /** A dialog for a mask: an image — white shows the pictures, black hides them. */
+  pickMask(parent: BrowserWindow | null): Promise<string | null> {
+    return this.pickFile(parent, 'image')
+  }
+
   // ── The output windows' own door ────────────────────────────────────────────
 
   /** A window has loaded and asks what it is. */
@@ -276,11 +402,12 @@ export class OutputManager {
       }
     }
     entry.ready = true
-    const replay = this.registry.replay(entry.outputId)
+    // A mirror is handed its source's pictures: the record of what that output is showing.
+    const replay = this.registry.replay(entry.mirrorOf ?? entry.outputId)
     this.publishStatus(entry)
     return {
       role: 'output',
-      output,
+      output: this.drawnOutput(output),
       width: entry.width,
       height: entry.height,
       layers: replay.layers,
@@ -295,21 +422,49 @@ export class OutputManager {
   windowReport(sender: Electron.WebContents, report: OutputWindowReport): void {
     const entry = this.entryFor(sender)
     if (entry === undefined) return
+    let statusMoved = false
     if (report.renderer !== undefined && report.renderer !== entry.renderer) {
       entry.renderer = report.renderer
-      this.publishStatus(entry)
+      statusMoved = true
+    }
+    if (report.maskMissing !== undefined && report.maskMissing !== entry.maskMissing) {
+      entry.maskMissing = typeof report.maskMissing === 'string' ? report.maskMissing.slice(0, 4096) : null
+      statusMoved = true
+    }
+    if (Array.isArray(report.cameras)) {
+      entry.cameras = report.cameras.slice(0, 64)
+        .filter(device => typeof device === 'object' && device !== null && typeof device.deviceId === 'string')
+        .map(device => ({ deviceId: device.deviceId.slice(0, 512), label: String(device.label ?? '').slice(0, 512) }))
+      this.publish([{ kind: 'cameras', cameras: this.cameras() }])
     }
     const events = (Array.isArray(report.events) ? report.events : []).slice(0, 256)
+    for (const event of events) {
+      if (event.kind !== 'camera') continue
+      if (event.state === 'live' || event.state === 'connecting') entry.cameraProblems.delete(event.cueId)
+      else entry.cameraProblems.set(event.cueId, String(event.message).slice(0, 400))
+      statusMoved = true
+    }
+    // A mirror draws its source's pictures from the same commands: what they did is the
+    // source's to say, and the cues hear it once.
+    if (entry.mirrorOf !== null) {
+      if (statusMoved) this.publishStatus(entry)
+      return
+    }
     let layersMoved = false
     for (const event of events) {
       if (event.kind === 'gone') {
         this.registry.gone(event.cueId, entry.outputId)
+        entry.cameraProblems.delete(event.cueId)
         layersMoved = true
       }
       if (event.kind === 'first-frame' || event.kind === 'dissolved') layersMoved = true
     }
     if (events.length > 0) this.deps.publish(events)
-    if (layersMoved) this.publishStatus(entry)
+    if (layersMoved || statusMoved) {
+      this.publishStatus(entry)
+      // Its mirrors show the same pictures: their status lists them too.
+      for (const mirror of this.windows.values()) if (mirror.mirrorOf === entry.outputId) this.publishStatus(mirror)
+    }
   }
 
   clock(): Promise<AudioClockReading | null> {
@@ -436,7 +591,7 @@ export class OutputManager {
     refuseNavigation(win.webContents)
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
 
-    const size = this.sizeFor(output, placement)
+    const size = this.compositionFor(output)
     const entry: OutputWindow = {
       outputId: output.id,
       win,
@@ -446,7 +601,11 @@ export class OutputManager {
       height: size.height,
       displayMissing: missing,
       testPattern: false,
-      settle: null
+      settle: null,
+      mirrorOf: this.mirrorSourceId(output),
+      maskMissing: null,
+      cameraProblems: new Map(),
+      cameras: null
     }
     this.windows.set(output.id, entry)
 
@@ -475,6 +634,7 @@ export class OutputManager {
       if (this.windows.get(output.id) === entry) {
         this.windows.delete(output.id)
         this.publish([{ kind: 'status', status: this.statusOf(output.id) }])
+        if (entry.cameras !== null) this.publish([{ kind: 'cameras', cameras: this.cameras() }])
       }
     })
     win.webContents.on('render-process-gone', (_event, details) => {
@@ -492,6 +652,12 @@ export class OutputManager {
     })
     forwardKeys(win)
     loadOutputPage(win, 'output')
+    // An output made again — placed elsewhere, its display back — may compose at another size:
+    // the outputs that mirror it follow.
+    for (const mirror of this.mirrorsOf(output.id)) {
+      const mirrorEntry = this.windows.get(mirror.id)
+      if (mirrorEntry !== undefined && mirrorEntry.mirrorOf === output.id) this.sendOutput(mirrorEntry)
+    }
   }
 
   private openTimerWindow(): void {
@@ -552,7 +718,9 @@ export class OutputManager {
     const entry = this.windows.get(outputId)
     const output = this.registry.get(outputId)
     const placement = this.deps.placements.placement(outputId)
-    const size = output === null ? { width: 0, height: 0 } : this.sizeFor(output, placement)
+    const size = output === null ? { width: 0, height: 0 } : this.compositionFor(output)
+    const mirrorOf = output === null ? null : this.mirrorSourceId(output)
+    const cameraProblems = entry === undefined ? [] : [...entry.cameraProblems.values()]
     return {
       outputId,
       open: entry !== undefined && entry.ready && !entry.win.isDestroyed(),
@@ -561,9 +729,12 @@ export class OutputManager {
       renderer: entry?.renderer ?? null,
       displayMissing: entry?.displayMissing !== null && entry?.displayMissing !== undefined,
       placement,
-      layers: this.registry.cuesOn(outputId),
+      layers: this.registry.cuesOn(mirrorOf ?? outputId),
       testPattern: entry?.testPattern ?? false,
-      windowClosed: entry === undefined && output !== null && !this.closing
+      windowClosed: entry === undefined && output !== null && !this.closing,
+      ...(mirrorOf === null ? {} : { mirrorOf }),
+      ...(entry?.maskMissing === null || entry?.maskMissing === undefined ? {} : { maskMissing: entry.maskMissing }),
+      ...(cameraProblems.length === 0 ? {} : { cameraProblems })
     }
   }
 

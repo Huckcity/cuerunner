@@ -3,7 +3,7 @@ import type { ShowSettings } from './show'
 import type { ShowHistoryEntry } from './showfile'
 import type { LightingSettings } from './dmx'
 import type { TimecodeShowSettings } from './timecode'
-import type { VideoOutput } from './visual'
+import type { PictureSettings, VideoOutput } from './visual'
 import type { CueListInfo } from './cueLists'
 
 export interface AudioSettings {
@@ -182,6 +182,11 @@ export interface Workspace {
    * wrote. A cue names its list with `listId`; one that names none is in the main list.
    */
   cueLists?: CueListInfo[]
+  /**
+   * What the show says about its pictures as a whole (src/shared/visual.ts). Optional: a show
+   * that leaves them at the defaults carries none, so its bytes are what they were.
+   */
+  pictures?: PictureSettings
   /**
    * The show's named OSC destinations, chosen per message by an OSC cue. Optional: a show with
    * none carries no such section, so a show saved before patches existed writes the bytes it

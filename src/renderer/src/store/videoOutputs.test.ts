@@ -24,6 +24,7 @@ function saved() {
     timecode: s.timecode,
     videoOutputs: s.videoOutputs,
     cueLists: s.cueLists,
+    pictures: s.pictures,
     oscPatches: s.oscPatches,
     cues: s.cues
   })

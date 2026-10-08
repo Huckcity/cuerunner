@@ -13,9 +13,13 @@ import { sendToWindow } from '../ipc/broadcast'
 import { audioEngine } from '../audio/AudioEngine'
 import { OutputManager, isOutputWindow } from './OutputManager'
 import { createMachinePlacements } from './placements'
+import { createMachineCameraChoices } from './cameraChoices'
+import { StreamAllowance } from './streamProtocol'
+import type { CameraDevice } from '../../shared/camera'
 import { OUTPUT_WINDOW_CHANNELS } from '../../shared/ipc/outputWindow'
 import {
   OUTPUT_CHANNELS,
+  type ChooseCameraPayload,
   type LayerCommand,
   type OutputEvent,
   type OutputPlacePayload,
@@ -30,6 +34,12 @@ import type { VideoOutput } from '../../shared/visual'
 let manager: OutputManager | null = null
 
 /**
+ * The network streams main may fetch for a camera picture: one allowance, shared by the
+ * manager (which allows an origin when a cue naming it goes up) and the scheme's handler.
+ */
+export const streamAllowance = new StreamAllowance()
+
+/**
  * The one manager, made the first time anything asks for it rather than when this module is
  * imported: the placements file is read from userData, which only a ready app can name.
  */
@@ -37,6 +47,8 @@ export function outputManager(): OutputManager {
   if (manager === null) {
     manager = new OutputManager({
       placements: createMachinePlacements({ filePath: join(app.getPath('userData'), 'video-outputs.json') }),
+      cameraChoices: createMachineCameraChoices({ filePath: join(app.getPath('userData'), 'camera-devices.json') }),
+      streams: streamAllowance,
       clock: () => audioEngine.clock().catch(() => null),
       publish: events => publishToControl(events)
     })
@@ -79,6 +91,10 @@ export function registerOutputHandlers(): void {
   ipcMain.handle(OUTPUT_CHANNELS.timerWindow, (_, state: TimerWindowState) => outputManager().timerWindow(state))
   ipcMain.handle(OUTPUT_CHANNELS.pickFile, (event, kind: 'video' | 'image') =>
     outputManager().pickFile(senderWindow(event), kind === 'image' ? 'image' : 'video'))
+  ipcMain.handle(OUTPUT_CHANNELS.cameras, () => outputManager().cameras())
+  ipcMain.handle(OUTPUT_CHANNELS.chooseCamera, (_, payload: ChooseCameraPayload) =>
+    outputManager().chooseCamera(String(payload?.cueId ?? ''), (payload?.device ?? null) as CameraDevice | null))
+  ipcMain.handle(OUTPUT_CHANNELS.pickMask, event => outputManager().pickMask(senderWindow(event)))
 }
 
 export function registerOutputWindowHandlers(): void {

@@ -224,6 +224,7 @@ function CompareTab() {
       timecode,
       videoOutputs: useStore.getState().videoOutputs,
       cueLists,
+      pictures: useStore.getState().pictures,
       oscPatches,
       cues
     })

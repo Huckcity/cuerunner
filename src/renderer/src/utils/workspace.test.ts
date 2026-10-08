@@ -59,6 +59,7 @@ const build = () =>
     timecode: undefined,
     videoOutputs: [],
     cueLists: undefined,
+    pictures: undefined,
     oscPatches: undefined,
     cues: [cue()]
   })

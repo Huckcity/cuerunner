@@ -67,6 +67,7 @@ export async function guardDirty(): Promise<boolean> {
       timecode,
       videoOutputs: useStore.getState().videoOutputs,
       cueLists, oscPatches,
+      pictures: useStore.getState().pictures,
       cues
     })
     let saved: { path: string; history: ShowHistoryEntry[]; name?: string } | null
@@ -135,7 +136,8 @@ export function loadIntoStore(
     workspace.lighting,
     workspace.timecode,
     workspace.videoOutputs,
-    workspace.cueLists
+    workspace.cueLists,
+    workspace.pictures
   )
   // The guard remembers what pressed what; a show that has just opened has no presses
   // behind it, and the first GO of the night must not be mistaken for a repeat of the
@@ -193,6 +195,7 @@ export async function relinkMissingMedia(cueId: string): Promise<void> {
     timecode,
     videoOutputs: useStore.getState().videoOutputs,
     cueLists, oscPatches,
+    pictures: useStore.getState().pictures,
     cues
   })
   try {
@@ -241,6 +244,7 @@ export async function exportShowBundle(): Promise<void> {
     timecode,
     videoOutputs: useStore.getState().videoOutputs,
     cueLists, oscPatches,
+    pictures: useStore.getState().pictures,
     cues
   })
   try {
@@ -293,6 +297,7 @@ export async function mergeAnotherShow(policy: 'ours' | 'theirs' = 'ours', again
     timecode,
     videoOutputs: useStore.getState().videoOutputs,
     cueLists, oscPatches,
+    pictures: useStore.getState().pictures,
     cues
   })
   try {
@@ -462,6 +467,7 @@ export function useWorkspace() {
       timecode,
       videoOutputs: useStore.getState().videoOutputs,
       cueLists, oscPatches,
+      pictures: useStore.getState().pictures,
       cues
     })
     try {
@@ -514,6 +520,7 @@ export function useWorkspace() {
       timecode,
       videoOutputs: useStore.getState().videoOutputs,
       cueLists, oscPatches,
+      pictures: useStore.getState().pictures,
       cues
     })
     try {

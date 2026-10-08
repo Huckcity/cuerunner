@@ -57,7 +57,10 @@ const SECTIONS: Array<{ key: WorkspaceKey; value: unknown; changed: unknown }> =
     key: 'oscPatches',
     value: [{ id: 'p-desk', name: 'Lighting desk', host: '10.0.0.30', port: 8000 }],
     changed: [{ id: 'p-desk', name: 'Lighting desk', host: '10.0.0.31', port: 8000 }]
-  }
+  },
+  // The show's picture settings have one field: the change a second writer can make is to turn
+  // it back, which a merge still has to carry when the policy says theirs.
+  { key: 'pictures', value: { stopOnNextGo: true }, changed: { stopOnNextGo: false } }
 ]
 
 const withSection = (key: WorkspaceKey, value: unknown): Workspace => ({ ...show(), [key]: value }) as Workspace

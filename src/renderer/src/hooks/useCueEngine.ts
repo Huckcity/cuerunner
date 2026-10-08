@@ -31,7 +31,9 @@ export function useCueEngine() {
       getCueLists: () => useStore.getState().cueLists,
       getActiveListId: () => useStore.getState().activeListId,
       getListPlayhead: listId => useStore.getState().listPlayhead(listId),
-      setListPlayhead: (listId, cueId) => useStore.getState().setListPlayhead(listId, cueId)
+      setListPlayhead: (listId, cueId) => useStore.getState().setListPlayhead(listId, cueId),
+      getPictureSettings: () => useStore.getState().pictures,
+      getVideoOutputs: () => useStore.getState().videoOutputs
     })
   }, [select, setRunning, clearAllRunning, syncCueDuration, setLastRun, appendLog])
 

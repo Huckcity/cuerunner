@@ -137,6 +137,8 @@ const fixture: Required<Workspace> = {
       tileKeys: [{ cueId: 'a2', key: 'q' }]
     }
   ],
+  // Moved from its defaults: a show whose pictures go on the next GO.
+  pictures: { stopOnNextGo: true },
   // A destination the show's OSC cues name, as a show that sends to a desk carries it.
   oscPatches: [{ id: 'p-desk', name: 'Lighting desk', host: '10.0.0.30', port: 8000 }],
   cues: [cue('a1', 'Walk-in'), { ...cue('a2', 'Interval'), listId: 'sfx' }]
@@ -194,6 +196,7 @@ const declared: readonly WorkspaceKey[] = [
   'timecode',
   'videoOutputs',
   'cueLists',
+  'pictures',
   'oscPatches',
   'cues'
 ]
@@ -215,7 +218,7 @@ describe('the saved shape', () => {
     const bare = serialiseWorkspace(
       {
         ...fixture, history: undefined, showSettings: undefined, triggerGuard: undefined, lighting: undefined,
-        timecode: undefined, videoOutputs: undefined, cueLists: undefined, oscPatches: undefined
+        timecode: undefined, videoOutputs: undefined, cueLists: undefined, pictures: undefined, oscPatches: undefined
       },
       SHOWS
     )
@@ -223,7 +226,7 @@ describe('the saved shape', () => {
     expect(Object.keys(JSON.parse(bare))).toEqual(
       declared.filter(
         key => key !== 'history' && key !== 'showSettings' && key !== 'triggerGuard' && key !== 'lighting' && key !== 'timecode' &&
-          key !== 'videoOutputs' && key !== 'cueLists' && key !== 'oscPatches'
+          key !== 'videoOutputs' && key !== 'cueLists' && key !== 'pictures' && key !== 'oscPatches'
       )
     )
   })
@@ -559,6 +562,7 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     fadeProperty: 'volume',
     targetValue: 1,
     panTargetValue: -0.5,
+    geometryTarget: { x: 0.25, scale: 0.5, crop: { top: 0, right: 0.1, bottom: 0, left: 0.1 } },
     curve: 'linear',
     stopTargetWhenDone: false
   },
@@ -667,7 +671,12 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     holdLastFrame: true,
     volume: 0.8,
     pan: 0,
-    outputs: [{ inputChannel: 0, outputChannel: 0, gain: 1 }]
+    outputs: [{ inputChannel: 0, outputChannel: 0, gain: 1 }],
+    // The optional picture fields, set, so the walk reads them: a blend, a keyframe list (a list
+    // of objects with an object inside each), and a cue's own stop-on-next-GO.
+    blendMode: 'screen',
+    keyframes: [{ atMs: 2000, x: 0.2, y: 0, scale: 0.8, rotation: 0, crop: { top: 0, right: 0, bottom: 0, left: 0 }, easing: 'ease-in-out' }],
+    stopOnNextGo: true
   },
   image: {
     ...cueBase('i1'),
@@ -697,7 +706,22 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     color: '#ffffff',
     bold: true,
     italic: false,
-    position: 'bottom'
+    position: 'bottom',
+    stopOnNextGo: null
+  },
+  camera: {
+    ...cueBase('c1'),
+    type: 'camera',
+    outputId: '',
+    layer: 1,
+    opacity: 1,
+    fadeInDuration: 0,
+    fadeOutDuration: 0,
+    crossfade: false,
+    geometry: { fit: 'fill', x: 0, y: 0, scale: 1, rotation: 0, crop: { top: 0, right: 0, bottom: 0, left: 0 } },
+    source: 'device',
+    deviceName: 'HD Webcam',
+    url: ''
   },
   control: {
     ...cueBase('ct1'),

@@ -10,6 +10,8 @@
 import type { Cue, FadeCurve } from '../../../shared/cue'
 import type { VisualCue, VideoCue } from '../../../shared/visual'
 import { mediaUrl } from '../../../shared/visual'
+import { blendOf } from '../../../shared/visualBlend'
+import { movesGeometry, normalizeKeyframes, type GeometryKeyframe, type GeometryTarget } from '../../../shared/visualKeyframes'
 import type { LayerCommand, LayerPatch, LayerSpec, OutputCommandResult, OutputEvent, TextStyle } from '../../../shared/ipc/output'
 import {
   elapsedAt,
@@ -95,7 +97,9 @@ export function layerSpecOf(cue: VisualCue, at: number, seq: number, seekMs = 0)
     displayMs: null as number | null,
     text: null as TextStyle | null,
     src: null as string | null,
-    timeline: null as MediaTimeline | null
+    timeline: null as MediaTimeline | null,
+    blend: blendOf(cue.blendMode),
+    keyframes: keyframesOf(cue)
   }
   switch (cue.type) {
     case 'video':
@@ -104,7 +108,16 @@ export function layerSpecOf(cue: VisualCue, at: number, seq: number, seekMs = 0)
       return { ...base, kind: 'image', src: mediaUrl(cue.filePath), displayMs: cue.duration > 0 ? Math.max(1, cue.duration - seekMs) : null }
     case 'text':
       return { ...base, kind: 'text', text: textStyleOf(cue), displayMs: cue.duration > 0 ? Math.max(1, cue.duration - seekMs) : null }
+    case 'camera':
+      // A live picture has no length: it is up until it is stopped. This machine's own id for
+      // the device is main's to add (userData), never the show's.
+      return { ...base, kind: 'camera', camera: { source: cue.source, deviceId: '', deviceName: cue.deviceName, url: cue.url } }
   }
+}
+
+/** A cue's keyframes as an output draws them: held to their ranges, in order. */
+export function keyframesOf(cue: VisualCue): GeometryKeyframe[] {
+  return normalizeKeyframes(cue.keyframes, cue.geometry)
 }
 
 /** What may be applied to a picture that is up, from the cue as it now stands. */
@@ -114,6 +127,8 @@ export function livePatchOf(cue: VisualCue): LayerPatch {
     opacity: Math.min(Math.max(cue.opacity, 0), 1),
     geometry: cue.geometry,
     fadeOutMs: Math.max(0, cue.fadeOutDuration),
+    blend: blendOf(cue.blendMode),
+    keyframes: keyframesOf(cue),
     ...(cue.type === 'text' ? { text: textStyleOf(cue) } : {})
   }
 }
@@ -169,9 +184,14 @@ export class VisualRunner {
     return this.send({ op: 'play', layer: spec })
   }
 
-  /** Opens a video's file on its output ahead of its GO, so its first frame is ready when it is. */
+  /**
+   * Opens a video's file on its output ahead of its GO, so its first frame is ready when it is —
+   * or a camera, so its picture is live the moment it is asked for.
+   */
   prepare(cue: VisualCue): void {
-    if (cue.type !== 'video' || cue.filePath === '' || this.showing.has(cue.id)) return
+    if (this.showing.has(cue.id)) return
+    if (cue.type === 'video' && cue.filePath === '') return
+    if (cue.type !== 'video' && cue.type !== 'camera') return
     void this.send({ op: 'prepare', layer: layerSpecOf(cue, 0, 0) })
   }
 
@@ -212,11 +232,32 @@ export class VisualRunner {
     })
   }
 
+  /**
+   * A fade cue moving a picture's place — its position, scale, rotation, crop — over the same
+   * time and curve as its level.
+   */
+  move(cueId: string, to: GeometryTarget, durationMs: number, curve: FadeCurve, atShowMs: number): void {
+    if (!this.showing.has(cueId) || !movesGeometry(to)) return
+    void this.send({
+      op: 'move',
+      cueId,
+      to,
+      durationMs: Math.max(0, durationMs),
+      curve,
+      at: audioEngine.engineTime(atShowMs)
+    })
+  }
+
   /** An edit in the inspector, applied to the picture while it is up. */
   update(cue: Cue): void {
     if (!this.showing.has(cue.id)) return
-    if (cue.type !== 'video' && cue.type !== 'image' && cue.type !== 'text') return
+    if (cue.type !== 'video' && cue.type !== 'image' && cue.type !== 'text' && cue.type !== 'camera') return
     void this.send({ op: 'update', cueId: cue.id, patch: livePatchOf(cue) })
+  }
+
+  /** The cues whose pictures are up (or on their way up). */
+  showingIds(): string[] {
+    return [...this.showing.keys()]
   }
 
   /** How far a video has played at show time `atShowMs`, pauses taken out. */

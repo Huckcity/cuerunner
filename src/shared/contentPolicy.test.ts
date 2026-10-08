@@ -15,6 +15,11 @@ describe('what the window may load and run', () => {
     expect(policy['connect-src']).toBe("'self'")
   })
 
+  it('reads a camera\'s stream only through main\'s own scheme, never from the network itself', () => {
+    expect(policy['img-src']).toContain('cuerunner-stream:')
+    expect(policy['media-src']).toContain('cuerunner-stream:')
+  })
+
   it('allows nothing of the kinds the app does not use', () => {
     for (const directive of ['object-src', 'base-uri', 'form-action']) {
       expect(policy[directive], directive).toBe("'none'")

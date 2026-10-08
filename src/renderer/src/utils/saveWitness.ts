@@ -48,6 +48,7 @@ export function witnessSave(sent: Workspace): boolean {
     timecode,
     videoOutputs: useStore.getState().videoOutputs,
     cueLists,
+    pictures: useStore.getState().pictures,
     oscPatches,
     cues
   })
