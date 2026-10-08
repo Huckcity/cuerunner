@@ -201,6 +201,12 @@ constexpr int kMaxOutputFrames = 4096;
 constexpr int kMaxPatches = 16;
 constexpr int kMaxSlices = 32;
 constexpr int kMaxInputFeeds = 8;
+/**
+ * The output devices the engine can play beside the one it opened (aux_output.h): each one a
+ * stream of its own that a patch can name, locked to the main device's clock. An engine size
+ * like the ones above; a device past the last is refused by name where it is asked for.
+ */
+constexpr int kMaxAuxOutputs = 8;
 /** Points in a drawn fade shape: enough that a smooth curve read between them is within half a
  *  percent of itself where it is steepest, few enough to travel inside a command. */
 constexpr int kMaxCurvePoints = 65;
@@ -317,6 +323,11 @@ struct MixSnapshot {
   // after its fader. A patch slot that is not defined reads zero channels.
   int busChannels[kMaxPatches] = {};
   float busPeak[kMaxPatches][kMaxOutputChannels] = {};
+  // Each extra output device's own reading, the way `meterPeak` is the main device's: the
+  // peak of each of its channels over the last block, after the master level. A slot with
+  // no device open reads zero channels.
+  int auxChannels[kMaxAuxOutputs] = {};
+  float auxPeak[kMaxAuxOutputs][kMaxOutputChannels] = {};
 };
 
 struct Event {
@@ -367,7 +378,12 @@ struct Command {
     // One output patch defined (its channel map and fader) or cleared, and the per-output
     // faders: the mixer's controls, applied on the audio thread like every other change.
     Bus = 14,
-    OutputGains = 15
+    OutputGains = 15,
+    // An extra output device opened (its channel count) or closed (0), so the mixer mixes
+    // the patches that name it into a block of its own; and one that was lost, whose
+    // voices end `device-lost` while every other device plays on.
+    AuxOutput = 16,
+    AuxLost = 17
   } kind = None;
 
   char cueId[kMaxCueIdLen] = {};
@@ -394,6 +410,11 @@ struct Command {
   bool busDefined = false;
   int busChannels = 0;
   int busMap[kMaxOutputChannels] = {};
+  // The device a bus is mixed onto: -1 the main one, otherwise an extra output's slot.
+  int busAux = -1;
+  // An extra output device's slot, and its channel count (0: closed).
+  int auxSlot = -1;
+  int auxChannels = 0;
   float outputGains[kMaxOutputChannels] = {};
   double value = 0.0;
   double durationMs = 0.0;

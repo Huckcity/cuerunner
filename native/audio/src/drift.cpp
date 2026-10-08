@@ -45,13 +45,14 @@ DriftRing::DriftRing() {
   for (auto& peak : peaks_) peak.store(0.0f, std::memory_order_relaxed);
 }
 
-void DriftRing::configure(int channels, int inRate, double latencyMs, int expectedChunk) {
+void DriftRing::configure(int channels, int inRate, double latencyMs, int expectedChunk, DriftTuning tuning) {
   channels_ = std::clamp(channels, 1, kMaxOutputChannels);
   if (ring_.size() < static_cast<size_t>(kRingFrames) * static_cast<size_t>(channels_)) {
     ring_.assign(static_cast<size_t>(kRingFrames) * static_cast<size_t>(channels_), 0.0f);
   }
   inRate_.store(inRate > 0 ? inRate : 48000, std::memory_order_release);
   latencyMs_ = std::max(0.0, latencyMs);
+  tuning_ = tuning;
   lastPushAt_.store(0.0, std::memory_order_relaxed);
   writeHead_.store(0, std::memory_order_relaxed);
   releasedHead_.store(0, std::memory_order_relaxed);
@@ -62,6 +63,7 @@ void DriftRing::configure(int channels, int inRate, double latencyMs, int expect
   latencyPublished_.store(0.0, std::memory_order_relaxed);
   targetPublished_.store(0.0, std::memory_order_relaxed);
   ratioPublished_.store(0.0, std::memory_order_relaxed);
+  heldPublished_.store(0.0, std::memory_order_relaxed);
   for (auto& peak : peaks_) peak.store(0.0f, std::memory_order_relaxed);
   resetRequested_.store(true, std::memory_order_release);
 }
@@ -100,6 +102,7 @@ bool DriftRing::pull(float* out, int frames, int outRate, double now) {
     primed_ = false;
     integral_ = 0.0;
     adjust_ = 0.0;
+    lockedFor_ = 0.0;
     learned_ = 0.0;
     sinceLearned_ = kLearnCooldownSeconds;
     lockedRate_ = inRate;
@@ -120,16 +123,6 @@ bool DriftRing::pull(float* out, int frames, int outRate, double now) {
     return false;
   };
 
-  if (!primed_) {
-    // Nothing is played until the target is there to be held: starting short is an
-    // underrun a block later.
-    if (write < target_ + 2.0) return silence();
-    readPos_ = write - target_;
-    fillAverage_ = target_ + chunk / 2.0;
-    primed_ = true;
-  }
-
-  double available = write - readPos_;
   // What the writer has made since it last delivered, estimated from when that was: the
   // buffer the controller holds is what is buffered on both sides of the writer's callback,
   // so a period handed over in one piece is not read as the buffer jumping by a period.
@@ -138,6 +131,20 @@ bool DriftRing::pull(float* out, int frames, int outRate, double now) {
   // seconds rather than a slope the controller can follow.
   const double sinceDelivery = now - lastPushAt_.load(std::memory_order_relaxed);
   const double undelivered = std::clamp(sinceDelivery * static_cast<double>(inRate), 0.0, chunk);
+
+  if (!primed_) {
+    // Nothing is played until the target is there to be held: starting short is an
+    // underrun a block later.
+    if (write < target_ + 2.0) return silence();
+    // Started exactly where the controller will hold it — the buffer on both sides of the
+    // writer's callback at its target — so a lock begins locked rather than settling into
+    // place over the first minute.
+    readPos_ = std::min(write - need, write + undelivered - (target_ + chunk / 2.0));
+    fillAverage_ = target_ + chunk / 2.0;
+    primed_ = true;
+  }
+
+  double available = write - readPos_;
   if (available < need) {
     // The writer stopped delivering (or never kept up): silence, and lock again once the
     // buffer is back at its target — with more room, since the room it had was not enough.
@@ -161,13 +168,19 @@ bool DriftRing::pull(float* out, int frames, int outRate, double now) {
     resyncs_.fetch_add(1, std::memory_order_relaxed);
   }
 
-  const double weight = std::min(1.0, dt / kFillAverageSeconds);
+  // A tuned start raises the loop's bandwidth — the average's, the proportional gain with it
+  // and the integral gain with its square, so the damping is the same at every speed — and
+  // lets it fall back to the gentle loop as the lock ages.
+  lockedFor_ += dt;
+  const double boost =
+      tuning_.startBoost > 0.0 ? 1.0 + tuning_.startBoost * std::exp(-lockedFor_ / tuning_.boostSeconds) : 1.0;
+  const double weight = std::min(1.0, dt * boost / kFillAverageSeconds);
   fillAverage_ += weight * (available + undelivered - fillAverage_);
   // The target is for what is delivered; the average also counts what is waiting on the
   // writer's side, half a period on average, so that half is where the two meet.
   const double error = (fillAverage_ - (target_ + chunk / 2.0)) / static_cast<double>(inRate);
-  integral_ = std::clamp(integral_ + error * dt, -kMaxAdjust / kIntegral, kMaxAdjust / kIntegral);
-  adjust_ = std::clamp(kProportional * error + kIntegral * integral_, -kMaxAdjust, kMaxAdjust);
+  integral_ = std::clamp(integral_ + kIntegral * boost * boost * error * dt, -kMaxAdjust, kMaxAdjust);
+  adjust_ = std::clamp(kProportional * boost * error + integral_, -kMaxAdjust, kMaxAdjust);
   const double step = base * (1.0 + adjust_);
 
   float blockPeak[kMaxOutputChannels] = {};
@@ -197,6 +210,7 @@ bool DriftRing::pull(float* out, int frames, int outRate, double now) {
   latencyPublished_.store(fillAverage_ * 1000.0 / static_cast<double>(inRate), std::memory_order_relaxed);
   targetPublished_.store(target_ * 1000.0 / static_cast<double>(inRate), std::memory_order_relaxed);
   ratioPublished_.store(adjust_ * 1e6, std::memory_order_relaxed);
+  heldPublished_.store(integral_ * 1e6, std::memory_order_relaxed);
   return true;
 }
 

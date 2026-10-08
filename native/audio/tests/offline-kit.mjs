@@ -75,8 +75,12 @@ export function readFloatWav(path) {
   return { channels, frames, samples }
 }
 
-/** Renders `script` offline; the summary the engine printed and the output's samples. */
-export function render(workDir, script, { keepWav = true } = {}) {
+/**
+ * Renders `script` offline; the summary the engine printed and the output's samples — and,
+ * for each test output device named in `devices`, what that device played (its tee, written
+ * beside the render's own WAV).
+ */
+export function render(workDir, script, { keepWav = true, devices = [] } = {}) {
   const tag = Math.floor(Math.random() * 1e9)
   const scriptPath = join(workDir, `script-${tag}.json`)
   const outPath = join(workDir, `out-${tag}.wav`)
@@ -87,7 +91,17 @@ export function render(workDir, script, { keepWav = true } = {}) {
   const wav = keepWav ? readFloatWav(outPath) : null
   rmSync(outPath, { force: true })
   rmSync(scriptPath, { force: true })
-  return { summary, wav }
+  const played = {}
+  for (const device of devices) {
+    const teePath = join(workDir, `out-${tag}.${device.replace(/[^A-Za-z0-9]/g, '-')}.wav`)
+    try {
+      played[device] = readFloatWav(teePath)
+    } catch {
+      played[device] = null
+    }
+    rmSync(teePath, { force: true })
+  }
+  return { summary, wav, devices: played }
 }
 
 /** The reply to the command at `index` in the script, as the offline runner kept it. */

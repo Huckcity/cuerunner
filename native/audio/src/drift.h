@@ -30,6 +30,19 @@
 
 namespace ws {
 
+/**
+ * How a lock starts. A live input is played the moment it opens and keeps the gentle loop
+ * throughout. An extra output device is opened when a show loads, long before its first cue,
+ * and a fast start is worth more to it than anything: its loop starts with its bandwidth
+ * raised by `startBoost` and lets the boost fall away over `boostSeconds`, so the clock error
+ * is taken up in seconds and the settled lock is the gentle one, which no callback's lateness
+ * moves.
+ */
+struct DriftTuning {
+  double startBoost = 0.0;
+  double boostSeconds = 1.0;
+};
+
 class DriftRing {
  public:
   static constexpr int64_t kRingFrames = 1 << 16;
@@ -44,7 +57,7 @@ class DriftRing {
    * deliveries) and the delivery the writer is expected to make before it has made one.
    * Buffers are grown here and never on either end.
    */
-  void configure(int channels, int inRate, double latencyMs, int expectedChunk);
+  void configure(int channels, int inRate, double latencyMs, int expectedChunk, DriftTuning tuning = {});
   /** The writer's rate has changed (a device reopened at another rate): the reader relocks. */
   void setInRate(int rate);
   /** Asks the reader to start over: prime again, controller at rest. */
@@ -79,6 +92,9 @@ class DriftRing {
   double targetMs() const { return targetPublished_.load(std::memory_order_relaxed); }
   /** How far the controller has moved the resampler off the nominal ratio, ppm. */
   double ratioPpm() const { return ratioPublished_.load(std::memory_order_relaxed); }
+  /** The part of that move the loop has learned and holds — the two clocks' difference, as
+   *  the lock measures it — without the moment-to-moment correction on top, ppm. */
+  double heldPpm() const { return heldPublished_.load(std::memory_order_relaxed); }
   /** Each channel's peak since the last call, linear; the peaks start again from zero. */
   float takePeak(int channel) {
     return channel >= 0 && channel < kMaxOutputChannels ? peaks_[channel].exchange(0.0f, std::memory_order_relaxed)
@@ -93,6 +109,7 @@ class DriftRing {
 
   int channels_ = 0;
   double latencyMs_ = 0.0;
+  DriftTuning tuning_;
   std::atomic<int> inRate_{48000};
   std::vector<float> ring_;
   std::atomic<uint64_t> writeHead_{0};
@@ -106,8 +123,9 @@ class DriftRing {
   bool primed_ = false;
   double readPos_ = 0.0;
   double fillAverage_ = 0.0;
-  double integral_ = 0.0;
+  double integral_ = 0.0;  // the integral term, in the nudge's own units
   double adjust_ = 0.0;
+  double lockedFor_ = 0.0;  // seconds since the loop last started from rest
   double target_ = 0.0;
   double learned_ = 0.0;        // headroom learned from late deliveries, ms
   double sinceLearned_ = 0.0;   // seconds since it last grew
@@ -118,6 +136,7 @@ class DriftRing {
   std::atomic<double> latencyPublished_{0.0};
   std::atomic<double> targetPublished_{0.0};
   std::atomic<double> ratioPublished_{0.0};
+  std::atomic<double> heldPublished_{0.0};
   std::atomic<float> peaks_[kMaxOutputChannels];
 };
 

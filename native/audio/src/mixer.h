@@ -46,7 +46,8 @@ struct VoiceSlice {
 /**
  * An output patch as the mixer holds it: a bus with its own channels, mapped onto device
  * outputs, with its own fader and meter. Voices routed through a patch are mixed into the
- * bus first; the bus is faded, metered and then summed onto the outputs its map names.
+ * bus first; the bus is faded, metered and then summed onto the outputs its map names — of
+ * the main device, or of the extra output device `aux` names while that device is open.
  */
 struct Bus {
   bool defined = false;
@@ -55,6 +56,10 @@ struct Bus {
   double gainTarget = 1.0;
   double gainCurrent = 1.0;
   float peak[kMaxOutputChannels] = {};
+  /** The extra output device this patch plays on (aux_output.h), or -1 for the main one. A
+   *  device that is not open leaves the patch on the main device's outputs of the same
+   *  numbers, so a cue patched to an interface that is not there is still heard. */
+  int aux = -1;
 };
 
 // One destination gain for the explicit matrix. The output channel is not stored: the
@@ -162,6 +167,21 @@ class Mixer {
     std::call_once(busesPrepared_, [this] { busScratch_.assign(kBusStride * static_cast<size_t>(kMaxPatches), 0.0f); });
   }
 
+  /**
+   * Allocates the extra output devices' mixing space, once, on the control thread — before
+   * the first one is opened, so a show on one device never pays for it and the audio thread
+   * never allocates. The render thread only touches a slot an `AuxOutput` command opened.
+   */
+  void prepareAux() {
+    std::call_once(auxPrepared_, [this] { auxScratch_.assign(kBusStride * static_cast<size_t>(kMaxAuxOutputs), 0.0f); });
+  }
+  /** Whether any extra output device is open: the one test a show on one device pays. */
+  bool anyAux() const { return anyAux_; }
+  /** An extra output device's channel count while it is open, else 0. */
+  int auxChannels(int slot) const { return slot >= 0 && slot < kMaxAuxOutputs ? auxChannels_[slot] : 0; }
+  /** The block last rendered for an extra output device, interleaved at its channel count. */
+  const float* auxBlock(int slot) const { return auxScratch_.data() + static_cast<size_t>(slot) * kBusStride; }
+
   void configure(int deviceChannels, int sampleRate);
   void reset();
 
@@ -232,6 +252,11 @@ class Mixer {
   /** Moves a sliced voice on past the end of its slice: another pass, the next slice, or the end. */
   void advanceSlices(Voice& voice, int64_t frame);
   void mixBuses(float* out, int frames, int channels);
+  /** The master level onto every open extra output device, ramped as the main one is, and metered. */
+  void masterAux(int frames, double from, double to);
+  /** A lost extra output device: the voices on its patches end, and the device stops being mixed. */
+  void loseAux(int slot);
+  float* auxData(int slot) { return auxScratch_.data() + static_cast<size_t>(slot) * kBusStride; }
   template <bool Special>
   void mixVoiceFrame(Voice& voice, int64_t frame, int64_t blockStart, float* outFrame, int channels);
   float* busData(int slot) { return busScratch_.data() + static_cast<size_t>(slot) * kBusStride; }
@@ -275,6 +300,13 @@ class Mixer {
   double outputGainTarget_[kMaxOutputChannels] = {};
   double outputGainCurrent_[kMaxOutputChannels] = {};
   bool outputsAtUnity_ = true;
+  // The extra output devices: each open one's channel count, its block (one block of every
+  // channel it can have, allocated once like the buses'), and its meter.
+  int auxChannels_[kMaxAuxOutputs] = {};
+  bool anyAux_ = false;
+  std::vector<float> auxScratch_;
+  std::once_flag auxPrepared_;
+  float auxPeak_[kMaxAuxOutputs][kMaxOutputChannels] = {};
   InputFeeds* inputs_ = nullptr;
   // What a voice holds that the render loop reads only at an edge — a slice boundary, a drawn
   // fade — kept out of `Voice` and indexed by its slot, so the per-frame walk over the voices
