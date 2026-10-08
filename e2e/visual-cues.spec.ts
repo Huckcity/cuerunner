@@ -411,12 +411,12 @@ test.describe('on the GPU', () => {
     await tab(page, 'Text')
     await page.locator('#inspector-text-body').fill('CUERUNNER')
     await typeInto(page, 'Size (px)', '200')
-    // A fade cue aimed at the text, taking it to nothing over half a second.
+    // A fade cue aimed at the text, taking it to nothing over half a second: made with the
+    // text selected, it is born aimed at it, and a picture with no sound fades its opacity.
     await toolbarCueBtn(page, 'Fade').click()
     await tab(page, 'Fade')
-    const target = field(page, 'Target cue').locator('select')
-    const textCue = await target.locator('option', { hasText: 'Text Cue' }).getAttribute('value')
-    await target.selectOption(textCue ?? '')
+    await expect(page.locator('.target-row')).toHaveCount(1)
+    await expect(page.locator('.target-row')).toContainText('Text Cue')
     await expect(field(page, 'Property').locator('select')).toHaveValue('opacity')
     await typeInto(page, 'Duration (s)', '0.5')
 

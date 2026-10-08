@@ -82,7 +82,7 @@ test('a QLab workspace file becomes a new show, with a report on every cue and t
   await expect(report).toBeVisible()
   expect(await page.locator('.app-notice').allTextContents(), 'the app reported an error').toEqual([])
   await expect(report.getByTestId('qlab-summary')).toContainText(
-    'Press Night: 30 cues in 2 cue lists came across from Press Night.qlab5; 7 are placeholders.'
+    'Press Night: 30 cues in 2 cue lists came across from Press Night.qlab5; 6 are placeholders.'
   )
 
   // Every QLab type, and what it became.
@@ -93,7 +93,9 @@ test('a QLab workspace file becomes a new show, with a report on every cue and t
   await expect(row('MIDI', 'msc')).toHaveText('1')
   await expect(row('Network', 'osc')).toHaveText('2')
   await expect(row('Video', 'placeholder')).toHaveText('1')
-  await expect(report.locator('[data-notes="placeholder"] li')).toHaveCount(7)
+  // QLab's Start cue is a Control cue here, not a placeholder.
+  await expect(row('Start', 'control')).toHaveText('1')
+  await expect(report.locator('[data-notes="placeholder"] li')).toHaveCount(6)
   await expect(report.locator('[data-notes="retimed"]')).toContainText('Fade walk-in')
 
   // Two files are not where QLab said: one never existed here, one is on a stick.
@@ -138,8 +140,10 @@ test('a QLab workspace file becomes a new show, with a report on every cue and t
     .toEqual(['audio', 'fade', 'stop', 'msc', 'osc', 'devamp'])
   expect([cue('4').mode, cue('5').mode, cue('19').mode, cue('20').mode, cue('21').mode])
     .toEqual(['timeline', 'random', 'timeline', 'sequence', 'playlist'])
-  expect(['10', '12', '13', '14', '15', '17', '18'].map(number => [cue(number).type, cue(number).isArmed]))
-    .toEqual(Array(7).fill(['wait', false]))
+  expect(['10', '12', '13', '14', '15', '18'].map(number => [cue(number).type, cue(number).isArmed]))
+    .toEqual(Array(6).fill(['wait', false]))
+  // QLab's Start cue, armed and aimed: a Control cue that starts cue 4.
+  expect(cue('17')).toMatchObject({ type: 'control', action: 'start', isArmed: true, targetCueIds: [cue('4').id] })
   expect(cue('4.1').parentId).toBe(cue('4').id)
   // The file found on the stick is the file the saved show plays.
   expect(cue('FX1').filePath).toBe(path.join('stick', 'audio', 'door.wav'))

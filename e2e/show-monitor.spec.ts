@@ -59,9 +59,13 @@ test('the monitor opens on the running services, and closes the log', async () =
   await expect(page.locator('.log-panel')).toHaveCount(0)
   await expect(page.locator('.btn-monitor')).toHaveAttribute('data-active', 'true')
 
-  // OSC input comes up on its default port with no workspace loaded at all.
-  await expect(service(page, 'OSC input')).toHaveAttribute('data-state', 'running')
-  await expect(service(page, 'OSC input')).toContainText('53000')
+  // OSC input comes up on its default port with no workspace loaded at all. The port is the
+  // show's alone, so on a machine where something else already holds 53000 — another app in a
+  // parallel run, a QLab — it is refused and says so, on that same port; either way it is up.
+  const osc = service(page, 'OSC input')
+  await expect(osc).toContainText('53000')
+  await expect(osc).toHaveAttribute('data-state', /^(running|degraded)$/)
+  if ((await osc.getAttribute('data-state')) === 'degraded') await expect(osc).toContainText(PORT_IN_USE)
 
   await page.locator('.btn-monitor').click()
   await expect(monitor(page)).toHaveCount(0)
@@ -133,7 +137,9 @@ test('a port another program holds is reported instead of swallowed', async () =
     // A service that cannot start is an alarm the operator can read, and the app is
     // still there to show it.
     await openMonitor(page)
-    await expect(monitor(page).locator('.monitor-alert', { hasText: PORT_IN_USE })).toBeVisible()
+    // This port's alarm: the launch's own default port may have its own where another app in
+    // the run holds 53000.
+    await expect(monitor(page).locator('.monitor-alert', { hasText: new RegExp(`${port}.*(EADDRINUSE|EACCES)`) })).toBeVisible()
   } finally {
     squatter.close()
   }
@@ -154,6 +160,9 @@ test('enabling network presence starts the service and reports what it found', a
 })
 
 test('services coming and going stay in the monitor, out of the log', async () => {
+  // A port of its own: 53000 is refused where another app in the run holds it, and a refusal
+  // is an alarm, which belongs in the log. Moving the port is a service going and coming.
+  await oscPortOfItsOwn(page)
   await openMonitor(page)
   await expect(service(page, 'OSC input')).toHaveAttribute('data-state', 'running')
 
