@@ -45,7 +45,7 @@ import { playRegion } from '../utils/silenceTrim'
 import type { RunningCue, CueRunResult, LogEntryInput } from '../store'
 import type { TriggerGuardSettings } from '../../../shared/workspace'
 import type { TakeoverPlan } from '../../../shared/redundancy'
-import { listArmed, listOfCue, type CueListInfo } from '../../../shared/cueLists'
+import { listArmed, listOfCue, MAIN_CUE_LIST_ID, type CueListInfo } from '../../../shared/cueLists'
 import { idsInList, sequenceOf } from './cueListScope'
 
 type SetRunning = (id: string, state: RunningCue | null) => void
@@ -315,8 +315,10 @@ export class CueEngine {
 
     // The hand that shook. Every way of firing a cue reaches the runner, so the window
     // is asked here rather than at each of them — and Space, which the OS repeats while
-    // it is held down, is exactly what it is for.
-    if (!this.guard.accepts('key', 'go', this.now())) return
+    // it is held down, is exactly what it is for. Each list's GO is a press of its own: a GO
+    // on the cart straight after one on the main list is two lists being run, not a bounce.
+    const pressed = listId ?? this.deps!.getActiveListId?.() ?? MAIN_CUE_LIST_ID
+    if (!this.guard.accepts('key', pressed === MAIN_CUE_LIST_ID ? 'go' : `go:${pressed}`, this.now())) return
 
     // A cue that is already in flight is left where it is, unless it was told it may be
     // restarted. Checked before the selection moves, so an ignored press changes nothing

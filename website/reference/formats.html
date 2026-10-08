@@ -56,6 +56,16 @@
         <code>dmx.json</code> beside the licence.
       </p>
       <p>
+        A show with more than one cue list carries a <code>cueLists</code> section: each list's
+        id, name, colour, whether it is a cart, whether it is disarmed, how it follows the
+        clock and its tiles' own keys, in tab order. A cue at the top level of a list other than
+        the main one names it with <code>listId</code>; a cue inside a group never does — it runs
+        in its group's list. A show with only its main list under its own name writes no
+        section and no <code>listId</code>, so a show saved before lists existed opens as one
+        list and saves the bytes it always did. A cue naming a list the file does not have runs
+        in the main list, and the bar across the top says so, the way a grouping repair does.
+      </p>
+      <p>
         <strong>It does not hold the audio.</strong> Each audio cue stores the path to its
         file. Moving a show to another machine means taking the sound with it and keeping
         the paths valid: the simplest arrangement is a folder with the <code>.cuerunner</code>

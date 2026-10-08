@@ -310,7 +310,7 @@ export const GUIDES = [
             <tr><td>Wait, Memo</td><td>Wait. A memo is a wait of no length, its notes kept.</td></tr>
             <tr><td>MIDI</td><td>MIDI for note on, note off, control change, program change and SysEx, on the port the workspace's patch names; Show Control for MIDI Show Control's Go, Stop, Resume, Load and Reset.</td></tr>
             <tr><td>Network (QLab 4: OSC)</td><td>OSC, to the host and port of the workspace's network patch, its arguments typed as QLab types them.</td></tr>
-            <tr><td>Second cue list, cart</td><td>Cuerunner runs one cue list. The first QLab list is the show; every other list and cart comes after it as a disarmed group, so GO never runs into it. Arm it, or move its cues, to use them.</td></tr>
+            <tr><td>Second cue list, cart</td><td>Every QLab list is a cue list here, a tab of its own with its own GO, and keeps QLab's id, so a remote that sent <code>/cue_id/{list}/go</code> to QLab sends it here. The first list that is not a cart is the main list. A cart is a cart list, its tiles in the order the cart held them rather than at their grid places.</td></tr>
           </tbody>
         </table>
       </div>
@@ -735,6 +735,26 @@ export const GUIDES = [
         whatever order the scene asks for them. The first ten answer the number keys
         <kbd>1</kbd>–<kbd>9</kbd> and <kbd>0</kbd>. A running tile counts down and has its own
         stop. This computer remembers whether you left it in the cart.
+      </p>
+      <p>
+        A show can hold several <strong>cue lists</strong>, a tab each above the list: the main
+        sequence, a cart of effects, the pre-show loop. <strong>+</strong> adds one; a double
+        click renames it; a right-click colours it, shows it as a cart, disarms it, moves it
+        among the tabs or deletes it with its cues, after asking. Each list keeps its own
+        place: GO, <kbd>Space</kbd> and STOP act on the list in front, and a list you come back
+        to is standing where you left it. Cues running in another list play on, the tab shows a
+        green dot while they do, and the Active tab names the list beside each one. Drag rows
+        onto a tab, or right-click them and choose <strong>Move to</strong>, to move them to
+        another list — a group goes whole. A disarmed list fires nothing, by GO, trigger or the
+        clock. In <strong>List settings</strong> each list follows timecode or ignores it, and
+        sits its own number of frames later on the clock than the show. Every one of these is
+        one <kbd>Ctrl</kbd>+<kbd>Z</kbd>.
+      </p>
+      <p>
+        A list shown as a <strong>cart</strong> opens as tiles, and <kbd>F6</kbd> turns it to
+        rows for editing and back. Right-click a tile and press a key to give it a key of its
+        own: that key plays it wherever the show is standing, with the main list in front.
+        Backspace takes the key away.
       </p>
       <p>
         The <strong>Active</strong> tab in the dock lists everything that is running, oldest

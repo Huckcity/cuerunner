@@ -113,6 +113,9 @@ test('a QLab workspace file becomes a new show, with a report on every cue and t
   // workspace. The list is virtualised, so what it holds is read from the file Save As
   // writes rather than from the rows on screen.
   await expect(page.locator('.cue-row').filter({ hasText: 'Walk-in' }).first()).toBeVisible()
+  // Each QLab list is a tab: the main sequence in front, the cart beside it.
+  await expect(page.locator('.cue-list-tab .cue-list-tab-name')).toHaveText(['Main Cue List', 'Sound FX'])
+  await expect(page.locator('.cue-list-tab').nth(1)).toHaveAttribute('data-cart', 'true')
   await expect(page).toHaveTitle(/Press Night ● — Cuerunner/)
   expect(fs.readdirSync(show).sort()).toEqual(['Press Night.qlab5', 'audio'])
 
@@ -126,13 +129,20 @@ test('a QLab workspace file becomes a new show, with a report on every cue and t
   await expect(page).toHaveTitle(/^Press Night — Cuerunner/)
 
   const stored = JSON.parse(fs.readFileSync(saved, 'utf-8')) as {
-    cues: Array<{ id: string; number: string; type: string; isArmed: boolean; parentId: string | null; filePath?: string; mode?: string }>
+    cueLists?: Array<{ id: string; name: string; cart?: boolean }>
+    cues: Array<{
+      id: string; number: string; type: string; isArmed: boolean; parentId: string | null; filePath?: string
+      mode?: string; listId?: string
+    }>
   }
   // QLab's numbers in QLab's order, children after their groups, the second list last.
   expect(stored.cues.map(cue => cue.number)).toEqual([
     '1', '2', '3', '4', '4.1', '4.2', '5', '5.1', '5.2', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15',
-    '16', '17', '18', '19', '19.1', '19.2', '20', '20.1', '21', '21.1', '', 'FX1'
+    '16', '17', '18', '19', '19.1', '19.2', '20', '20.1', '21', '21.1', 'FX1'
   ])
+  // The cart is a cart list of its own, its cue in it and armed: not a disarmed group in the main list.
+  expect(stored.cueLists?.map(list => [list.name, list.cart === true])).toEqual([['Main Cue List', false], ['Sound FX', true]])
+  expect(stored.cues.find(entry => entry.number === 'FX1')).toMatchObject({ listId: stored.cueLists?.[1].id, isArmed: true })
   const cue = (number: string) => stored.cues.find(entry => entry.number === number)!
   expect([cue('1').type, cue('2').type, cue('3').type, cue('9').type, cue('11').type, cue('16').type])
     .toEqual(['audio', 'fade', 'stop', 'msc', 'osc', 'devamp'])

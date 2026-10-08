@@ -582,14 +582,16 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
         <table>
           <thead><tr><th>Keys</th><th>Action</th><th>Where</th></tr></thead>
           <tbody>
-            <tr><td><kbd>Space</kbd></td><td>GO — fire the selected cue and move on to the next. With nothing selected, as after the last cue, it fires nothing.</td><td>Anywhere except a text field</td></tr>
-            <tr><td><kbd>Esc</kbd></td><td>STOP — stop everything, at once or over the show's STOP fade; a second press during the fade cuts it</td><td>Anywhere except a text field. With a menu open, the press closes the menu and stops nothing</td></tr>
+            <tr><td><kbd>Space</kbd></td><td>GO — fire the selected cue of the list in front and move on to the next cue of that list. With nothing selected, as after the list's last cue, it fires nothing.</td><td>Anywhere except a text field</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>STOP — stop the list in front, at once or over the show's STOP fade; a second press during the fade cuts it. Where no other list is running, that is everything</td><td>Anywhere except a text field. With a menu open, the press closes the menu and stops nothing</td></tr>
             <tr><td><kbd>P</kbd></td><td>PAUSE — hold the whole show where it stands, and let it go on. While it is held GO waits; STOP and PANIC end the hold</td><td>Anywhere except a text field</td></tr>
             <tr><td><kbd>Shift</kbd> + <kbd>Esc</kbd></td><td>PANIC — stop with a short fade</td><td>Anywhere except a text field</td></tr>
             <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd></td><td>PANIC from the application menu — the same silence, reached without the window</td><td>Anywhere, including while the window is busy</td></tr>
             <tr><td><kbd>F5</kbd></td><td>Show mode — the show in large type, read-only; F5 again to edit</td><td>Anywhere a panel is not open</td></tr>
             <tr><td><kbd>F6</kbd></td><td>Cart — the list as a wall of buttons, each playing its cue; F6 again for the list</td><td>Anywhere a panel is not open</td></tr>
             <tr><td><kbd>1</kbd> … <kbd>9</kbd>, <kbd>0</kbd></td><td>Play the first ten cart tiles</td><td>The cart</td></tr>
+            <tr><td>A tile's own key</td><td>Play that tile — set by right-clicking the tile and pressing the key</td><td>Anywhere except a text field, whichever list is in front</td></tr>
+            <tr><td><kbd>Ctrl</kbd> + <kbd>Page Down</kbd> / <kbd>Page Up</kbd></td><td>The next or previous cue list tab</td><td>Anywhere a panel is not open</td></tr>
           </tbody>
         </table>
       </div>
@@ -704,8 +706,8 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
         <table>
           <thead><tr><th>Address</th><th>Effect</th></tr></thead>
           <tbody>
-            <tr><td><code>/go</code></td><td>GO, exactly as <kbd>Space</kbd>: the selected cue fires and the selection moves on.</td></tr>
-            <tr><td><code>/stop</code>, <code>/hardStop</code></td><td>STOP: everything is cut where it stands.</td></tr>
+            <tr><td><code>/go</code></td><td>GO, exactly as <kbd>Space</kbd>: the selected cue of the list in front fires and the selection moves on.</td></tr>
+            <tr><td><code>/stop</code>, <code>/hardStop</code></td><td>STOP, as <kbd>Esc</kbd>: the list in front is cut where it stands — everything, where no other list is running.</td></tr>
             <tr><td><code>/panic</code></td><td>Panic, answered where the engine is, as <code>/cuerunner/panic</code> is.</td></tr>
             <tr><td><code>/pause</code>, <code>/resume</code>, <code>/togglePause</code> (also <code>/pause_toggle</code>)</td><td>Hold the whole show, let it go on, or whichever it is not — as <kbd>P</kbd> does.</td></tr>
             <tr><td><code>/cue/{number}/pause</code>, <code>/resume</code>, <code>/togglePause</code></td><td>Hold one playing audio cue while the rest of the show goes on, and let it go.</td></tr>
@@ -715,6 +717,12 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
             <tr><td><code>/cue/{number}/start</code></td><td>Fire that cue where it is; the selection stays where the operator left it. A disarmed cue is not fired, and the log says so.</td></tr>
             <tr><td><code>/cue/{number}/stop</code></td><td>Stop that cue (and a group's children with it).</td></tr>
             <tr><td><code>/cue/{number}/seek</code> <em>seconds</em></td><td>Move a running audio cue to that many seconds into its region.</td></tr>
+            <tr><td><code>/cue_id/{id}/…</code></td><td>The same verbs, for the cue with that id. QLab counts a cue list as a cue, and so does this: <code>/cue_id/{list id}/go</code> is GO on that list, <code>/stop</code> stops it and <code>/select</code> brings it to the front. A list imported from QLab keeps QLab's id.</td></tr>
+            <tr><td><code>/list/{list}/go</code> (also <code>/cueList/…</code>, <code>/cueLists/…</code>; <code>/start</code>)</td><td>GO on that list's own place, without bringing it to the front. The list is named by its id, its name (any case) or its place among the tabs counting from 1.</td></tr>
+            <tr><td><code>/list/{list}/stop</code></td><td>Stop what is running in that list, and nothing else.</td></tr>
+            <tr><td><code>/list/{list}/select</code></td><td>Bring that list to the front.</td></tr>
+            <tr><td><code>/list/{list}/next</code>, <code>/previous</code></td><td>Move that list's place one cue, without bringing it to the front. Nothing fires.</td></tr>
+            <tr><td><code>/list/{list}/arm</code>, <code>/disarm</code></td><td>Put the list back in the show, or take it out: a disarmed list fires nothing, by GO, trigger or clock.</td></tr>
           </tbody>
         </table>
       </div>
@@ -889,6 +897,16 @@ await rig.blackout()</code></div>
         lights saves the bytes it always did. Which network interface the lights leave by,
         and the sACN identity this machine sends as, are the machine's, in
         <code>dmx.json</code> beside the licence.
+      </p>
+      <p>
+        A show with more than one cue list carries a <code>cueLists</code> section: each list's
+        id, name, colour, whether it is a cart, whether it is disarmed, how it follows the
+        clock and its tiles' own keys, in tab order. A cue at the top level of a list other than
+        the main one names it with <code>listId</code>; a cue inside a group never does — it runs
+        in its group's list. A show with only its main list under its own name writes no
+        section and no <code>listId</code>, so a show saved before lists existed opens as one
+        list and saves the bytes it always did. A cue naming a list the file does not have runs
+        in the main list, and the bar across the top says so, the way a grouping repair does.
       </p>
       <p>
         <strong>It does not hold the audio.</strong> Each audio cue stores the path to its
