@@ -199,6 +199,34 @@
         19:42".
       </div>
     </section>
+
+    <section class="panel reveal delay-2" id="updates">
+      <h2>Updates</h2>
+      <p>
+        Cuerunner looks for a newer version twenty seconds after it starts and once a day after
+        that, and only looks: when there is one, a bar under the toolbar says so, with its
+        release notes. Nothing is downloaded until you press <strong>Download</strong>, and
+        nothing is installed until you press <strong>Restart now</strong> or quit the app.
+      </p>
+      <ol class="steps">
+        <li><strong>Read the notes.</strong> <strong>Release notes</strong> lists every version between the one you are running and the new one.</li>
+        <li><strong>Download when the show is idle.</strong> A download asked for while a cue is running, paused or waiting is held with a sentence saying so, and a cue fired while a download is under way stops it. Nothing is fetched during a show.</li>
+        <li><strong>Restart, or just quit.</strong> A downloaded update installs the next time Cuerunner quits, or now with <strong>Restart now</strong> — which asks you to save the show first, and is refused while anything is running.</li>
+      </ol>
+      <p>
+        A download whose bytes do not match the checksum its release published, or whose
+        signature is not the publisher's, is refused with a sentence and deleted; nothing is
+        installed. A machine with no network says nothing at all. A copy installed from the
+        <code>.deb</code> is told when there is a newer version and sent to the download page,
+        because a package manager's install cannot replace itself.
+      </p>
+      <p>
+        For show week, set <strong>Show hours</strong> in Settings → Updates: no update checks
+        between the two times, by this computer's clock. Show Mode with a show open is locked out
+        too, unless you turn that off. The first launch after an update shows what changed, once.
+        Every field is in the <a href="../reference/settings.html#updates">settings reference</a>.
+      </p>
+    </section>
   </main>
 
   <footer class="site-footer">

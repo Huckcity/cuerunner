@@ -14,6 +14,7 @@ import { refuseNavigation } from './safety/navigation'
 import { placeWindow, readWindowState, saveWindowState } from './windowState'
 import { FILE_MENU, fileMenuItemId, type MenuAction } from '../shared/fileMenu'
 import { APP_CHANNELS, type RendererCrash } from '../shared/ipc/app'
+import { startUpdates, stopUpdates } from './update/main'
 
 // The last renderer crash, handed to the reloaded renderer so it can say what happened.
 // One shot: the renderer reads it on startup, and it is cleared.
@@ -384,8 +385,12 @@ app.whenReady().then(() => {
     // A MIDI file still playing at quit lets go of its notes on the way out: a port outlives
     // the app that held it, and a synth left with a chord down drones until someone finds it.
     midiFiles.stopAll()
+    stopUpdates()
   })
   createWindow()
+  // The launch check waits for the window and a show; the daily one follows it. Each is
+  // skipped while checks are off or locked out, and none of them downloads anything.
+  startUpdates()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
