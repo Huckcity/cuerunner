@@ -20,6 +20,32 @@
  */
 export const UPDATE_FEED_URL = 'https://pub.cuerunner.app/latest/'
 
+/**
+ * What each platform's updater reads from the feed, and which file it installs from what that
+ * feed offers. These are electron-updater's own choices — the channel file its provider asks for
+ * on that platform, and the extension its updater looks for — written down so the release
+ * pipeline, the suite's fake feed and the app agree on them, and held to the library's real
+ * provider by `src/main/update/platformFeed.test.ts`.
+ *
+ * Windows reads `latest.yml` and installs the NSIS `.exe`; macOS reads `latest-mac.yml` and
+ * installs the `.zip` (Squirrel replaces an app from a zip of it, never from the dmg beside it);
+ * Linux reads `latest-linux.yml` and installs the AppImage, passing over the .deb the same feed
+ * lists. A 64-bit ARM Linux machine reads `latest-linux-arm64.yml`, which this pipeline does not
+ * publish: its check finds no release and says nothing.
+ */
+export const PLATFORM_FEEDS = {
+  win32: { feed: 'latest.yml', installs: 'exe', passesOver: [] as string[] },
+  darwin: { feed: 'latest-mac.yml', installs: 'zip', passesOver: ['pkg', 'dmg'] },
+  linux: { feed: 'latest-linux.yml', installs: 'AppImage', passesOver: ['rpm', 'deb', 'pacman'] }
+} as const
+
+export type FeedPlatform = keyof typeof PLATFORM_FEEDS
+
+/** The feed facts for a platform this app ships on, or null for one it does not. */
+export function platformFeed(platform: string): (typeof PLATFORM_FEEDS)[FeedPlatform] | null {
+  return platform === 'win32' || platform === 'darwin' || platform === 'linux' ? PLATFORM_FEEDS[platform] : null
+}
+
 /** Where an operator whose copy cannot replace itself is sent: the site's download section. */
 export const UPDATE_DOWNLOAD_PAGE = 'https://cuerunner.app/#download'
 
