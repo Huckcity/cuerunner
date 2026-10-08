@@ -306,7 +306,7 @@ export const GUIDES = [
       <ul class="tight-list">
         <li><strong>Sequence</strong> — its children in order, each after the one before.</li>
         <li><strong>All at once</strong> — everything together: a bang, a blackout, three sends in one press.</li>
-        <li><strong>Random</strong> — one child, picked at random. Good for a stinger you do not want to be identical every night.</li>
+        <li><strong>Random</strong> — one child, drawn at random, every child once before any repeats. Good for a stinger you do not want to be identical every night, or the same twice in a row.</li>
         <li><strong>Timeline</strong> — each child at an offset you set by dragging it. The dock draws the timeline for a group in this mode.</li>
         <li><strong>Playlist</strong> — one child per GO. The group holds the show until a full pass is done, so a walk-in playlist of thirty cues is thirty presses.</li>
       </ul>

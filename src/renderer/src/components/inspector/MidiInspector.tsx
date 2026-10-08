@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../../store'
 import type { MidiCue, MidiMessageKind } from '../../../../shared/cue'
 import { LastRun } from './LastRun'
+import { SendNow } from './SendNow'
 import { NumberField, TextField } from '../common/Field'
 
 interface Props { cue: MidiCue }
@@ -148,6 +149,15 @@ export function MidiInspector({ cue }: Props) {
         </div>
       ))}
       <button onClick={addMsg} className="inspector-add-btn add-row">+ Add message</button>
+      <SendNow
+        what={cue.messages.length === 1 ? 'the message' : `${cue.messages.length} messages`}
+        disabled={cue.messages.length === 0}
+        send={() => window.cuerunner.midi.send({
+          // The port the cue would use: its own, or the show's default when it names none.
+          portName: cue.portName || useStore.getState().midiSettings.outputPortName,
+          messages: cue.messages
+        })}
+      />
       <LastRun cueId={cue.id} />
     </div>
   )

@@ -282,7 +282,7 @@ export const REFERENCE = [
           <tbody>
             <tr><td>Sequence</td><td>Children in order, each after the one before.</td></tr>
             <tr><td>All at once</td><td>Every child together.</td></tr>
-            <tr><td>Random</td><td>One child, chosen at random.</td></tr>
+            <tr><td>Random</td><td>One child, drawn at random — every child once before any of them twice, and never the same one twice running across the seam between passes.</td></tr>
             <tr><td>Timeline</td><td>Each child at its own offset, edited by dragging in the dock.</td></tr>
           </tbody>
         </table>
@@ -301,11 +301,11 @@ export const REFERENCE = [
           <tbody>
             <tr>
               <td><strong>MIDI</strong></td>
-              <td><strong>Port</strong> (or the show's default output) and a list of messages: note on, note off, control change, program change, or raw sysex bytes.</td>
+              <td><strong>Port</strong> (or the show's default output) and a list of messages: note on, note off, control change, program change, or raw sysex bytes. <strong>Send now</strong> sends them from the inspector without running the cue.</td>
             </tr>
             <tr>
               <td><strong>OSC</strong></td>
-              <td><strong>Host</strong>, <strong>Port</strong>, <strong>Address</strong>, and arguments typed as integer, float, string, true or false.</td>
+              <td><strong>Host</strong>, <strong>Port</strong>, <strong>Address</strong>, and arguments typed as integer, float, string, true or false. <strong>Send now</strong> sends the message from the inspector without running the cue — the check that the console is listening — and says whether it left.</td>
             </tr>
             <tr>
               <td><strong>Network</strong></td>
