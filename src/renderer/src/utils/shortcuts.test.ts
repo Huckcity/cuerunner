@@ -20,6 +20,12 @@ describe('formatShortcut', () => {
     expect(formatShortcut('Shift+Esc', 'darwin')).toBe('⇧Esc')
   })
 
+  it('keeps the keypad plus key whole', () => {
+    expect(formatShortcut('Num+', 'win32')).toBe('Num+')
+    expect(formatShortcut('Shift+Num+', 'win32')).toBe('Shift+Num+')
+    expect(formatShortcut('Mod+Num+', 'darwin')).toBe('⌘Num+')
+  })
+
   it('reads the platform the preload reports when none is given', () => {
     expect(formatShortcut('Mod+D')).toBe(window.cuerunner.platform === 'darwin' ? '⌘D' : 'Ctrl+D')
   })

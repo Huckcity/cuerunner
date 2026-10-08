@@ -26,6 +26,8 @@ async function triggersOf(number: string): Promise<void> {
 }
 
 test('a key fires its cue, and a key the app answers is refused with what it does', async () => {
+  // A key is shown the way this machine's keyboard labels it: ⇧F7 on a Mac, Shift+F7 elsewhere.
+  const mac = process.platform === 'darwin'
   await toolbarCueBtn(page, 'Wait').click()
   await toolbarCueBtn(page, 'Wait').click()
   await triggersOf('2')
@@ -34,13 +36,17 @@ test('a key fires its cue, and a key the app answers is refused with what it doe
   await page.locator('#trigger-hotkey').fill('Space')
   await expect(page.locator('.trigger-hotkey-hint')).toHaveText('Taken: Space is the app’s key for GO.')
   await expect(page.locator('.trigger-hotkey-add')).toBeDisabled()
+  // A menu's key is named as the keyboard has it, never as the stored Mod+S.
+  await page.locator('#trigger-hotkey').fill('Mod+S')
+  await expect(page.locator('.trigger-hotkey-hint')).toHaveText(`Taken: ${mac ? '⌘S' : 'Ctrl+S'} is the app’s key for save.`)
 
   // Recorded off the keyboard, the way an operator sets one.
   await page.locator('.trigger-hotkey-record').click()
   await page.keyboard.press('Shift+F7')
   await expect(page.locator('#trigger-hotkey')).toHaveValue('Shift+F7')
+  await expect(page.locator('.trigger-hotkey-hint')).toHaveText(`${mac ? '⇧F7' : 'Shift+F7'} fires this cue.`)
   await page.locator('.trigger-hotkey-add').click()
-  await expect(page.locator('.trigger-row[data-kind="hotkey"]')).toContainText('Key Shift+F7')
+  await expect(page.locator('.trigger-row[data-kind="hotkey"]')).toContainText(`Key ${mac ? '⇧F7' : 'Shift+F7'}`)
 
   // From the list, not from a field: the key fires cue 2 and GO's place is left alone.
   await row('1').click()
@@ -49,7 +55,7 @@ test('a key fires its cue, and a key the app answers is refused with what it doe
   await expect(row('1')).toHaveAttribute('data-running', 'false')
   await expect(row('1')).toHaveAttribute('data-selected', 'true')
   await page.locator('.btn-log').click()
-  await expect(page.locator('.log-panel')).toContainText('Triggered by the key Shift+F7')
+  await expect(page.locator('.log-panel')).toContainText(`Triggered by the key ${mac ? '⇧F7' : 'Shift+F7'}`)
 })
 
 test('a key is not taken from a field being typed in', async () => {

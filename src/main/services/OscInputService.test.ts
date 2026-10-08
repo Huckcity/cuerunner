@@ -344,6 +344,33 @@ describe('OscInputService', () => {
   })
 })
 
+describe('the refusal sentence, on each platform', () => {
+  const error = (code: string) => Object.assign(new Error(`bind ${code}`), { code })
+  const inUse = (port: number, code: string) =>
+    `port ${port} is in use by another program (QLab, another Cuerunner, a bridge) — ` +
+    `this show cannot hear OSC there until it is let go or the port is changed (${code})`
+
+  it('reads a port held by another program as in use, whichever code the platform gives it', () => {
+    for (const platform of ['linux', 'darwin', 'win32'] as const) {
+      expect(refusalSentence(error('EADDRINUSE'), '0.0.0.0', 53000, platform)).toBe(inUse(53000, 'EADDRINUSE'))
+    }
+    // Windows: WSAEACCES is a port another socket holds exclusively, not a privilege.
+    expect(refusalSentence(error('EACCES'), '0.0.0.0', 53000, 'win32')).toBe(inUse(53000, 'EACCES'))
+  })
+
+  it('reads EACCES elsewhere as a privileged port', () => {
+    for (const platform of ['linux', 'darwin'] as const) {
+      expect(refusalSentence(error('EACCES'), '0.0.0.0', 80, platform))
+        .toBe('port 80 needs privileges this program does not have — choose a port above 1023 (EACCES)')
+    }
+  })
+
+  it('names an interface that is not there any more', () => {
+    expect(refusalSentence(error('EADDRNOTAVAIL'), '10.0.0.9', 53000, 'win32'))
+      .toBe('10.0.0.9 is not an address of this machine any more — choose its interface again (EADDRNOTAVAIL)')
+  })
+})
+
 describe('the listener binds its port exclusively', () => {
   /** A real service on a real socket, with a status and a log to read. */
   function real(): { service: OscInputService; setState: Mock; bus: ShowBus; context: ServiceContext } {
@@ -368,12 +395,14 @@ describe('the listener binds its port exclusively', () => {
     const second = real()
     second.service.start(second.context, settings(true, port))
 
-    await vi.waitFor(() => expect(second.setState).toHaveBeenCalledWith('degraded', expect.stringContaining('EADDRINUSE')))
-    const sentence = refusalSentence(Object.assign(new Error('x'), { code: 'EADDRINUSE' }), '0.0.0.0', port)
+    // The code is the platform's for a port held exclusively: EADDRINUSE, or WSAEACCES on Windows.
+    await vi.waitFor(() => expect(second.setState).toHaveBeenCalledWith('degraded', expect.stringMatching(/\((EADDRINUSE|EACCES)\)$/)))
+    const code = (second.setState.mock.calls.find(call => call[0] === 'degraded')![1] as string).match(/\((\w+)\)$/)![1]
+    const sentence = refusalSentence(Object.assign(new Error('x'), { code }), '0.0.0.0', port)
     expect(second.setState).toHaveBeenCalledWith('degraded', sentence)
     expect(sentence).toBe(
       `port ${port} is in use by another program (QLab, another Cuerunner, a bridge) — ` +
-      'this show cannot hear OSC there until it is let go or the port is changed (EADDRINUSE)'
+      `this show cannot hear OSC there until it is let go or the port is changed (${code})`
     )
     // A refused port is a status, not an alarm: the window writes the status's sentence to
     // the log (`useOscPortReport`), and nothing reaches the alarm list or the transport chip.
@@ -394,7 +423,12 @@ describe('the listener binds its port exclusively', () => {
       intruder.once('listening', () => resolve(null))
       intruder.bind(port, '0.0.0.0')
     })
-    expect(refused).toBe('EADDRINUSE')
+    // The intruder is refused. The code is the platform's own for a port held exclusively —
+    // Windows answers WSAEACCES, everything else EADDRINUSE — and either way the sentence an
+    // operator reads for it is the in-use one, naming the port.
+    expect(refused).toBe(process.platform === 'win32' ? 'EACCES' : 'EADDRINUSE')
+    expect(refusalSentence(Object.assign(new Error('x'), { code: refused }), '0.0.0.0', port))
+      .toContain(`port ${port} is in use by another program`)
   })
 
   it('is refused by a port another program already shares with address reuse, rather than splitting its traffic', async () => {

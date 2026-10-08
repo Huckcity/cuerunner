@@ -255,16 +255,23 @@ export class OscInputService implements ShowService {
  * Why a bind was refused, as the sentence the operator reads in Settings and the log: the port
  * and what holds it, with the system's own code kept at the end for whoever is asked to look.
  */
-export function refusalSentence(error: unknown, address: string, port: number): string {
+export function refusalSentence(
+  error: unknown,
+  address: string,
+  port: number,
+  platform: NodeJS.Platform = process.platform
+): string {
   const code = (error as { code?: unknown } | null)?.code
   switch (code) {
     case 'EADDRINUSE':
       return `port ${port} is in use by another program (QLab, another Cuerunner, a bridge) — ` +
         `this show cannot hear OSC there until it is let go or the port is changed (EADDRINUSE)`
     case 'EACCES':
-      // Windows reports a port another socket holds exclusively as WSAEACCES; elsewhere it is
+      // Windows reports a port another socket holds exclusively as WSAEACCES — libuv binds a
+      // UDP socket there with SO_EXCLUSIVEADDRUSE, so a later bind with SO_REUSEADDR is refused
+      // with it — and a port below 1024 needs no privileges there. Elsewhere it is exactly that:
       // a port below 1024 that needs privileges.
-      return process.platform === 'win32'
+      return platform === 'win32'
         ? `port ${port} is in use by another program (QLab, another Cuerunner, a bridge) — ` +
           `this show cannot hear OSC there until it is let go or the port is changed (EACCES)`
         : `port ${port} needs privileges this program does not have — choose a port above 1023 (EACCES)`
