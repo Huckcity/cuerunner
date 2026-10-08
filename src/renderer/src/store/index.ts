@@ -196,6 +196,16 @@ interface CueListState {
   moveCue: (fromIndex: number, beforeIndex: number, newParentId?: string | null) => void
   /** Duplicates each cue with its children as a single edit; the copies are selected. */
   duplicateCues: (ids: string[]) => void
+  /**
+   * Writes a patch of its own to each cue as a single edit — a batch edit whose fields do not
+   * apply to every cue in the set (a volume to the audio cues and not to the waits).
+   */
+  patchCues: (patches: Record<string, Partial<Cue>>) => void
+  /**
+   * Puts a block of new cues — a group and its children, already in order — at the top level
+   * after the top-level cue that holds `afterId`, as one edit, and selects the first of them.
+   */
+  insertCues: (block: Cue[], afterId: string | null) => void
 
   // Selection. The set is what a bulk edit acts on; `selectedId` is the cue the operator
   // last put their hand on — the one GO fires and advances from, and always a member of
@@ -989,6 +999,36 @@ export const useStore = create<CueListState>((set) => ({
       past: record ? pushPast(s.past, snapshotOf(s)) : s.past,
       future: record ? [] : s.future,
     }
+  }),
+
+  patchCues: (patches) => set(s => {
+    const ids = Object.keys(patches).filter(id => s.cues.some(cue => cue.id === id))
+    if (ids.length === 0) return s
+    const retargeted = ids.filter(id => cueRetargeted(s.cues, id, patches[id]))
+    return {
+      cues: s.cues.map(c => c.id in patches ? patchedCue(c, patches[c.id]) : c),
+      ...(retargeted.length > 0
+        ? { silenceFailures: forgetSilenceFailures(s.silenceFailures, retargeted) }
+        : {}),
+      isDirty: true,
+      past: pushPast(s.past, snapshotOf(s)),
+      future: [],
+    }
+  }),
+
+  insertCues: (block, afterId) => set(s => {
+    if (block.length === 0) return s
+    const cues = [...s.cues]
+    // The block goes after the top-level cue that holds `afterId`, past its whole subtree:
+    // inside a group it would become part of what it acts on.
+    let anchor = afterId === null ? -1 : cues.findIndex(c => c.id === afterId)
+    while (anchor >= 0 && cues[anchor].parentId !== null) {
+      const parentId = cues[anchor].parentId
+      anchor = cues.findIndex(c => c.id === parentId)
+    }
+    const insertIdx = anchor < 0 ? cues.length : subtreeEndIndex(cues, anchor) + 1
+    cues.splice(insertIdx, 0, ...block)
+    return { cues, ...selectionFor(block[0].id), isDirty: true, past: pushPast(s.past, snapshotOf(s)), future: [] }
   }),
 
   moveCue: (fromIndex, beforeIndex, newParentId) => set(s => {

@@ -3,6 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { useStore } from '../../store'
 import { CueRow } from './CueRow'
 import { CueContextMenu } from './CueContextMenu'
+import { BatchEditDialog } from './BatchEditDialog'
 import { groupDurationMs } from '../../utils/cueDuration'
 import { cueNameFromFile } from '../../utils/cueDefaults'
 import { groupLengthState, mediaLengthsFrom, mediaLengthState } from '../../utils/mediaLength'
@@ -86,6 +87,8 @@ export function CueList() {
   // Context menu state
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; cueId: string } | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
+  // The cues a batch edit from the menu is open for; the menu closes as the dialog opens.
+  const [batchIds, setBatchIds] = useState<string[] | null>(null)
 
   const openCtxMenu = useCallback((e: React.MouseEvent, cueId: string) => {
     e.preventDefault()
@@ -518,9 +521,11 @@ export function CueList() {
               setRenamingId(ctxMenu.cueId)
               setTimeout(() => setRenamingId(null), 100)
             }}
+            onBatchEdit={setBatchIds}
           />
         ) : null
       })()}
+      {batchIds !== null && <BatchEditDialog ids={batchIds} onClose={() => setBatchIds(null)} />}
     </div>
   )
 }
