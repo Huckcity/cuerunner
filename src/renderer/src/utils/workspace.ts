@@ -32,10 +32,14 @@ import { isDefaultTimecodeShow, type TimecodeShowSettings } from '../../../share
 // optional on the saved form, so a call site that forgot it would compile and save a show
 // that had stopped chasing. A show that leaves it at the defaults writes no section — so a
 // show saved before timecode existed, or that never touched it, stays byte-identical.
+//
+// The video outputs the same: named at every call, even where there are none, and a show with
+// none writes no section.
 export function buildWorkspace(
-  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode'> & {
+  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode' | 'videoOutputs'> & {
     lighting: LightingSettings | undefined
     timecode: TimecodeShowSettings | undefined
+    videoOutputs: WorkspaceValues['videoOutputs']
   }
 ): Workspace {
   return savedShape({
@@ -45,6 +49,9 @@ export function buildWorkspace(
     // be the key every save of every show carries for no reason.
     history: values.history && values.history.length > 0 ? values.history : undefined,
     lighting: values.lighting === undefined || isEmptyLighting(values.lighting) ? undefined : values.lighting,
-    timecode: values.timecode === undefined || isDefaultTimecodeShow(values.timecode) ? undefined : values.timecode
+    timecode: values.timecode === undefined || isDefaultTimecodeShow(values.timecode) ? undefined : values.timecode,
+    // The same for a show with no video output: its bytes are what they were before
+    // outputs existed.
+    videoOutputs: values.videoOutputs && values.videoOutputs.length > 0 ? values.videoOutputs : undefined
   })
 }

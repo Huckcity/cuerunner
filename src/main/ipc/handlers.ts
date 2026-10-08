@@ -158,6 +158,7 @@ import type { ScriptDocument, ShowEvent, ShowSettings } from '../../shared/show'
 import type { LicenseStatus } from '../../shared/license'
 import type { Workspace } from '../../shared/workspace'
 import { AUDIO_FILE_EXTENSIONS } from '../../shared/media'
+import { registerOutputHandlers } from '../output/ipc'
 
 const midi = new MidiEngine(midiModuleLoader())
 // A MIDI File cue's players send through the same engine, so a port it names is the port
@@ -383,6 +384,9 @@ export function registerIpcHandlers(): void {
   // on any machine; the Pro ones answer to the licence, and the host says so in their
   // status rather than leaving a port bound to nothing.
   void show.configure(defaultShowSettings())
+
+  // Video outputs: the windows main keeps for the show's pictures (src/main/output).
+  registerOutputHandlers()
 
   // Audio
   /**

@@ -130,6 +130,19 @@ import {
   type QLabLivePayload,
   type QLabWorkspacesResult
 } from '../shared/ipc/qlab'
+import {
+  OUTPUT_CHANNELS,
+  type LayerCommand,
+  type OutputCommandResult,
+  type OutputEvent,
+  type OutputPlacePayload,
+  type OutputPlaceResult,
+  type OutputSnapshot,
+  type OutputTestPatternPayload,
+  type TimerFeed,
+  type TimerWindowState
+} from '../shared/ipc/output'
+import type { OutputPlacement, VideoOutput } from '../shared/visual'
 import type { CuerunnerBridge, EventChannel } from '../shared/ipc'
 import type { Workspace } from '../shared/workspace'
 import type { ShowEvent, ShowSettings, ShowSnapshot, ScriptDocument } from '../shared/show'
@@ -506,5 +519,33 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invoke(QLAB_CHANNELS.importLive, payload),
     findMedia: (workspace: Workspace, workspacePath: string | null): Promise<QLabFindMediaResult> =>
       invoke(QLAB_CHANNELS.findMedia, { workspace, workspacePath } satisfies QLabFindMediaPayload)
+  },
+  /**
+   * The video outputs: windows main keeps for the show's pictures. Every time a command
+   * carries is engine milliseconds, the clock the sound of a video is scheduled on.
+   */
+  output: {
+    configure: (outputs: VideoOutput[]): Promise<void> =>
+      invoke(OUTPUT_CHANNELS.configure, outputs),
+    snapshot: (): Promise<OutputSnapshot> =>
+      invoke(OUTPUT_CHANNELS.snapshot),
+    place: (outputId: string, placement: OutputPlacement): Promise<OutputPlaceResult> =>
+      invoke(OUTPUT_CHANNELS.place, { outputId, placement } satisfies OutputPlacePayload),
+    layer: (command: LayerCommand): Promise<OutputCommandResult> =>
+      invoke(OUTPUT_CHANNELS.layer, command),
+    identify: (): Promise<void> =>
+      invoke(OUTPUT_CHANNELS.identify),
+    testPattern: (outputId: string, on: boolean): Promise<OutputCommandResult> =>
+      invoke(OUTPUT_CHANNELS.testPattern, { outputId, on } satisfies OutputTestPatternPayload),
+    preview: (outputId: string): Promise<string | null> =>
+      invoke(OUTPUT_CHANNELS.preview, outputId),
+    timer: (feed: TimerFeed): Promise<void> =>
+      invoke(OUTPUT_CHANNELS.timer, feed),
+    timerWindow: (state: TimerWindowState): Promise<TimerWindowState> =>
+      invoke(OUTPUT_CHANNELS.timerWindow, state),
+    pickFile: (kind: 'video' | 'image'): Promise<string | null> =>
+      invoke(OUTPUT_CHANNELS.pickFile, kind),
+    onEvents: (callback: (events: OutputEvent[]) => void): (() => void) =>
+      subscribe(OUTPUT_CHANNELS.events, callback)
   }
 } satisfies CuerunnerBridge)

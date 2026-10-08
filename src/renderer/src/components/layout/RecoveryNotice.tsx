@@ -105,6 +105,7 @@ export function RecoveryNotice() {
             triggerGuard: store.triggerGuard,
             lighting: store.lighting,
             timecode: store.timecode,
+            videoOutputs: store.videoOutputs,
             cues: store.cues
           })
           const answer = await window.cuerunner.workspace.save(ws, store.workspacePath)
@@ -155,7 +156,9 @@ export function RecoveryNotice() {
       snapshot.workspace.lighting,
       // And how it follows timecode: recovering without it would hand back a show that had
       // stopped chasing.
-      snapshot.workspace.timecode
+      snapshot.workspace.timecode,
+      // And its outputs: a recovered show still has its projectors.
+      snapshot.workspace.videoOutputs
     )
     // The place, not just the cues: standing where the session stood means the next GO
     // fires what it would have fired.

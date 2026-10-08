@@ -8,6 +8,7 @@ import { MonitorPanel } from '../monitor/MonitorPanel'
 import { RfPanel } from '../rf/RfPanel'
 import { ScriptPanel } from '../script/ScriptPanel'
 import { ActivePanel } from '../active/ActivePanel'
+import { OutputsPanel } from '../outputs/OutputsPanel'
 import { ProLock, ProMark } from '../license/ProLock'
 import { CueIcon } from '../../utils/cueIcons'
 import { formatDuration } from '../../utils/cueDefaults'
@@ -27,7 +28,8 @@ const TABS: { id: DockTab; label: string; className: string; pro?: true }[] = [
   { id: 'log', label: 'Log', className: 'btn-log' },
   { id: 'monitor', label: 'Monitor', className: 'btn-monitor' },
   { id: 'rf', label: 'Wireless', className: 'btn-rf', pro: true },
-  { id: 'script', label: 'Script', className: 'btn-script', pro: true }
+  { id: 'script', label: 'Script', className: 'btn-script', pro: true },
+  { id: 'outputs', label: 'Outputs', className: 'btn-outputs' }
 ]
 
 export const DOCK_DEFAULT_HEIGHT = 180
@@ -230,6 +232,8 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
           <ProLock variant="strip" feature="Script panel"
             blurb="The script beside the cue stack, with cues pinned to the lines they fire on." onClose={backToCue} />
         )
+      case 'outputs':
+        return <OutputsPanel onClose={backToCue} />
     }
   })()
 

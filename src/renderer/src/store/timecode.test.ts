@@ -20,6 +20,7 @@ function saved(): Workspace {
     triggerGuard: s.triggerGuard,
     lighting: s.lighting,
     timecode: s.timecode,
+    videoOutputs: s.videoOutputs,
     cues: s.cues
   })
 }

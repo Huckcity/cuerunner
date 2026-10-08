@@ -32,7 +32,20 @@ export default defineConfig({
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
-    build: shipped
+    // Two preloads: the control window's bridge, and the output windows' smaller one. Each
+    // has to come out as one file — a sandboxed preload can require `electron` and nothing
+    // else, so a chunk the two shared would be a chunk neither could load — which is why
+    // the output windows' channel table lives in a module of its own
+    // (src/shared/ipc/outputWindow.ts) that the control window's preload never imports.
+    build: {
+      ...shipped,
+      rollupOptions: {
+        input: {
+          index: resolve('src/preload/index.ts'),
+          output: resolve('src/preload/output.ts')
+        }
+      }
+    }
   },
   renderer: {
     resolve: {
@@ -42,7 +55,17 @@ export default defineConfig({
     },
     // Script cues run in a module worker (see engine/scriptWorker.ts).
     worker: { format: 'es' },
-    build: shipped,
+    // Two pages: the control window, and the page every video output (and the floating
+    // timer) draws in — src/renderer/output.html.
+    build: {
+      ...shipped,
+      rollupOptions: {
+        input: {
+          index: resolve('src/renderer/index.html'),
+          output: resolve('src/renderer/output.html')
+        }
+      }
+    },
     plugins: [react(), contentPolicy]
   }
 })

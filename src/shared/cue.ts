@@ -13,7 +13,8 @@ export const CUE_TYPES = [
   'audio', 'midi', 'osc', 'wait', 'fade', 'stop',
   'group', 'network', 'script', 'scene', 'devamp', 'msc', 'mic',
   'memo', 'midiFile', 'light',
-  'timecode'
+  'timecode',
+  'video', 'image', 'text'
 ] as const
 
 export type CueType = (typeof CUE_TYPES)[number]
@@ -234,7 +235,11 @@ export type FadeCurve = 'linear' | 'sCurve' | 'logarithmic'
 export interface FadeCue extends CueBase {
   type: 'fade'
   targetCueId: string
-  fadeProperty: 'volume' | 'pan'
+  /**
+   * What the fade moves. `opacity` is a picture's: a video, image or text cue's layer on its
+   * output, 0–1 (see src/shared/visual.ts). A video's sound is still `volume`.
+   */
+  fadeProperty: 'volume' | 'pan' | 'opacity'
   targetValue: number
   /**
    * Where a volume fade takes the pan as well, −1 to 1, over the same time and curve — the
@@ -457,6 +462,10 @@ export interface TimecodeCue extends CueBase {
   /** Where ArtTimeCode goes: a broadcast address, a node, or "host:port". */
   artnetHost: string
 }
+// The picture cues. Their shapes live with the rest of the visual model — outputs, geometry,
+// layers — in src/shared/visual.ts, which imports nothing from here but `CueBase`.
+import type { VideoCue, ImageCue, TextCue } from './visual'
+export type { VideoCue, ImageCue, TextCue } from './visual'
 
 export type Cue =
   | AudioCue
@@ -476,3 +485,6 @@ export type Cue =
   | MidiFileCue
   | LightCue
   | TimecodeCue
+  | VideoCue
+  | ImageCue
+  | TextCue

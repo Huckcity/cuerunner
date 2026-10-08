@@ -21,6 +21,9 @@ const clock = { heldAt: null as number | null, offset: 0 }
 
 export const audioEngine = {
   nowMs: () => clock.heldAt ?? Date.now() - clock.offset,
+  // The fake engine's clock is the show's: one epoch, no restart.
+  engineTime: (showMs: number) => showMs,
+  showTime: (engineMs: number) => engineMs,
   holdClock: vi.fn(() => {
     if (clock.heldAt === null) clock.heldAt = Date.now() - clock.offset
   }),

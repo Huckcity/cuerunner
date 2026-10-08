@@ -186,7 +186,7 @@ describe('pausing one audio cue', () => {
     const { runner, appendLog } = setup([wait('w', 1000)])
     runner.go()
     expect(runner.pauseCue('w')).toBe(false)
-    expect(messages(appendLog)).toContain('only an audio cue that is playing can be paused on its own')
+    expect(messages(appendLog)).toContain('only an audio or video cue that is playing can be paused on its own')
   })
 
   it('does not move a held cue’s playhead: a seek waits for the resume', async () => {
