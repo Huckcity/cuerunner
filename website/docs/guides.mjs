@@ -146,7 +146,10 @@ export const GUIDES = [
         whether a build is signed. Windows warns when an unsigned installer is run, and macOS
         warns about an unidentified developer at first launch. Downloads come from
         <code>pub.cuerunner.app</code>, and these links are the newest release's files. A Linux
-        AppImage is published too, and is experimental.
+        AppImage is published too, and is experimental, with a
+        <a href="https://pub.cuerunner.app/latest/Cuerunner.deb">.deb</a> for Debian and Ubuntu
+        beside it. Once installed, Cuerunner offers each new version itself — see
+        <a href="running.html#updates">Updates</a>.
       </p>
       <p>
         <a href="https://pub.cuerunner.app/latest/SHA256SUMS">SHA256SUMS</a> carries the
