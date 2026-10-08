@@ -1,6 +1,7 @@
 #include "source.h"
 
 #include "m4a.h"
+#include "matroska.h"
 #include "util.h"
 
 #include <algorithm>
@@ -92,6 +93,8 @@ Format sniffFormat(const std::string& path) {
     return Format::Aiff;
   }
   if (std::memcmp(magic + 4, "ftyp", 4) == 0) return Format::M4a;
+  // EBML's own magic: a Matroska or WebM file, which is how a video cue's file often comes.
+  if (magic[0] == 0x1A && magic[1] == 0x45 && magic[2] == 0xDF && magic[3] == 0xA3) return Format::Matroska;
   if (std::memcmp(magic, "ID3", 3) == 0) return Format::Mp3;
   // Raw MP3 frame sync: 11 bits set.
   if (magic[0] == 0xFF && (magic[1] & 0xE0) == 0xE0) return Format::Mp3;
@@ -672,6 +675,7 @@ const char* formatName(Format format) {
     case Format::Flac: return "flac";
     case Format::M4a: return "m4a";
     case Format::Aiff: return "aiff";
+    case Format::Matroska: return "matroska";
     default: return "unknown";
   }
 }
@@ -725,6 +729,15 @@ std::unique_ptr<Source> openSource(const std::string& path, std::string& error, 
     case Format::M4a: {
       SourceError code = SourceError::None;
       source = openM4aSource(path, error, &code);
+      if (!source) {
+        if (errorCode != nullptr) *errorCode = code == SourceError::None ? SourceError::Unreadable : code;
+        return nullptr;
+      }
+      break;
+    }
+    case Format::Matroska: {
+      SourceError code = SourceError::None;
+      source = openMatroskaSource(path, error, &code);
       if (!source) {
         if (errorCode != nullptr) *errorCode = code == SourceError::None ? SourceError::Unreadable : code;
         return nullptr;

@@ -30,6 +30,17 @@
 namespace ws {
 namespace {
 
+// The code a file that could not be opened is refused with: a decoder this machine does not
+// have, a video with no sound in it (the picture still plays — the window reads the code),
+// or a file that is not media this engine reads.
+const char* sourceErrorCode(SourceError code) {
+  switch (code) {
+    case SourceError::DecoderUnavailable: return "format-unavailable";
+    case SourceError::NoAudioTrack: return "no-audio";
+    default: return "decode";
+  }
+}
+
 constexpr int kBackgroundTickMs = 2;
 constexpr int kAckTimeoutMs = 2000;
 
@@ -889,7 +900,7 @@ bool Engine::prepare(const std::string& cueId, const std::string& filePath, Prep
   SourceError openCode = SourceError::None;
   std::unique_ptr<Source> probe = openSource(filePath, openError, &openCode);
   if (probe == nullptr) {
-    error = {openCode == SourceError::DecoderUnavailable ? "format-unavailable" : "decode", openError};
+    error = {sourceErrorCode(openCode), openError};
     return false;
   }
   SourceInfo info = probe->info();
@@ -955,7 +966,7 @@ bool Engine::probe(const std::string& filePath, ProbeDTO& out, EngineError& erro
   SourceError openCode = SourceError::None;
   std::unique_ptr<Source> source = openSource(filePath, openError, &openCode);
   if (source == nullptr) {
-    error = {openCode == SourceError::DecoderUnavailable ? "format-unavailable" : "decode", openError};
+    error = {sourceErrorCode(openCode), openError};
     return false;
   }
   const SourceInfo info = source->info();
@@ -1787,7 +1798,7 @@ bool Engine::waveform(const std::string& filePath, int points, const RegionQuery
   SourceError openCode = SourceError::None;
   std::unique_ptr<Source> source = openSource(filePath, openError, &openCode);
   if (source == nullptr) {
-    error = {openCode == SourceError::DecoderUnavailable ? "format-unavailable" : "decode", openError};
+    error = {sourceErrorCode(openCode), openError};
     return false;
   }
   const SourceInfo info = source->info();

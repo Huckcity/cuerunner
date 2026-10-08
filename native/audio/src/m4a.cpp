@@ -1,6 +1,7 @@
 #include "m4a.h"
 
 #include "m4a_platform.h"
+#include "matroska.h"
 #include "util.h"
 
 #include <cmath>
@@ -169,6 +170,7 @@ bool parseMp4AudioInfo(const std::string& path, Mp4AudioInfo& out, std::string& 
     }
   }
 
+  bool sawSound = false;
   int64_t pos = moov.payload;
   while (pos + 8 <= moov.end) {
     Box trak;
@@ -185,6 +187,7 @@ bool parseMp4AudioInfo(const std::string& path, Mp4AudioInfo& out, std::string& 
           }
         }
         if (isAudio) {
+          sawSound = true;
           Box mdhd;
           int64_t frames = -1;
           if (findBox(file, mdia.payload, mdia.end, "mdhd", mdhd)) {
@@ -248,6 +251,11 @@ bool parseMp4AudioInfo(const std::string& path, Mp4AudioInfo& out, std::string& 
 
   std::fclose(file);
   if (!out.ok) {
+    if (!sawSound) {
+      out.noAudioTrack = true;
+      error = "this video has no sound track";
+      return false;
+    }
     error = "MP4 container has no decodable audio sample entry";
     return false;
   }
@@ -324,7 +332,7 @@ std::string findFfmpeg(std::string* missingOverride) {
 
 class FfmpegPipeSource final : public Source {
  public:
-  bool open(const std::string& path, const Mp4AudioInfo& meta, std::string& error) {
+  bool open(const std::string& path, const Mp4AudioInfo& meta, std::string& error, Format format = Format::M4a) {
     std::string missing;
     ffmpeg_ = findFfmpeg(&missing);
     if (!missing.empty()) {
@@ -337,7 +345,7 @@ class FfmpegPipeSource final : public Source {
       return false;
     }
     path_ = path;
-    info_.format = Format::M4a;
+    info_.format = format;
     info_.sampleRate = meta.sampleRate > 0 ? meta.sampleRate : 48000;
     info_.channels = meta.channels > 0 ? meta.channels : 2;
     info_.frames = meta.frames;
@@ -428,6 +436,11 @@ class FfmpegPipeSource final : public Source {
       }
       args.push_back("-i");
       args.push_back(path_);
+      // Sound only: a video's picture and subtitles are not this helper's to read, and the
+      // pinned build has no decoder for them to try.
+      args.push_back("-vn");
+      args.push_back("-sn");
+      args.push_back("-dn");
       args.push_back("-f");
       args.push_back("f32le");
       args.push_back("-ac");
@@ -491,6 +504,13 @@ std::unique_ptr<Source> openM4aSource(const std::string& path, std::string& erro
   Mp4AudioInfo meta;
   std::string metaError;
   const bool haveMeta = parseMp4AudioInfo(path, meta, metaError);
+  if (!haveMeta && meta.noAudioTrack) {
+    // A video with no sound is a picture and nothing else: said as such on every platform,
+    // before any decoder is asked to make sound out of it.
+    error = metaError;
+    if (errorCode != nullptr) *errorCode = SourceError::NoAudioTrack;
+    return nullptr;
+  }
 
 #if defined(_WIN32)
   {
@@ -526,6 +546,42 @@ std::unique_ptr<Source> openM4aSource(const std::string& path, std::string& erro
   if (error.empty()) error = "no M4A decoder available";
   if (errorCode != nullptr) *errorCode = SourceError::DecoderUnavailable;
   return nullptr;
+#endif
+}
+
+std::unique_ptr<Source> openMatroskaSource(const std::string& path, std::string& error, SourceError* errorCode) {
+  if (errorCode != nullptr) *errorCode = SourceError::None;
+  Mp4AudioInfo meta;
+  std::string metaError;
+  const MatroskaParse parsed = parseMatroskaAudioInfo(path, meta, metaError);
+  if (parsed == MatroskaParse::NoAudio) {
+    error = metaError;
+    if (errorCode != nullptr) *errorCode = SourceError::NoAudioTrack;
+    return nullptr;
+  }
+  if (parsed != MatroskaParse::Ok) {
+    error = metaError.empty() ? std::string("unrecognised Matroska container") : metaError;
+    if (errorCode != nullptr) *errorCode = SourceError::Unreadable;
+    return nullptr;
+  }
+#if defined(_WIN32)
+  {
+    // Media Foundation reads WebM where the system has the extension for it; where it does
+    // not, the sound is a format this machine cannot decode, and the picture still plays.
+    std::string platformError;
+    std::unique_ptr<Source> source = openMediaFoundationSource(path, platformError);
+    if (source != nullptr) return source;
+    error = platformError.empty() ? std::string("this machine has no decoder for the sound in a Matroska/WebM file") : platformError;
+    if (errorCode != nullptr) *errorCode = SourceError::DecoderUnavailable;
+    return nullptr;
+  }
+#else
+  auto pipe = std::make_unique<FfmpegPipeSource>();
+  if (!pipe->open(path, meta, error, Format::Matroska)) {
+    if (errorCode != nullptr) *errorCode = SourceError::DecoderUnavailable;
+    return nullptr;
+  }
+  return pipe;
 #endif
 }
 
