@@ -254,8 +254,13 @@ class AuxOutputs {
  private:
   /** `find`, with the lock already held — a device's name is only written under it. */
   int findLocked(const std::string& device) const;
+  /** With the lock held: how many slots are open or failed, into `inUse_`. */
+  void recount();
 
   AuxOutput outputs_[kMaxAuxOutputs];
+  // How many slots are open or failed: written under `mutex_`, read by the service loop so a
+  // show on one device skips the extra devices' checks whole.
+  std::atomic<int> inUse_{0};
   mutable std::mutex mutex_;
   bool offline_ = false;
   bool testOutputs_ = false;

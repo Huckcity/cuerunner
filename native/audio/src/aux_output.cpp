@@ -357,6 +357,11 @@ void AuxOutput::fail(const std::string& message) {
 }
 
 bool AuxOutput::takeFailure(std::string& message) {
+  // A plain look first: the service loop asks this of every slot on every tick, and a
+  // read-modify-write each time was a synchronisation per slot per tick for a loss that
+  // almost never comes — under ThreadSanitizer, enough to cost a show on one device 6% of its
+  // render time. A flag set after this look is seen on the next tick.
+  if (!failurePending_.load(std::memory_order_relaxed)) return false;
   if (!failurePending_.exchange(false, std::memory_order_acq_rel)) return false;
   std::lock_guard<std::mutex> lock(failureMutex_);
   message = failure_;
@@ -458,14 +463,22 @@ int AuxOutputs::open(const OutputOpenOptions& options, int mainRate, double cloc
   host.offline = offline_;
   host.clockMs = clockMs;
   host.capturePath = capturePath_;
-  if (!outputs_[slot].open(options, host, error)) return -1;
-  return slot;
+  const bool opened = outputs_[slot].open(options, host, error);
+  recount();
+  return opened ? slot : -1;
+}
+
+void AuxOutputs::recount() {
+  int count = 0;
+  for (const AuxOutput& output : outputs_) count += output.inUse() ? 1 : 0;
+  inUse_.store(count, std::memory_order_relaxed);
 }
 
 void AuxOutputs::close(int slot) {
   if (slot < 0 || slot >= kMaxAuxOutputs) return;
   std::lock_guard<std::mutex> lock(mutex_);
   outputs_[slot].close();
+  recount();
 }
 
 void AuxOutputs::halt(int slot, std::string& name) {
@@ -478,6 +491,7 @@ void AuxOutputs::halt(int slot, std::string& name) {
 void AuxOutputs::closeAll() {
   std::lock_guard<std::mutex> lock(mutex_);
   for (AuxOutput& output : outputs_) output.close();
+  recount();
 }
 
 std::vector<OutputStatus> AuxOutputs::status() const {
@@ -541,6 +555,7 @@ void AuxOutputs::advanceSimulation(double now) {
 }
 
 void AuxOutputs::checkHealth() {
+  if (inUse_.load(std::memory_order_relaxed) == 0) return;
   // Never a wait on the service thread: an open or a close in progress holds the lock for as
   // long as a device takes to open, and the next tick looks again.
   std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);
@@ -549,6 +564,9 @@ void AuxOutputs::checkHealth() {
 }
 
 int AuxOutputs::takeFailure(std::string& message) {
+  // Only a slot that is open, or failed and kept, can have a loss to report: with none, the
+  // service loop's every tick costs one plain load, not a look at every slot.
+  if (inUse_.load(std::memory_order_relaxed) == 0) return -1;
   for (int slot = 0; slot < kMaxAuxOutputs; slot++) {
     if (outputs_[slot].takeFailure(message)) return slot;
   }
