@@ -261,6 +261,12 @@ export const APP_PATHS = [
     printed: 'Ctrl/⌘ + Shift + P → PANIC from the application menu — the same silence, reached without the window',
     names: [{ item: 'playback-panic', own: true }]
   },
+  // The View menu's Show Mode: F5 is printed on the item and answered by the window itself.
+  {
+    page: 'reference/keyboard.html',
+    printed: 'F5 → Show mode — the show in large type, read-only; F5 again to edit',
+    names: [{ item: 'view-show-mode', own: true }]
+  },
   {
     page: 'reference/keyboard.html',
     printed: 'Ctrl/⌘ + N → New workspace',

@@ -27,6 +27,8 @@ import { useRedundancy } from './hooks/useRedundancy'
 import { Dock, type DockTab } from './components/layout/Dock'
 import type { AppView } from './components/layout/Toolbar'
 import { ScenesView } from './components/scenes/ScenesView'
+import { ShowModeView } from './components/show-mode/ShowModeView'
+import { useShowMode } from './hooks/useShowMode'
 import { useSelectedCue, useStore, usePro } from './store'
 import type { GroupCue } from '../../shared/cue'
 import { ProLock } from './components/license/ProLock'
@@ -80,13 +82,15 @@ export function App() {
   // it is edited; the cue stack is the other half, one click away at curtain up.
   const [view, setView] = useState<AppView>('cues')
   const selected = useSelectedCue()
+  // The large-type operator view (F5): it takes the place of the list and the inspector.
+  const [showMode, toggleShowMode] = useShowMode()
 
   const timelineGroupCue = selected?.type === 'group' && (selected as GroupCue).mode === 'timeline'
     ? selected as GroupCue
     : null
 
   const timelineFullscreen = timelineExpanded && timelineGroupCue !== null && dockTab === 'cue' && view === 'cues'
-  const shellClass = `app-shell${timelineFullscreen ? ' timeline-fullscreen' : ''}`
+  const shellClass = `app-shell${timelineFullscreen ? ' timeline-fullscreen' : ''}${showMode ? ' in-show-mode' : ''}`
 
   // The license can change while the window is open — a key entered in Settings, or one
   // that ran out overnight — so the panels follow the main process rather than the read
@@ -154,8 +158,10 @@ export function App() {
         onSwitchView={setView}
       />
       <ContextBar />
-      <div className="app-main" data-view={view}>
-        {view === 'scenes' ? (
+      <div className="app-main" data-view={showMode ? 'show' : view}>
+        {showMode ? (
+          <ShowModeView onExit={toggleShowMode} />
+        ) : view === 'scenes' ? (
           pro ? (
             <ScenesView />
           ) : (

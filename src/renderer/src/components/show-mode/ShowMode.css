@@ -1,0 +1,176 @@
+/* Show mode: the cue list as an operator reads it across a booth. Large type, one card per
+   cue, the next cue in the brand's amber, the running ones in the playing row's green, what is
+   done set back. The same tokens as the list, so the two read as one show. */
+.app-main[data-view='show'] { grid-template-columns: minmax(0, 1fr); }
+
+/* Nothing in show mode adds to the show: the toolbar keeps the file menu and the view switch,
+   and loses the buttons that put cues in the list. */
+.app-shell.in-show-mode .toolbar-actions,
+.app-shell.in-show-mode .toolbar-list-actions,
+.app-shell.in-show-mode .toolbar-divider { display: none; }
+
+.show-mode {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg-well);
+}
+
+.show-mode-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4, 16px);
+  border-bottom: 1px solid var(--border);
+}
+
+.show-mode-title {
+  font-weight: var(--fw-bold);
+  color: var(--accent-amber);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  font-size: var(--text-sm);
+}
+
+.show-mode-hint {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.show-mode-exit {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-body);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.show-mode-exit:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+.show-mode-empty {
+  padding: var(--space-4, 16px);
+  color: var(--fg-muted);
+  font-size: var(--text-md);
+}
+
+.show-mode-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  padding: var(--space-3) var(--space-4, 16px) var(--space-4, 16px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.show-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 6px 5.5rem 22px minmax(0, 1fr) auto 7rem;
+  align-items: center;
+  column-gap: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-3) 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.show-card[data-depth='1'] { margin-left: 2.5rem; }
+
+.show-card-color { align-self: stretch; }
+
+.show-card-number {
+  font-family: var(--font-mono);
+  font-size: 1.6rem;
+  color: var(--fg-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.show-card-icon { color: var(--fg-muted); }
+
+.show-card-words {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.show-card-name {
+  font-size: 1.6rem;
+  font-weight: var(--fw-semi);
+  color: var(--fg-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.show-card-note {
+  font-size: var(--text-md);
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.show-card-state {
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  color: var(--fg-muted);
+}
+
+.show-card-time {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.4rem;
+  color: var(--fg-body);
+  text-align: right;
+}
+
+.show-card-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: transparent;
+}
+
+.show-card-progress i {
+  display: block;
+  height: 100%;
+  background: var(--ok-fg);
+  transform-origin: left center;
+  will-change: transform;
+}
+
+/* Done: still there to read, and plainly behind the show. */
+.show-card[data-state='done'] { background: var(--bg-raised); border-color: var(--border-soft); }
+.show-card[data-state='done'] .show-card-name,
+.show-card[data-state='done'] .show-card-number { color: var(--fg-subtle); }
+
+/* Next: what GO fires, in the brand's amber. */
+.show-card[data-state='next'] {
+  background: var(--accent-amber-bg);
+  border-color: var(--accent-amber);
+}
+.show-card[data-state='next'] .show-card-state { color: var(--accent-amber); font-weight: var(--fw-bold); }
+
+/* Running, and the waits either side of it. */
+.show-card[data-state='running'] { background: var(--bg-playing-row); border-color: var(--ok-border); }
+.show-card[data-state='running'] .show-card-state { color: var(--ok-fg); font-weight: var(--fw-bold); }
+.show-card[data-state='pre-wait'],
+.show-card[data-state='post-wait'] { background: var(--bg-prewait-row); }
+
+.show-card[data-armed='false'] .show-card-name { text-decoration: line-through; }

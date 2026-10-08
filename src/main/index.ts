@@ -140,6 +140,28 @@ function createMenu(): void {
       ]
     },
     {
+      // How the window is drawn. Show mode is the window's to switch, and F5 is answered by
+      // the window itself — the accelerator is printed here and not registered, so a press
+      // is one toggle rather than the menu's and the window's both. The zoom is the
+      // operator's: a booth monitor across a desk reads larger than a laptop in front of them.
+      label: 'View',
+      submenu: [
+        {
+          id: 'view-show-mode',
+          label: 'Show Mode',
+          accelerator: 'F5',
+          registerAccelerator: false,
+          click: () => sendMenuAction('show-mode')
+        },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
       // Panic, from the menu, without the renderer: this is the shortcut that still
       // works when the window is wedged, dead, or busy showing something. It silences
       // the native engine directly and then tells whatever renderer is left to drop its

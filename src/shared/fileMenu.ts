@@ -17,8 +17,14 @@ export type FileMenuAction =
   | 'show-settings'
   | 'settings'
 
+/**
+ * What the View menu asks of the window: show mode, the large-type operator view, in and out.
+ * Not a File item, so the Cuerunner ▾ button does not draw it — the window answers F5 itself.
+ */
+export type ViewMenuAction = 'show-mode'
+
 /** Everything the application menu can ask the window to do. */
-export type MenuAction = 'undo' | 'redo' | FileMenuAction
+export type MenuAction = 'undo' | 'redo' | FileMenuAction | ViewMenuAction
 
 export interface FileMenuItem {
   action: FileMenuAction
