@@ -35,6 +35,10 @@ export class CanvasRenderer implements Renderer {
     }
   }
 
+  readPixel(x: number, y: number): number[] {
+    return Array.from(this.context.getImageData(Math.floor(x), Math.floor(y), 1, 1).data)
+  }
+
   release(): void {
     // Nothing is uploaded: the 2D context draws from the element itself.
   }

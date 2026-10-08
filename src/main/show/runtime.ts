@@ -12,6 +12,10 @@ import type { BatteryLog } from '../services/BatteryLog'
 import { PresenceService } from '../services/PresenceService'
 import { CompanionService } from '../services/CompanionService'
 import { RedundancyService } from '../services/RedundancyService'
+import { DmxService } from '../services/DmxService'
+import { sharedLighting, type DmxLightingOptions } from '../dmx/lighting'
+import { TimecodeService } from '../services/TimecodeService'
+import type { TimecodeHub } from '../timecode/hub'
 import type { RedundancySettings } from '../../shared/redundancy'
 import type { AlertLevel, ShowEvent, ShowSettings, ShowSnapshot } from '../../shared/show'
 
@@ -29,6 +33,10 @@ export interface ServiceOptions {
   discoverReceivers?: () => Promise<DiscoverResult>
   /** What each pack used in earlier shows, kept on this machine. */
   batteryLog?: BatteryLog
+  /** The lighting's machine half — its interface and its sACN identity — and its seams. */
+  dmx?: DmxLightingOptions
+  /** The timecode hub, whose receiver the timecode service runs. */
+  timecode?: () => TimecodeHub
 }
 
 export function defaultServices(options: ServiceOptions = {}): ShowService[] {
@@ -46,8 +54,16 @@ export function defaultServices(options: ServiceOptions = {}): ShowService[] {
     new WirelessService(telemetryPorts(options.ewDx, options.discoverReceivers), options.batteryLog),
     new PresenceService(),
     new CompanionService(),
-    new RedundancyService({ settings: options.redundancy })
+    new RedundancyService({ settings: options.redundancy }),
+    // The show's lights: a stream the show keeps up on its own behalf, so Pro like the desk link.
+    new DmxService(sharedLighting(options.dmx)),
+    new TimecodeService(options.timecode ?? noTimecodeHub)
   ]
+}
+
+/** A runtime built without the app's hub: the service then fails to start and says why. */
+function noTimecodeHub(): TimecodeHub {
+  throw new Error('timecode is not available in this build')
 }
 
 export interface ShowRuntime {

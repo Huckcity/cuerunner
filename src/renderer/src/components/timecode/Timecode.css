@@ -1,0 +1,83 @@
+/* The incoming clock. Mono for the digits, so a running clock does not jitter; the state
+   is the one colour on it — green locked, amber freewheeling, red lost — because that is
+   the question the booth asks of it. */
+
+.timecode-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--h-button-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-card);
+  color: var(--fg-body);
+  font-size: var(--text-sm);
+}
+
+.timecode-chip-label {
+  font-family: var(--font-cond);
+  font-weight: var(--fw-semi);
+  letter-spacing: var(--ls-caps);
+  color: var(--fg-muted);
+}
+
+.timecode-chip-value {
+  font-family: var(--font-mono);
+  color: var(--fg-primary);
+}
+
+.timecode-chip-state,
+.timecode-panel-state {
+  font-family: var(--font-cond);
+  font-size: var(--text-xs);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.timecode-chip[data-state='locked'] { border-color: var(--ok-border); }
+.timecode-chip[data-state='locked'] .timecode-chip-state,
+.timecode-panel-state[data-state='locked'] { color: var(--ok-fg); }
+.timecode-chip[data-state='freewheel'] { border-color: var(--warn-border); }
+.timecode-chip[data-state='freewheel'] .timecode-chip-state,
+.timecode-panel-state[data-state='freewheel'] { color: var(--warn-fg); }
+.timecode-chip[data-state='lost'] { border-color: var(--danger-border); background: var(--danger-bg); }
+.timecode-chip[data-state='lost'] .timecode-chip-state,
+.timecode-panel-state[data-state='lost'] { color: var(--danger-fg); }
+
+.timecode-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.timecode-panel-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.timecode-panel-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  color: var(--fg-primary);
+}
+
+.timecode-panel-line {
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+  overflow-wrap: anywhere;
+}
+
+.timecode-panel-generator { color: var(--fg-body); }
+
+/* The inspector's clock controls: the transport of the cue's own clock. */
+.timecode-controls {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}

@@ -174,6 +174,19 @@ export interface ShowSnapshot {
 export interface OscInSettings {
   enabled: boolean
   port: number
+  /**
+   * Whether the port answers the transport — `/go`, `/stop`, `/cue/12/start`, in this app's
+   * namespace and QLab's (`src/shared/oscRemote.ts`). Optional on disk: a show saved before the
+   * remote existed has none, and absent means on, which is what a remote set up for QLab on
+   * the same port expects.
+   */
+  remote?: boolean
+  /**
+   * The senders the port hears, as addresses or IPv4 prefixes (`10.0.0.0/24`). Optional, and
+   * absent or empty is everyone. Anyone else's datagram is dropped before it reaches a trigger,
+   * the remote or the Monitor.
+   */
+  allowFrom?: string[]
 }
 
 export interface MidiInSettings {

@@ -1,8 +1,10 @@
 import type {
   AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, DevampCue, MicCue,
-  MscCue, Cue, CueType, AudioCrosspoint, VideoCue, ImageCue, TextCue
+  MscCue, Cue, CueType, AudioCrosspoint, MemoCue, LightCue, TimecodeCue, VideoCue, ImageCue, TextCue
 } from '../../../shared/cue'
 import { TEXT_DEFAULTS, VIDEO_DEFAULTS, VISUAL_BASE_DEFAULTS, defaultGeometry } from '../../../shared/visual'
+import type { MidiFileCue } from '../../../shared/cue'
+import { MIDI_FILE_IDENTITY_MAP } from '../../../shared/midiFile'
 
 // Every field a new cue is born with. createCue builds on these, and the inspector's
 // reset controls restore them — one definition, so the two can never drift apart.
@@ -29,6 +31,7 @@ export const AUDIO_DEFAULTS = {
   startTime: 0,
   endTime: null as number | null,
   fadeInDuration: 0,
+  fadeOutDuration: 0,
   volume: 1,
   pan: 0,
   // Automatic channel routing: the file's own channel layout decides where it goes.
@@ -52,6 +55,25 @@ export const OSC_DEFAULTS = {
 }
 
 export const WAIT_DEFAULTS = { duration: 2000 }
+
+/**
+ * A new clock starts at the hour, where a show's timecode conventionally starts so that
+ * pre-roll never runs back through midnight, at the European rate, sending MTC to the
+ * show's own MIDI port. LTC and Art-Net are off until a channel and an address are chosen.
+ */
+export const TIMECODE_DEFAULTS = {
+  rate: '25' as const,
+  startTimecode: '01:00:00:00',
+  endTimecode: '',
+  jamSync: false,
+  mtc: true,
+  mtcPortName: '',
+  ltc: false,
+  ltcChannel: 2,
+  ltcLevelDb: -12,
+  artnet: false,
+  artnetHost: '255.255.255.255'
+}
 
 export const FADE_DEFAULTS = {
   targetCueId: '',
@@ -98,6 +120,27 @@ export const MSC_DEFAULTS = {
   // console on a cable is the other answer, and it is one field away.
   destination: 'desk' as const,
   portName: ''
+}
+
+export const MIDI_FILE_DEFAULTS = {
+  // The show's own MIDI output port, like a MIDI cue that names none.
+  portName: '',
+  playbackRate: 1,
+  startTime: 0,
+  endTime: null as number | null,
+  loopCount: 0,
+  // The file as written: every channel on its own channel, nothing moved.
+  channelMap: [...MIDI_FILE_IDENTITY_MAP],
+  transpose: 0,
+  transposeDrums: false
+}
+
+export const LIGHT_DEFAULTS = {
+  // A look takes three seconds to arrive unless it says otherwise: long enough to read as a
+  // fade, short enough that a cue nobody has timed yet does not hold the show.
+  duration: 3000,
+  curve: 'linear' as const,
+  intensity: 'ltp' as const
 }
 
 /**
@@ -239,6 +282,36 @@ export function createCue(type: CueType, number = '1'): Cue {
         label: '',
         action: 'mute'
       } satisfies MicCue
+    case 'memo':
+      return {
+        ...base('Memo', number),
+        type: 'memo'
+      } satisfies MemoCue
+    case 'midiFile':
+      return {
+        ...base('MIDI File', number),
+        type: 'midiFile',
+        filePath: '',
+        ...MIDI_FILE_DEFAULTS,
+        // A fresh list per cue: the defaults' own must not be shared by every cue made.
+        channelMap: [...MIDI_FILE_IDENTITY_MAP]
+      } satisfies MidiFileCue
+    case 'light':
+      return {
+        ...base('Light Cue', number),
+        type: 'light',
+        // Nothing until it is recorded or built: a Light cue with an empty look changes
+        // nothing, which is what a cue nobody has written yet should do.
+        look: [],
+        effects: [],
+        ...LIGHT_DEFAULTS
+      } satisfies LightCue
+    case 'timecode':
+      return {
+        ...base('Timecode', number),
+        type: 'timecode',
+        ...TIMECODE_DEFAULTS
+      } satisfies TimecodeCue
     // The picture cues: shown on the show's first output until they are pointed at another,
     // full size, fitted, and at full level. Their defaults live with the rest of the visual
     // model (src/shared/visual.ts).

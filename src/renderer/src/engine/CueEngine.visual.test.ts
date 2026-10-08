@@ -267,31 +267,46 @@ describe('CueEngine — picture cues', () => {
     expect(setLastRun).toHaveBeenCalledWith('d1', expect.objectContaining({ outcome: 'success' }))
   })
 
-  it('pauses a video — picture frozen, sound taken — and resumes it where it stood', async () => {
-    const { runner } = setup([makeVideo({ duration: 4000, loopCount: 2 })])
+  it('pauses a video — picture frozen, its voice held in the engine — and resumes both where they stood', async () => {
+    const { runner, setLastRun } = setup([makeVideo({ duration: 4000, fadeOutDuration: 500 })])
     runner.go()
     await vi.advanceTimersByTimeAsync(1000)
     expect(runner.pauseCue('v1')).toBe(true)
     expect(sentOps('v1')).toContain('pause')
-    expect(engine.stop).toHaveBeenCalledWith('v1', 15)
+    expect(engine.pause).toHaveBeenCalledWith('v1')
     expect(runner.isPaused('v1')).toBe(true)
-    // Paused for a long time: nothing ends, nothing hands on.
+    // Paused for a long time: nothing ends, nothing hands on, no fade-out comes due.
+    engine.fade.mockClear()
     await vi.advanceTimersByTimeAsync(20_000)
-    expect(runner.isPaused('v1')).toBe(true)
+    expect(setLastRun).not.toHaveBeenCalled()
+    expect(engine.fade).not.toHaveBeenCalled()
 
-    engine.start.mockClear()
     expect(runner.resumeCue('v1')).toBe(true)
     expect(sentOps('v1')).toContain('resume')
-    await vi.advanceTimersByTimeAsync(10)
-    expect(engine.start).toHaveBeenCalledTimes(1)
-    const [, , options] = engine.start.mock.calls[0]
-    // It stood in its first pass: all three passes are still to play, with no fade over it.
-    expect(options).toEqual(expect.objectContaining({ loopCount: 2, fadeInDuration: 0 }))
-    await vi.advanceTimersByTimeAsync(10)
-    expect(engine.seek).toHaveBeenCalledWith('v1', expect.any(Number))
-    const [, position] = engine.seek.mock.calls.at(-1)!
-    expect(position).toBeGreaterThanOrEqual(950)
-    expect(position).toBeLessThanOrEqual(1100)
+    expect(engine.resume).toHaveBeenCalledWith('v1')
+    // Its end moved on by the time it was held: three seconds still to play.
+    await vi.advanceTimersByTimeAsync(2900)
+    expect(setLastRun).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(200)
+    expect(setLastRun).toHaveBeenCalledWith('v1', expect.objectContaining({ outcome: 'success' }))
+  })
+
+  it('holds the pictures with the show, and lets them go with it', async () => {
+    const { runner, select } = setup([makeVideo({ id: 'v1', duration: 10_000 }), makeImage({ id: 'i1', duration: 5000 })])
+    runner.go()
+    await vi.advanceTimersByTimeAsync(400)
+    select('i1')
+    runner.go()
+    await vi.advanceTimersByTimeAsync(400)
+    runner.pauseAll()
+    expect(sentOps('v1')).toContain('pause')
+    expect(sentOps('i1')).toContain('pause')
+    expect(engine.pause).toHaveBeenCalledWith('v1')
+    expect(engine.pause).not.toHaveBeenCalledWith('i1')
+    runner.resumeAll()
+    expect(sentOps('v1')).toContain('resume')
+    expect(sentOps('i1')).toContain('resume')
+    expect(engine.resume).toHaveBeenCalledWith('v1')
   })
 
   it('stops a cue whose picture a dissolve took, and takes its sound down with the dissolve', async () => {

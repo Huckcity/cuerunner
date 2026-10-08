@@ -26,7 +26,11 @@ export const APP_CHANNELS = {
   /** The composed report, written to a file the operator names. */
   saveReport: 'app:save-report',
   /** The composed report onto the clipboard, and a message to the support address opened. */
-  emailReport: 'app:email-report'
+  emailReport: 'app:email-report',
+  /** Lines of the session log, for the file on disk that outlives the window. */
+  writeLog: 'app:write-log',
+  /** The folder that file is in, opened in the file manager. */
+  openLogs: 'app:open-logs'
 } as const
 
 /** The last renderer crash, kept by main and handed to the window that reloaded after it. */
@@ -48,6 +52,9 @@ export type ReportSaveResult = Refusal | { ok: true; path: string | null }
 /** The report is on the clipboard and the mail program has been asked to open. */
 export type ReportEmailResult = Refusal | { ok: true }
 
+/** Where the logs folder is, once it has been opened; a refusal says why it could not be. */
+export type LogsOpenResult = Refusal | { ok: true; path: string }
+
 /** The window lifecycle, as the renderer reads it (`window.cuerunner.app`). */
 export interface AppBridge {
   onCloseRequested(callback: () => void): () => void
@@ -65,4 +72,8 @@ export interface AppBridge {
   saveReport(text: string): Promise<ReportSaveResult>
   /** Puts `text` on the clipboard and opens a message to the support address beside it. */
   emailReport(text: string): Promise<ReportEmailResult>
+  /** Appends lines to the log file on disk. Bounded in main; never refuses, never rejects. */
+  writeLog(lines: string[]): Promise<void>
+  /** Opens the folder the log file is in. */
+  openLogs(): Promise<LogsOpenResult>
 }

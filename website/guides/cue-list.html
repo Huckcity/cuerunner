@@ -52,8 +52,10 @@
       <p>
         The toolbar adds cues: <strong>Audio</strong>, <strong>Group</strong>,
         <strong>Fade</strong>, <strong>Wait</strong>, <strong>Stop</strong>, and the rest
-        under <strong>More</strong>. A new cue lands after the selected one. Dragging a
-        row moves it; dropping audio files on the list adds them where you dropped them.
+        under <strong>More</strong>. A new cue lands after the selected one — or drag the
+        button into the list and it lands where you let go, between two cues, at the top,
+        or inside an open group. Dragging a row moves it; dropping audio files on the list
+        adds them where you dropped them.
       </p>
       <figure class="figure">
         <a href="../assets/guide/02-cue-list.png" target="_blank" rel="noreferrer">
@@ -66,6 +68,27 @@
         <strong>disarmed</strong> cue stays in the list and is skipped by GO, which is how
         you take something out of a show without losing it. Undo is
         <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd> and covers the last 50 edits.
+      </p>
+      <p>
+        The columns after the name are yours to arrange: drag a heading to move its column,
+        drag its left edge to size it, and right-click the header to show or hide one —
+        <strong>Notes</strong> among them, which reads the first line of each cue's notes on its
+        row. The layout belongs to this computer rather than the show, and
+        <strong>Reset columns</strong> on the same menu puts the list back as it was.
+        Double-click a <strong>Pre</strong> or <strong>Post</strong> cell — or the
+        <strong>Duration</strong> of a wait or a fade — to type a new time where you read it:
+        <code>1.5</code> or <code>1:30</code>, Enter to keep it, Esc to put it back.
+      </p>
+      <p>
+        With several rows selected (<kbd>Shift</kbd>-click a range, <kbd>Ctrl</kbd>/<kbd>⌘</kbd>-click
+        one at a time) the menu acts on all of them. <strong>Edit…</strong> sets a pre-wait,
+        post-wait or advance across the set — and an audio cue's volume and fades across the
+        audio cues in it — leaving any field you do not fill as each cue has it. Its
+        <strong>Number from</strong> and <strong>Step</strong> renumber the set in list order
+        (from 10 by 0.5 reads 10, 10.5, 11), and refuse a number another cue already has.
+        <strong>Fade out</strong> and <strong>Add stop</strong> make the cue that ends what is
+        selected and put it after the last of them: one cue for one, or a group that fires one
+        for each at once. Each of these is one undo.
       </p>
     </section>
 
@@ -87,7 +110,7 @@
     <section class="panel reveal delay-2">
       <h2>The cue types</h2>
       <p>
-        Twelve of them, and the <a href="../reference/cue-types.html">reference</a> lists
+        Fourteen of them, and the <a href="../reference/cue-types.html">reference</a> lists
         every field of each. In practice:
       </p>
       <div class="table-wrap">
@@ -100,13 +123,36 @@
             <tr><td>Stop</td><td>Stop one cue, or everything, with or without a fade.</td></tr>
             <tr><td>Group</td><td>Cues inside a cue: fire them in order, all at once, at random, or on a timeline.</td></tr>
             <tr><td>MIDI / OSC / Network</td><td>Send a message to something else in the rig.</td></tr>
+            <tr><td>MIDI File</td><td>Play a <code>.mid</code> to a synth, a click, or anything else on a MIDI port.</td></tr>
             <tr><td>Show Control</td><td>MSC: GO, STOP and LOAD to a desk that speaks it.</td></tr>
             <tr><td>Script</td><td>Run JavaScript, including a system command.</td></tr>
             <tr><td>Scene<span class="pro">Pro</span></td><td>Move the sound desk to a scene you built.</td></tr>
+            <tr><td>Light<span class="pro">Pro</span></td><td>Fade the lighting rig to a look, over sACN or Art-Net.</td></tr>
+            <tr><td>Timecode<span class="pro">Pro</span></td><td>Run a SMPTE clock — MTC, LTC and Art-Net — for the rest of the building to follow.</td></tr>
             <tr><td>Devamp</td><td>Let a looping cue out of its loop and play on.</td></tr>
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>Playing a MIDI file</h2>
+      <p>
+        A <strong>MIDI File</strong> cue (in the toolbar's More menu) plays a Standard MIDI File
+        to one port — the keys part of a backing track to a synth, a click to the band's in-ears,
+        a sequence to a lighting desk that listens on MIDI. Browse to the file and the tab reads
+        it back: its format, its tempo, its length, and each track by name, so you know it is the
+        file you meant. Pick the port, and set a <strong>Rate</strong> if the band has moved the
+        song's tempo; the cue's length follows, and it completes when the file does, so the cue
+        after it can follow on by itself. A <strong>Start time</strong> and <strong>End time</strong>
+        play part of the file, and a <strong>Loop count</strong> of −1 vamps it until a Stop. On the
+        <strong>Channels</strong> tab you can send each of the file's channels out as a different
+        one — or not at all, to drop the part a player is covering live — and transpose the notes
+        for tonight's key, with the drums on channel 10 left where they are. Start it part-way and
+        every channel is set the way the file had it first, so the right sounds are on the right
+        channels before the next note; stop it and every note it played is released, with the
+        sustain pedal lifted.
+      </p>
     </section>
 
     <section class="panel reveal delay-2">
@@ -118,7 +164,7 @@
       <ul class="tight-list">
         <li><strong>Sequence</strong> — its children in order, each after the one before.</li>
         <li><strong>All at once</strong> — everything together: a bang, a blackout, three sends in one press.</li>
-        <li><strong>Random</strong> — one child, picked at random. Good for a stinger you do not want to be identical every night.</li>
+        <li><strong>Random</strong> — one child, drawn at random, every child once before any repeats. Good for a stinger you do not want to be identical every night, or the same twice in a row.</li>
         <li><strong>Timeline</strong> — each child at an offset you set by dragging it. The dock draws the timeline for a group in this mode.</li>
         <li><strong>Playlist</strong> — one child per GO. The group holds the show until a full pass is done, so a walk-in playlist of thirty cues is thirty presses.</li>
       </ul>

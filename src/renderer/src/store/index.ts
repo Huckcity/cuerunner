@@ -55,14 +55,21 @@ import { incidentsFrom, MAX_INCIDENTS } from '../utils/rfIncidents'
 import type { RfIncident } from '../utils/rfIncidents'
 import { liveCue } from '../utils/liveCue'
 import type { LicenseStatus } from '../../../shared/license'
+import { defaultLightingSettings, heldLighting, type LightingSettings } from '../../../shared/dmx'
+import {
+  defaultTimecodeShowSettings,
+  heldTimecode,
+  normalizeTimecodeShowSettings,
+  type TimecodeShowSettings
+} from '../../../shared/timecode'
 
-export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait'
+export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait' | 'paused'
 
 /**
  * The tabs the settings dialog has. `license` is the machine's own settings rather
  * than the workspace's, which is why the dialog can be opened straight onto it.
  */
-export type SettingsTab = 'general' | 'audio' | 'midi' | 'network' | 'wireless' | 'redundancy' | 'license'
+export type SettingsTab = 'general' | 'audio' | 'midi' | 'network' | 'wireless' | 'redundancy' | 'license' | 'timecode'
 
 /** The tabs Show Settings has, in the order they are drawn. */
 export type ShowSettingsTab = 'channels' | 'cast' | 'mic-plot'
@@ -111,6 +118,11 @@ export interface LogEntry {
   message: string
   /** Cue identity when the entry was written, e.g. "3 · Network Cue". */
   label?: string
+  /**
+   * Where the line came from when it is not the window's own: a failure main reported, which
+   * main writes to the log file itself, so the window does not write it a second time.
+   */
+  origin?: 'main'
 }
 
 export type LogEntryInput = Omit<LogEntry, 'id' | 'at'>
@@ -197,6 +209,18 @@ interface CueListState {
   moveCue: (fromIndex: number, beforeIndex: number, newParentId?: string | null) => void
   /** Duplicates each cue with its children as a single edit; the copies are selected. */
   duplicateCues: (ids: string[]) => void
+  /**
+   * Writes a patch of its own to each cue as a single edit — a batch edit whose fields do not
+   * apply to every cue in the set (a volume to the audio cues and not to the waits).
+   */
+  patchCues: (patches: Record<string, Partial<Cue>>) => void
+  /**
+   * Puts a block of new cues — a group and its children, already in order — into the list as
+   * one edit, and selects the first of them: at the top level after the top-level cue that
+   * holds `afterId`, or in front of the cue at a flat index (`cues.length` is the end), where
+   * a drop put it with the parent it gave the block's first cue.
+   */
+  insertCues: (block: Cue[], at: string | null | { beforeIndex: number }) => void
 
   // Selection. The set is what a bulk edit acts on; `selectedId` is the cue the operator
   // last put their hand on — the one GO fires and advances from, and always a member of
@@ -283,6 +307,22 @@ interface CueListState {
    */
   triggerGuard: TriggerGuardSettings
   updateTriggerGuard: (patch: Partial<TriggerGuardSettings>) => void
+
+  /**
+   * The lighting rig: workspace content, so an edit dirties the show and enters undo with the
+   * cue list it is read beside. The levels on the rig are not here — they are the lighting
+   * engine's, in main — only what the show says the rig is.
+   */
+  lighting: LightingSettings
+  setLighting: (next: LightingSettings) => void
+
+  /**
+   * How the show follows an incoming SMPTE clock: chase, what the cues do when it stops, the
+   * offset, the rate it is read at. Workspace content — it travels in the file — so an edit
+   * dirties the show and enters undo. Where the clock arrives is the machine's, not here.
+   */
+  timecode: TimecodeShowSettings
+  setTimecode: (patch: Partial<TimecodeShowSettings>) => void
 
   /**
    * The show's video outputs (src/shared/visual.ts). Workspace content: what each output is
@@ -540,6 +580,8 @@ interface CueListState {
     identity?: WorkspaceIdentity,
     triggerGuard?: TriggerGuardSettings,
     history?: ShowHistoryEntry[],
+    lighting?: LightingSettings,
+    timecode?: TimecodeShowSettings,
     videoOutputs?: VideoOutput[]
   ) => void
   /** A save that reached the disk: its path, and the history it wrote into the file. */
@@ -560,6 +602,9 @@ interface EditSnapshot {
   cast: CastSettings
   desk: DeskSettings
   plot: RfPlot
+  lighting: LightingSettings
+  timecode: TimecodeShowSettings
+  videoOutputs: VideoOutput[]
 }
 
 function snapshotOf(state: CueListState): EditSnapshot {
@@ -568,7 +613,10 @@ function snapshotOf(state: CueListState): EditSnapshot {
     scenes: state.showSettings.scenes,
     cast: state.showSettings.cast,
     desk: state.showSettings.desk,
-    plot: state.showSettings.rf.plot
+    plot: state.showSettings.rf.plot,
+    lighting: state.lighting,
+    timecode: state.timecode,
+    videoOutputs: state.videoOutputs
   }
 }
 
@@ -816,6 +864,8 @@ export const useStore = create<CueListState>((set) => ({
   log: [],
   showSettings: defaultShowSettings(),
   triggerGuard: { ...DEFAULT_TRIGGER_GUARD },
+  lighting: defaultLightingSettings(),
+  timecode: defaultTimecodeShowSettings(),
   videoOutputs: [],
   showServices: [],
   showDevices: [],
@@ -1004,6 +1054,41 @@ export const useStore = create<CueListState>((set) => ({
     }
   }),
 
+  patchCues: (patches) => set(s => {
+    const ids = Object.keys(patches).filter(id => s.cues.some(cue => cue.id === id))
+    if (ids.length === 0) return s
+    const retargeted = ids.filter(id => cueRetargeted(s.cues, id, patches[id]))
+    return {
+      cues: s.cues.map(c => c.id in patches ? patchedCue(c, patches[c.id]) : c),
+      ...(retargeted.length > 0
+        ? { silenceFailures: forgetSilenceFailures(s.silenceFailures, retargeted) }
+        : {}),
+      isDirty: true,
+      past: pushPast(s.past, snapshotOf(s)),
+      future: [],
+    }
+  }),
+
+  insertCues: (block, at) => set(s => {
+    if (block.length === 0) return s
+    const cues = [...s.cues]
+    let insertIdx: number
+    if (at !== null && typeof at === 'object') {
+      insertIdx = Math.min(Math.max(at.beforeIndex, 0), cues.length)
+    } else {
+      // The block goes after the top-level cue that holds `at`, past its whole subtree:
+      // inside a group it would become part of what it acts on.
+      let anchor = at === null ? -1 : cues.findIndex(c => c.id === at)
+      while (anchor >= 0 && cues[anchor].parentId !== null) {
+        const parentId = cues[anchor].parentId
+        anchor = cues.findIndex(c => c.id === parentId)
+      }
+      insertIdx = anchor < 0 ? cues.length : subtreeEndIndex(cues, anchor) + 1
+    }
+    cues.splice(insertIdx, 0, ...block)
+    return { cues, ...selectionFor(block[0].id), isDirty: true, past: pushPast(s.past, snapshotOf(s)), future: [] }
+  }),
+
   moveCue: (fromIndex, beforeIndex, newParentId) => set(s => {
     const moved = s.cues[fromIndex]
     if (!moved) return s
@@ -1115,6 +1200,9 @@ export const useStore = create<CueListState>((set) => ({
       cues: snapshot.cues,
       ...pruneSelection(snapshot.cues, s),
       showSettings: restoreSettings(s.showSettings, snapshot),
+      lighting: snapshot.lighting,
+      timecode: snapshot.timecode,
+      videoOutputs: snapshot.videoOutputs,
       past,
       future: [snapshotOf(s), ...s.future.slice(0, HISTORY_LIMIT - 1)],
       // An undo after a save moves the cues away from the file's bytes: the session is
@@ -1130,6 +1218,9 @@ export const useStore = create<CueListState>((set) => ({
       cues: snapshot.cues,
       ...pruneSelection(snapshot.cues, s),
       showSettings: restoreSettings(s.showSettings, snapshot),
+      lighting: snapshot.lighting,
+      timecode: snapshot.timecode,
+      videoOutputs: snapshot.videoOutputs,
       future,
       past: pushPast(s.past, snapshotOf(s)),
       // A redo after a save is an edit like any other: it leaves the file behind.
@@ -1486,7 +1577,7 @@ export const useStore = create<CueListState>((set) => ({
 
   markDirty: () => set({ isDirty: true }),
 
-  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history, videoOutputs) => set(() => {
+  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history, lighting, timecode, videoOutputs) => set(() => {
     // Where the operator was standing when the file was saved is not in the file; a load
     // starts on the show's first cue.
     const first = cues.find(c => c.parentId === null)?.id ?? cues[0]?.id ?? null
@@ -1519,6 +1610,10 @@ export const useStore = create<CueListState>((set) => ({
       // A file written before the guard existed has none: the normalizer both fills it in
       // and holds a value typed outside its range to the range.
       triggerGuard: normalizeTriggerGuard(triggerGuard),
+      // A show with no lights opens with an empty rig.
+      lighting: heldLighting(lighting),
+      // A show that says nothing about timecode follows it with the defaults.
+      timecode: heldTimecode(timecode),
       // A show with no outputs has none; one that has them has them held to their ranges.
       videoOutputs: normalizeVideoOutputs(videoOutputs),
       // The file's own record of its saves. A file that has never been saved has none.
@@ -1564,13 +1659,29 @@ export const useStore = create<CueListState>((set) => ({
     isDirty: true
   })),
 
+  setLighting: (lighting) => set(s => ({
+    lighting,
+    isDirty: true,
+    past: pushPast(s.past, snapshotOf(s)),
+    future: []
+  })),
+
+  setTimecode: (patch) => set(s => ({
+    timecode: normalizeTimecodeShowSettings({ ...s.timecode, ...patch }),
+    isDirty: true,
+    past: pushPast(s.past, snapshotOf(s)),
+    future: []
+  })),
+
   addVideoOutput: () => {
     const id = crypto.randomUUID()
     set(s => ({
       videoOutputs: s.videoOutputs.length >= MAX_OUTPUTS
         ? s.videoOutputs
         : [...s.videoOutputs, createOutput(id, `Output ${s.videoOutputs.length + 1}`)],
-      isDirty: true
+      isDirty: true,
+      past: pushPast(s.past, snapshotOf(s)),
+      future: []
     }))
     return id
   },
@@ -1579,12 +1690,16 @@ export const useStore = create<CueListState>((set) => ({
     // Held to the ranges a file is: an edit in the panel can no more set a corner off the
     // output than a hand-edited file can.
     videoOutputs: normalizeVideoOutputs(s.videoOutputs.map(output => output.id === id ? { ...output, ...patch, id } : output)),
-    isDirty: true
+    isDirty: true,
+    past: pushPast(s.past, snapshotOf(s)),
+    future: []
   })),
 
   removeVideoOutput: (id) => set(s => ({
     videoOutputs: s.videoOutputs.filter(output => output.id !== id),
-    isDirty: true
+    isDirty: true,
+    past: pushPast(s.past, snapshotOf(s)),
+    future: []
   })),
 
   updateOscInSettings: (patch) => set(s => ({

@@ -26,6 +26,10 @@ import type { LoadNote, Workspace } from '../../shared/workspace'
 import type { AudioCue, Cue } from '../../shared/cue'
 import { CUE_TYPES } from '../../shared/cue'
 import { heldShowSettings } from '../../shared/show'
+import { LIGHTING_SHAPE } from '../../shared/dmxShape'
+import { lightingRefusal } from '../../shared/dmx'
+import { TIMECODE_SHOW_SHAPE } from '../../shared/timecodeShape'
+import { timecodeShowRefusal, type TimecodeShowSettings } from '../../shared/timecode'
 import { hasCueList, isUnnamedShow, normalizeTriggerGuard, UNTITLED_SHOW } from '../../shared/workspace'
 import {
   CUE_FIELD_SHAPE,
@@ -688,8 +692,31 @@ function refuseUnknownShape(workspace: Workspace, source: string): void {
     // before one of them existed differs at.
     refuseForeignFields(sections, DECLARED_SETTINGS_FIELDS, '', -1, source, SETTINGS_VOICE, null)
   }
+  // The lighting rig is read field by field the way the settings are — a field this build does
+  // not write refuses, and so does one it writes and the file left out — and then for what a
+  // kind cannot say: its counts against the bounds the engine is held to, and its words.
+  if (Object.hasOwn(workspace, 'lighting') && workspace.lighting !== undefined) {
+    refuseForeignFields(workspace.lighting, LIGHTING_SHAPE, 'lighting', -1, source, SHOW_VOICE_STRICT, null)
+    const refusal = lightingRefusal(workspace.lighting)
+    if (refusal !== null) {
+      throw new Refusal(`that show’s lighting has ${refusal} — ${source} was probably saved by another build`)
+    }
+  }
+  // How the show follows timecode is read field by field the way the settings are — a field
+  // this build does not write refuses, and so does one it writes and the file left out — and
+  // then for the words a kind cannot hold: a rate or a stop behaviour this build has none for.
+  if (Object.hasOwn(workspace, 'timecode') && workspace.timecode !== undefined) {
+    refuseForeignFields(workspace.timecode, TIMECODE_SHOW_SHAPE, 'timecode', -1, source, SHOW_VOICE_STRICT, null)
+    const refusal = timecodeShowRefusal(workspace.timecode as TimecodeShowSettings)
+    if (refusal !== null) {
+      throw new Refusal(`that show has ${refusal} — ${source} was probably saved by another build`)
+    }
+  }
   refuseForeignCues(workspace.cues, source)
 }
+
+/** The show's voice, refusing a field it does not name: the lighting and the timecode are each this build's own whole. */
+const SHOW_VOICE_STRICT: RefusalVoice = { subject: 'that show', verb: 'has', refuseForeignFields: true }
 
 /** A document as the window holds it: its settings read with this build's defaults in. */
 const asHeld = (workspace: Workspace): Workspace => ({

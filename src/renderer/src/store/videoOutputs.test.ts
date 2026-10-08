@@ -20,6 +20,8 @@ function saved() {
     midiSettings: s.midiSettings,
     showSettings: s.showSettings,
     triggerGuard: s.triggerGuard,
+    lighting: s.lighting,
+    timecode: s.timecode,
     videoOutputs: s.videoOutputs,
     cues: s.cues
   })
@@ -63,7 +65,7 @@ describe('the show\'s outputs', () => {
 
   it('loads a show\'s outputs as they were saved, and a new show with none', () => {
     const outputs = [createOutput('a', 'Left'), createOutput('b', 'Right')]
-    useStore.getState().loadWorkspace([], 'Show', '/show.cuerunner', undefined, undefined, undefined, undefined, undefined, [], outputs)
+    useStore.getState().loadWorkspace([], 'Show', '/show.cuerunner', undefined, undefined, undefined, undefined, undefined, [], undefined, undefined, outputs)
     expect(useStore.getState().videoOutputs).toEqual(outputs)
     expect(useStore.getState().isDirty).toBe(false)
     useStore.getState().loadWorkspace([], 'Untitled', null)

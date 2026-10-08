@@ -10,7 +10,7 @@ import type {
 } from '../shared/audio'
 import { AUDIO_PROTOCOL_VERSION } from '../shared/audio'
 import type { CuerunnerBridge } from '../shared/ipc'
-import type { ReportEmailResult, ReportInput, ReportSaveResult } from '../shared/ipc/app'
+import type { LogsOpenResult, ReportEmailResult, ReportInput, ReportSaveResult } from '../shared/ipc/app'
 import type { RedundancyConfigureResult } from '../shared/ipc/redundancy'
 import type {
   RelinkedWorkspace,
@@ -23,7 +23,10 @@ import type {
   WorkspaceOpenResult,
   WorkspaceSaveResult
 } from '../shared/ipc/workspace'
+import type { QLabFindMediaResult, QLabImportResult, QLabWorkspacesResult } from '../shared/ipc/qlab'
 import type { RedundancySettings } from '../shared/redundancy'
+import { defaultTimecodeSettings, idleReceiverStatus, type TimecodeSettings, type TimecodeShowSettings, type TimecodeStatus } from '../shared/timecode'
+import type { TimecodeGenerateResult } from '../shared/ipc/timecode'
 import type { ScriptDocument } from '../shared/show'
 import type { Workspace } from '../shared/workspace'
 
@@ -114,6 +117,8 @@ Object.defineProperty(window, 'cuerunner', {
       composeReport: vi.fn((input: ReportInput) => Promise.resolve(`REPORT\n${input.description}`)),
       saveReport: vi.fn((): Promise<ReportSaveResult> => Promise.resolve({ ok: true, path: null })),
       emailReport: vi.fn((): Promise<ReportEmailResult> => Promise.resolve({ ok: true })),
+      writeLog: vi.fn(() => Promise.resolve()),
+      openLogs: vi.fn((): Promise<LogsOpenResult> => Promise.resolve({ ok: true, path: '/logs' })),
       onCloseRequested: vi.fn(() => () => {}),
       onMenuAction: vi.fn(() => () => {}),
       confirmClose: vi.fn(() => Promise.resolve())
@@ -138,6 +143,10 @@ Object.defineProperty(window, 'cuerunner', {
         ok: true, at: 0, positionMs: 0, state: 'playing'
       })),
       release: vi.fn((): Promise<AudioCommandResult> => Promise.resolve({ ok: true, at: 0, applied: true })),
+      pause: vi.fn((): Promise<AudioCommandResult> => Promise.resolve({ ok: true, at: 0, applied: true })),
+      resume: vi.fn((): Promise<AudioCommandResult> => Promise.resolve({ ok: true, at: 0, applied: true })),
+      master: vi.fn((): Promise<AudioCommandResult> => Promise.resolve({ ok: true, at: 0, applied: true })),
+      meters: vi.fn(() => Promise.resolve({ at: 0, master: 1, peaks: [0, 0] })),
       onsets: vi.fn(() => Promise.resolve({
         filePath: '', onsetsMs: [], durationMs: 0, sampleRate: 48000, channels: 2,
         truncated: false, startMs: 0, endMs: 0
@@ -170,7 +179,13 @@ Object.defineProperty(window, 'cuerunner', {
       listInputPorts: vi.fn(() => Promise.resolve([])),
       status: vi.fn(() => Promise.resolve({ available: true, error: null })),
       send: vi.fn(() => Promise.resolve({ ok: true })),
-      sendTcp: vi.fn(() => Promise.resolve({ ok: true }))
+      sendTcp: vi.fn(() => Promise.resolve({ ok: true })),
+      pickFile: vi.fn(() => Promise.resolve(null)),
+      fileInspect: vi.fn(() => Promise.resolve({ ok: false as const, error: 'no file in a unit test' })),
+      filePlay: vi.fn(() => Promise.resolve({ ok: true as const, remainingMs: 0, passMs: 0 })),
+      filePause: vi.fn(() => Promise.resolve({ ok: true as const, positionMs: 0 })),
+      fileResume: vi.fn(() => Promise.resolve({ ok: true as const, remainingMs: 0 })),
+      fileStop: vi.fn(() => Promise.resolve(false))
     },
     network: {
       request: vi.fn(() => Promise.resolve({
@@ -254,6 +269,23 @@ Object.defineProperty(window, 'cuerunner', {
       clearRecovery: vi.fn(() => Promise.resolve()),
       setTitle: vi.fn(() => Promise.resolve()),
       confirmClose: vi.fn((): Promise<0 | 1 | 2> => Promise.resolve(0))
+    },
+    qlab: {
+      importFile: vi.fn((): Promise<QLabImportResult> => Promise.resolve({ ok: true, imported: null })),
+      listWorkspaces: vi.fn((): Promise<QLabWorkspacesResult> => Promise.resolve({ ok: true, workspaces: [] })),
+      importLive: vi.fn((): Promise<QLabImportResult> => Promise.resolve({ ok: true, imported: null })),
+      findMedia: vi.fn((): Promise<QLabFindMediaResult> => Promise.resolve({ ok: true, found: null }))
+    },
+    // No clock arriving and none running: what a machine with nothing plugged in has.
+    timecode: {
+      settings: vi.fn(() => Promise.resolve(defaultTimecodeSettings())),
+      configure: vi.fn((patch: Partial<TimecodeSettings>) => Promise.resolve({ ...defaultTimecodeSettings(), ...patch })),
+      show: vi.fn((settings: TimecodeShowSettings) => Promise.resolve(settings)),
+      status: vi.fn((): Promise<TimecodeStatus> => Promise.resolve({ receiver: idleReceiverStatus(), generators: [] })),
+      inputs: vi.fn(() => Promise.resolve({ midi: [], audio: [] })),
+      generate: vi.fn((): Promise<TimecodeGenerateResult> => Promise.resolve({ ok: true, startFrames: 0 })),
+      control: vi.fn(() => Promise.resolve(true)),
+      onEvents: vi.fn(() => () => {})
     },
     output: {
       configure: vi.fn(() => Promise.resolve()),

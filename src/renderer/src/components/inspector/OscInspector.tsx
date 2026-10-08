@@ -1,6 +1,7 @@
 import { useStore } from '../../store'
 import type { OscCue, OscArg, OscArgType } from '../../../../shared/cue'
 import { LastRun } from './LastRun'
+import { SendNow } from './SendNow'
 import { ResetButton } from './ResetButton'
 import { NumberField, TextField } from '../common/Field'
 import { OSC_DEFAULTS } from '../../utils/cueDefaults'
@@ -87,6 +88,11 @@ export function OscInspector({ cue }: Props) {
         </div>
       ))}
       <button onClick={addArg} className="inspector-add-btn add-row">+ Add argument</button>
+      <SendNow
+        what="the message"
+        disabled={cue.address.trim() === '' || cue.host.trim() === ''}
+        send={() => window.cuerunner.osc.send({ host: cue.host, port: cue.port, address: cue.address, args: cue.args })}
+      />
       <LastRun cueId={cue.id} />
     </div>
   )

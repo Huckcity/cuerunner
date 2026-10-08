@@ -310,6 +310,17 @@ const LIVE: Reading = {
   ...readmeCounts(readFile(README))
 }
 
+/**
+ * The cue type a page name stands for: the name as a buyer reads it — "MIDI file" — folded to
+ * the type's own spelling, case and spaces aside, so a type whose identifier is two words
+ * (`midiFile`) is named on the page the way it is said. A name that folds to no type is read as
+ * itself, and the checks below say it is not a cue type the code has.
+ */
+function cueTypeOf(reading: Reading, name: string): string {
+  const folded = name.toLowerCase().replace(/\s+/g, '')
+  return [...reading.cueTypes].find(type => type.toLowerCase() === folded) ?? folded
+}
+
 /** The cells of one class, which is the column they sit in. */
 function cellsOfClass(reading: Reading, className: GateClass): Cell[] {
   return reading.cells.filter(entry => entry.class === className)
@@ -319,7 +330,7 @@ function cellsOfClass(reading: Reading, className: GateClass): Cell[] {
 function missingProClasses(reading: Reading): string[] {
   const pro = cellsOfClass(reading, 'pro')
   const identifiers = new Set(pro.flatMap(entry => entry.identifiers))
-  const named = new Set(pro.flatMap(entry => entry.cues.map(name => name.toLowerCase())))
+  const named = new Set(pro.flatMap(entry => entry.cues.map(name => cueTypeOf(reading, name))))
   return [
     ...reading.record
       .filter(item => item.class === 'pro' && !identifiers.has(item.identifier))
@@ -354,7 +365,7 @@ function identifierClassProblems(reading: Reading): string[] {
 function cueClassProblems(reading: Reading): string[] {
   return reading.cells.flatMap(entry =>
     entry.cues.flatMap(name => {
-      const type = name.toLowerCase()
+      const type = cueTypeOf(reading, name)
       if (!reading.cueTypes.has(type)) {
         return [`the page's "${entry.row}" row names the cue type "${name}", which the code does not have`]
       }
@@ -368,7 +379,7 @@ function cueClassProblems(reading: Reading): string[] {
 
 /** The free cue types the code declares, held both ways to the ones the page names as free. */
 function freeCueListProblems(reading: Reading): string[] {
-  const named = new Set(cellsOfClass(reading, 'free').flatMap(entry => entry.cues.map(name => name.toLowerCase())))
+  const named = new Set(cellsOfClass(reading, 'free').flatMap(entry => entry.cues.map(name => cueTypeOf(reading, name))))
   const declared = [...reading.cueTypes].filter(type => !reading.proCueTypes.has(type))
   return [
     ...declared
@@ -755,9 +766,11 @@ describe('the page the checks exist to refuse', () => {
   })
 
   it('names a count the README changes', () => {
+    // A count the code does not declare, whatever the code declares today: the README's word
+    // one past the truth, and the sentence naming both.
     const declared = CUE_TYPES.filter(type => !LIVE.proCueTypes.has(type)).length
-    expect(countProblems({ ...LIVE, word: 'two', count: 2 })).toEqual([
-      expect.stringContaining(`README.md states the free cue stack as "two cue types" and the code declares ${declared} free cue types`)
+    expect(countProblems({ ...LIVE, word: String(declared + 1), count: declared + 1 })).toEqual([
+      expect.stringContaining(`README.md states the free cue stack as "${declared + 1} cue types" and the code declares ${declared} free cue types`)
     ])
   })
 

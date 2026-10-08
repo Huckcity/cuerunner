@@ -35,4 +35,9 @@ export interface Renderer {
   draw(frame: Frame): void
   /** A layer is gone: its texture can go too. */
   release(key: string): void
+  /**
+   * One pixel of the last frame drawn, RGBA, read straight from the renderer's own surface —
+   * one pixel's worth of work, so reading it does not slow the output it is reading.
+   */
+  readPixel(x: number, y: number): number[]
 }

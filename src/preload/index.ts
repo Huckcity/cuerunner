@@ -5,6 +5,9 @@ import {
   AUDIO_SILENCE_THRESHOLD_DB,
   type AudioCancelPayload,
   type AudioReleasePayload,
+  type AudioHoldPayload,
+  type AudioMasterPayload,
+  type AudioMeters,
   type AudioCancelResult,
   type AudioClockReading,
   type AudioCommandResult,
@@ -45,6 +48,7 @@ import {
 import { unwrapAudioResult, type AudioResult } from '../shared/audioResult'
 import {
   APP_CHANNELS,
+  type LogsOpenResult,
   type ReportEmailResult,
   type ReportInput,
   type ReportSaveResult,
@@ -53,9 +57,25 @@ import {
 import { PLAYBACK_CHANNELS } from '../shared/ipc/playback'
 import { LICENSE_CHANNELS } from '../shared/ipc/license'
 import { MIDI_CHANNELS, type MidiSendPayload, type MidiSendResult, type MidiSendTcpPayload } from '../shared/ipc/midi'
+import type {
+  MidiFileCuePayload,
+  MidiFileInspectPayload,
+  MidiFileInspectResult,
+  MidiFilePauseResult,
+  MidiFilePlayPayload,
+  MidiFilePlayResult,
+  MidiFileResumeResult
+} from '../shared/ipc/midi'
 import { NETWORK_CHANNELS } from '../shared/ipc/network'
 import { OSC_CHANNELS, type OscSendPayload, type OscSendResult } from '../shared/ipc/osc'
 import { REDUNDANCY_CHANNELS, type RedundancyConfigureResult } from '../shared/ipc/redundancy'
+import {
+  TIMECODE_CHANNELS,
+  type TimecodeControlPayload,
+  type TimecodeGenerateResult,
+  type TimecodeInputs
+} from '../shared/ipc/timecode'
+import type { TimecodeGenerateRequest, TimecodeSettings, TimecodeShowSettings, TimecodeStatus } from '../shared/timecode'
 import {
   SCRIPT_CHANNELS,
   type ScriptReadDocumentPayload,
@@ -92,6 +112,14 @@ import {
   type WorkspaceSavePayload,
   type WorkspaceSaveResult
 } from '../shared/ipc/workspace'
+import {
+  QLAB_CHANNELS,
+  type QLabFindMediaPayload,
+  type QLabFindMediaResult,
+  type QLabImportResult,
+  type QLabLivePayload,
+  type QLabWorkspacesResult
+} from '../shared/ipc/qlab'
 import {
   OUTPUT_CHANNELS,
   type LayerCommand,
@@ -167,7 +195,11 @@ contextBridge.exposeInMainWorld('cuerunner', {
     saveReport: (text: string): Promise<ReportSaveResult> =>
       invoke(APP_CHANNELS.saveReport, text),
     emailReport: (text: string): Promise<ReportEmailResult> =>
-      invoke(APP_CHANNELS.emailReport, text)
+      invoke(APP_CHANNELS.emailReport, text),
+    writeLog: (lines: string[]): Promise<void> =>
+      invoke(APP_CHANNELS.writeLog, lines),
+    openLogs: (): Promise<LogsOpenResult> =>
+      invoke(APP_CHANNELS.openLogs)
   },
   playback: {
     /**
@@ -204,6 +236,14 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invokeAudio(AUDIO_CHANNELS.release, { cueId, whenMs, endMs } satisfies AudioReleasePayload),
     cancel: (cueId: string, whenMs?: number): Promise<AudioCancelResult> =>
       invokeAudio(AUDIO_CHANNELS.cancel, { cueId, whenMs } satisfies AudioCancelPayload),
+    pause: (cueId: string, whenMs?: number): Promise<AudioCommandResult> =>
+      invokeAudio(AUDIO_CHANNELS.pause, { cueId, whenMs } satisfies AudioHoldPayload),
+    resume: (cueId: string, whenMs?: number): Promise<AudioCommandResult> =>
+      invokeAudio(AUDIO_CHANNELS.resume, { cueId, whenMs } satisfies AudioHoldPayload),
+    master: (gain: number): Promise<AudioCommandResult> =>
+      invokeAudio(AUDIO_CHANNELS.master, { gain } satisfies AudioMasterPayload),
+    meters: (): Promise<AudioMeters> =>
+      invokeAudio(AUDIO_CHANNELS.meters),
     /** Replace a running cue's matrix live: null is automatic, [] is silence, else a list. */
     routing: (cueId: string, outputs: AudioCrosspoint[] | null): Promise<AudioCommandResult> =>
       invokeAudio(AUDIO_CHANNELS.routing, { cueId, outputs } satisfies AudioRoutingPayload),
@@ -261,7 +301,19 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invoke(MIDI_CHANNELS.send, cmd),
     /** MIDI to a desk on the network, which is where an SQ and an Avantis listen. */
     sendTcp: (cmd: MidiSendTcpPayload): Promise<MidiSendResult> =>
-      invoke(MIDI_CHANNELS.sendTcp, cmd)
+      invoke(MIDI_CHANNELS.sendTcp, cmd),
+    pickFile: (): Promise<string | null> =>
+      invoke(MIDI_CHANNELS.pickFile),
+    fileInspect: (cmd: MidiFileInspectPayload): Promise<MidiFileInspectResult> =>
+      invoke(MIDI_CHANNELS.fileInspect, cmd),
+    filePlay: (cmd: MidiFilePlayPayload): Promise<MidiFilePlayResult> =>
+      invoke(MIDI_CHANNELS.filePlay, cmd),
+    filePause: (cmd: MidiFileCuePayload): Promise<MidiFilePauseResult> =>
+      invoke(MIDI_CHANNELS.filePause, cmd),
+    fileResume: (cmd: MidiFileCuePayload): Promise<MidiFileResumeResult> =>
+      invoke(MIDI_CHANNELS.fileResume, cmd),
+    fileStop: (cmd: MidiFileCuePayload): Promise<boolean> =>
+      invoke(MIDI_CHANNELS.fileStop, cmd)
   },
   network: {
     /**
@@ -400,6 +452,40 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invoke(WORKSPACE_CHANNELS.setTitle, title),
     confirmClose: (workspaceName: string): Promise<0 | 1 | 2> =>
       invoke(WORKSPACE_CHANNELS.confirmClose, workspaceName)
+  },
+  /** SMPTE timecode: the clock this machine follows, and the clocks its cues run. */
+  timecode: {
+    settings: (): Promise<TimecodeSettings> =>
+      invoke(TIMECODE_CHANNELS.settings),
+    configure: (patch: Partial<TimecodeSettings>): Promise<TimecodeSettings> =>
+      invoke(TIMECODE_CHANNELS.configure, patch),
+    show: (settings: TimecodeShowSettings): Promise<TimecodeShowSettings> =>
+      invoke(TIMECODE_CHANNELS.show, settings),
+    status: (): Promise<TimecodeStatus> =>
+      invoke(TIMECODE_CHANNELS.status),
+    inputs: (): Promise<TimecodeInputs> =>
+      invoke(TIMECODE_CHANNELS.inputs),
+    generate: (request: TimecodeGenerateRequest): Promise<TimecodeGenerateResult> =>
+      invoke(TIMECODE_CHANNELS.generate, request),
+    control: (payload: TimecodeControlPayload): Promise<boolean> =>
+      invoke(TIMECODE_CHANNELS.control, payload),
+    onEvents: (callback: (status: TimecodeStatus) => void): (() => void) =>
+      subscribe(TIMECODE_CHANNELS.events, callback)
+  },
+  /**
+   * A QLab show brought across: from its workspace file, through a dialog main shows, or
+   * from a QLab that is running, over the socket main opens. A cancel is a `null` inside
+   * the `ok` arm; a file or a QLab the import cannot read is the refusal arm.
+   */
+  qlab: {
+    importFile: (): Promise<QLabImportResult> =>
+      invoke(QLAB_CHANNELS.importFile),
+    listWorkspaces: (host: string, port: number): Promise<QLabWorkspacesResult> =>
+      invoke(QLAB_CHANNELS.listWorkspaces, { host, port }),
+    importLive: (payload: QLabLivePayload): Promise<QLabImportResult> =>
+      invoke(QLAB_CHANNELS.importLive, payload),
+    findMedia: (workspace: Workspace, workspacePath: string | null): Promise<QLabFindMediaResult> =>
+      invoke(QLAB_CHANNELS.findMedia, { workspace, workspacePath } satisfies QLabFindMediaPayload)
   },
   /**
    * The video outputs: windows main keeps for the show's pictures. Every time a command

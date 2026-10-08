@@ -45,6 +45,24 @@ const BLUE = path.join(FIXTURES, 'blue.webm')
 const MAGENTA = path.join(FIXTURES, 'magenta.png')
 
 const BLACK: [number, number, number] = [0, 0, 0]
+
+/**
+ * How often a picture is read while waiting for a colour. The fixtures change colour once a
+ * second, and Playwright's own poll backs off to a second between reads: it can step over the
+ * whole green second of a file and see only the red before it and the black after.
+ */
+/**
+ * Waits for a frame to say yes, asking every 50 ms. The fixtures are a second of each colour,
+ * so a wait has to look more often than Playwright's poll does.
+ */
+async function until(check: () => Promise<boolean>, timeoutMs = 10_000, everyMs = 50): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    if (await check()) return
+    if (Date.now() > deadline) throw new Error(`not seen within ${timeoutMs} ms: ${check.toString()}`)
+    await new Promise(resolve => setTimeout(resolve, everyMs))
+  }
+}
 const RED: [number, number, number] = [255, 0, 0]
 const GREEN: [number, number, number] = [0, 255, 0]
 const YELLOW: [number, number, number] = [255, 255, 0]
@@ -103,6 +121,11 @@ async function brightestInMiddle(output: Page): Promise<number> {
     for (let i = 0; i < data.length; i += 4) brightest = Math.max(brightest, Math.min(data[i], data[i + 1], data[i + 2]))
     return brightest
   })
+}
+
+/** Where each video on the output is in its file, ms. */
+async function videoPositions(output: Page): Promise<number[]> {
+  return output.evaluate(() => window.__cuerunnerOutput!.videos().map(video => video.positionMs))
 }
 
 /** Whether a pixel is close to a colour: video is YUV and rounds, so a margin is allowed. */
@@ -203,34 +226,65 @@ test.describe('on the GPU', () => {
 
     await fire(page, 0)
     // The first second of the file is red, the second green: the picture is up, and it moves.
-    await expect.poll(async () => near(await centre(output), RED), { timeout: 10_000 }).toBe(true)
+    await until(async () => near(await centre(output), RED), 10_000)
     // The sound is the engine's: a voice, like any audio cue's — and the show has no other.
     await expectDecodes(page, RED_GREEN)
     await expect.poll(async () => (await engineCues(app)).length, { timeout: 5_000 }).toBe(1)
-    await expect.poll(async () => near(await centre(output), GREEN), { timeout: 10_000 }).toBe(true)
+    await until(async () => near(await centre(output), GREEN), 10_000)
     // And it goes when the video does, the cue with it.
-    await expect.poll(async () => near(await centre(output), BLACK, 8), { timeout: 10_000 }).toBe(true)
+    await until(async () => near(await centre(output), BLACK, 8), 10_000)
     await expect(page.locator('.cue-row').nth(0)).toHaveAttribute('data-running', 'false')
     expect(await engineCues(app)).toEqual([])
   })
 
-  test('pauses a video on the frame it is on, its sound taken away, and resumes it from there', async () => {
+  test('pauses a video on the frame it is on, its voice held in the engine, and resumes both from there', async () => {
     test.setTimeout(40_000)
-    await fire(page, 0)
-    await expect.poll(async () => near(await centre(output), RED), { timeout: 10_000 }).toBe(true)
+    // The Video tab first, so its Pause is a press away the moment the cue is running.
     await page.locator('.cue-row').nth(0).click()
     await tab(page, 'Video')
+    await page.waitForTimeout(350)
+    await page.locator('.btn-go').click()
+    await until(async () => near(await centre(output), RED), 10_000)
+    // GO moved the selection on; back to the cue, on the tab it was left on.
+    await page.locator('.cue-row').nth(0).click()
     await page.locator('.visual-pause', { hasText: 'Pause' }).click()
-    await expect.poll(async () => (await engineCues(app)).length, { timeout: 5_000 }).toBe(0)
-    // Past the second the file turns green at, still red: the picture stood still.
+    await expect(page.locator('.cue-row').nth(0)).toHaveAttribute('data-state', 'paused')
+    // Held: the frame on the output and the element's place in its file stand still, and the
+    // voice is held in the engine rather than taken away.
+    // A frame already on its way to the screen as the hold landed is let arrive first.
+    await page.waitForTimeout(250)
+    const frame = await centre(output)
+    const heldAt = (await videoPositions(output))[0]
     await page.waitForTimeout(1500)
-    expect(near(await centre(output), RED)).toBe(true)
-    await expect(page.locator('.cue-row').nth(0)).toHaveAttribute('data-running', 'true')
+    expect(near(await centre(output), frame, 8)).toBe(true)
+    expect(Math.abs((await videoPositions(output))[0] - heldAt)).toBeLessThan(60)
+    expect((await engineCues(app)).length).toBe(1)
 
     await page.locator('.visual-pause', { hasText: 'Resume' }).click()
-    await expect.poll(async () => (await engineCues(app)).length, { timeout: 5_000 }).toBe(1)
-    await expect.poll(async () => near(await centre(output), GREEN), { timeout: 10_000 }).toBe(true)
-    await expect.poll(async () => near(await centre(output), BLACK, 8), { timeout: 10_000 }).toBe(true)
+    await expect(page.locator('.cue-row').nth(0)).toHaveAttribute('data-state', 'playing')
+    // On from where it stood: the rest of the file, then the end of the cue.
+    await until(async () => ((await videoPositions(output))[0] ?? Infinity) > heldAt + 300, 5_000)
+    await until(async () => near(await centre(output), BLACK, 8), 10_000)
+    await expect(page.locator('.cue-row').nth(0)).toHaveAttribute('data-running', 'false')
+  })
+
+  test('holds the picture with the show on PAUSE, and lets both go on together', async () => {
+    test.setTimeout(40_000)
+    await fire(page, 0)
+    await until(async () => near(await centre(output), RED), 10_000)
+    await page.locator('.btn-pause').click()
+    await expect(page.locator('.btn-pause')).toHaveText('RESUME')
+    // A frame already on its way to the screen as the hold landed is let arrive first.
+    await page.waitForTimeout(250)
+    const frame = await centre(output)
+    const heldAt = (await videoPositions(output))[0]
+    // Held: the picture stands still with the show.
+    await page.waitForTimeout(1500)
+    expect(near(await centre(output), frame, 8)).toBe(true)
+    expect(Math.abs((await videoPositions(output))[0] - heldAt)).toBeLessThan(60)
+    await page.locator('.btn-pause').click()
+    await until(async () => ((await videoPositions(output))[0] ?? Infinity) > heldAt + 300, 5_000)
+    await until(async () => near(await centre(output), BLACK, 8), 10_000)
     await expect(page.locator('.cue-row').nth(0)).toHaveAttribute('data-running', 'false')
   })
 
@@ -246,11 +300,16 @@ test.describe('on the GPU', () => {
     await row.click()
     await page.waitForTimeout(350)
     await page.locator('.btn-go').click()
-    await expect.poll(async () => near(await centre(output), RED), { timeout: 10_000 }).toBe(true)
+    await until(async () => near(await centre(output), RED), 10_000)
+    // The sound is a voice while the picture plays; the probe after it ends names the reason
+    // if the engine could not read it.
+    // Asked while the picture plays, and not waited on before the picture is: the engine's
+    // answer can take longer than the red second of the file does.
+    const voices = engineCues(app)
+    await until(async () => near(await centre(output), GREEN), 10_000)
     await expectDecodes(page, RED_GREEN_MOV)
-    await expect.poll(async () => (await engineCues(app)).length, { timeout: 5_000 }).toBe(1)
-    await expect.poll(async () => near(await centre(output), GREEN), { timeout: 10_000 }).toBe(true)
-    await expect.poll(async () => near(await centre(output), BLACK, 8), { timeout: 10_000 }).toBe(true)
+    expect((await voices).length).toBe(1)
+    await until(async () => near(await centre(output), BLACK, 8), 10_000)
     // Out of the way of the rows the cases after this one count on.
     await row.click()
     await page.keyboard.press('Delete')
@@ -268,7 +327,7 @@ test.describe('on the GPU', () => {
       output.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Space' })
       output.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Space' })
     })
-    await expect.poll(async () => near(await centre(output), RED), { timeout: 10_000 }).toBe(true)
+    await until(async () => near(await centre(output), RED), 10_000)
     await stopEverything(page)
   })
 
@@ -280,9 +339,9 @@ test.describe('on the GPU', () => {
     await page.locator('.inspector-btn', { hasText: 'Browse' }).click()
     await expect(page.locator('.cue-row').nth(1).locator('.name-text')).toHaveText('silent')
     await fire(page, 1)
-    await expect.poll(async () => near(await centre(output), YELLOW), { timeout: 10_000 }).toBe(true)
+    await until(async () => near(await centre(output), YELLOW), 10_000)
     expect(await engineCues(app)).toEqual([])
-    await expect.poll(async () => near(await centre(output), BLACK, 8), { timeout: 10_000 }).toBe(true)
+    await until(async () => near(await centre(output), BLACK, 8), 10_000)
     await expect(page.locator('.cue-row').nth(1)).toHaveAttribute('data-running', 'false')
     await expect(page.locator('.cue-row').nth(1)).toHaveAttribute('data-failed', 'false')
   })
@@ -295,7 +354,7 @@ test.describe('on the GPU', () => {
     await tab(page, 'Picture')
     await typeInto(page, 'Scale (%)', '50')
     await fire(page, 2)
-    await expect.poll(async () => near(await centre(output), MAGENTA_RGB, 8), { timeout: 10_000 }).toBe(true)
+    await until(async () => near(await centre(output), MAGENTA_RGB, 8), 10_000)
     // Half the size: the corner of the output is still black.
     const { width, height } = await size(output)
     expect(near(await pixel(output, Math.floor(width * 0.1), Math.floor(height * 0.1)), BLACK, 8)).toBe(true)
@@ -321,7 +380,7 @@ test.describe('on the GPU', () => {
     await typeInto(page, 'Fade in (s)', '2')
 
     await fire(page, 2)
-    await expect.poll(async () => near(await centre(output), MAGENTA_RGB, 8), { timeout: 10_000 }).toBe(true)
+    await until(async () => near(await centre(output), MAGENTA_RGB, 8), 10_000)
     await fire(page, 0)
 
     // Magenta (255, 0, 255) to red (255, 0, 0) while the video is in its red second: blue
@@ -398,7 +457,7 @@ test.describe('on the 2D fallback', () => {
       await tab(page, 'Image')
       await page.locator('.inspector-btn', { hasText: 'Browse' }).click()
       await fire(page, 0)
-      await expect.poll(async () => near(await centre(output), MAGENTA_RGB, 8), { timeout: 10_000 }).toBe(true)
+      await until(async () => near(await centre(output), MAGENTA_RGB, 8), 10_000)
       await expect(page.locator('.output-card .output-state')).toContainText('2D fallback')
       await stopEverything(page)
 
@@ -409,7 +468,7 @@ test.describe('on the 2D fallback', () => {
       await tab(page, 'Video')
       await page.locator('.inspector-btn', { hasText: 'Browse' }).click()
       await fire(page, 1)
-      await expect.poll(async () => near(await centre(output), BLUE_RGB), { timeout: 10_000 }).toBe(true)
+      await until(async () => near(await centre(output), BLUE_RGB), 10_000)
       if (process.platform === 'linux') {
         await expectDecodes(page, BLUE)
         await expect.poll(async () => (await engineCues(app)).length, { timeout: 5_000 }).toBe(1)

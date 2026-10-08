@@ -174,6 +174,15 @@ export class GlRenderer implements Renderer {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
   }
 
+  readPixel(x: number, y: number): number[] {
+    const gl = this.gl
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    const out = new Uint8Array(4)
+    // GL's rows count from the bottom; the frame's from the top.
+    gl.readPixels(Math.floor(x), this.height - 1 - Math.floor(y), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, out)
+    return Array.from(out)
+  }
+
   release(key: string): void {
     const uploaded = this.textures.get(key)
     if (uploaded === undefined) return

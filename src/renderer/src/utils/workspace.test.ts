@@ -55,6 +55,8 @@ const build = () =>
     midiSettings: { outputPortName: '' },
     showSettings: settings,
     triggerGuard: guard,
+    lighting: undefined,
+    timecode: undefined,
     videoOutputs: [],
     cues: [cue()]
   })

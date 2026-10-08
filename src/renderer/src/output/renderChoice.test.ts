@@ -4,7 +4,7 @@ import { GlRenderer } from './renderGl'
 import type { Renderer } from './render'
 
 const fake = (kind: 'webgl' | 'canvas'): Renderer => ({
-  kind, pins: kind === 'webgl', resize: () => {}, draw: () => {}, release: () => {}
+  kind, pins: kind === 'webgl', resize: () => {}, draw: () => {}, release: () => {}, readPixel: () => []
 })
 
 describe('which renderer an output draws with', () => {

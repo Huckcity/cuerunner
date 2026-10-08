@@ -25,6 +25,9 @@ import { AUDIO_CHANNELS } from '../../shared/audio'
 import { SCRIPT_CHANNELS } from '../../shared/ipc/script'
 import { SHOW_CHANNELS } from '../../shared/ipc/show'
 import { WORKSPACE_CHANNELS } from '../../shared/ipc/workspace'
+import { QLAB_CHANNELS } from '../../shared/ipc/qlab'
+import { MIDI_CHANNELS } from '../../shared/ipc/midi'
+import { MIDI_FILE_IDENTITY_MAP } from '../../shared/midiFile'
 import type { Workspace } from '../../shared/workspace'
 import { registerIpcHandlers } from './handlers'
 
@@ -594,6 +597,41 @@ describe('the EW-DX credential channels', () => {
   })
 })
 
+describe('the MIDI File channels', () => {
+  it('answers a file that is not MIDI with its refusal arm, naming the file', async () => {
+    const file = join(ends.userData.path, 'setlist.mid')
+    writeFileSync(file, 'a set list, saved with the wrong name')
+
+    const result = await handler(MIDI_CHANNELS.fileInspect)('event', { filePath: file })
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'setlist.mid: this is not a MIDI file: it does not begin with a MIDI header'
+    })
+  })
+
+  it('answers a play whose file is not there with its refusal arm', async () => {
+    const result = await handler(MIDI_CHANNELS.filePlay)('event', {
+      cueId: 'f1',
+      filePath: join(ends.userData.path, 'gone.mid'),
+      portName: '',
+      options: {
+        rate: 1, startMs: 0, endMs: null, loopCount: 0,
+        channelMap: [...MIDI_FILE_IDENTITY_MAP], transpose: 0, transposeDrums: false
+      },
+      offsetMs: 0
+    })
+
+    expect(result).toEqual({ ok: false, error: 'gone.mid is not there' })
+  })
+
+  it('answers a hold for a cue whose file is not playing with its refusal arm', async () => {
+    const result = await handler(MIDI_CHANNELS.filePause)('event', { cueId: 'nothing' })
+
+    expect(result).toEqual({ ok: false, error: 'that cue’s MIDI file is not playing' })
+  })
+})
+
 describe('only a fault rejects', () => {
   it('lets an unexpected failure through as a rejection', async () => {
     vi.mocked(dialog.showOpenDialog).mockRejectedValueOnce(new Error('the dialog itself failed'))
@@ -608,5 +646,56 @@ describe('only a fault rejects', () => {
       relativePath: undefined,
       workspacePath: null
     })).rejects.toThrow()
+  })
+})
+
+describe('the QLab import channels', () => {
+  it('answers a file that is not a QLab workspace with its refusal arm, naming the file', async () => {
+    const notAWorkspace = join(ends.userData.path, 'Show.qlab5')
+    writeFileSync(notAWorkspace, '{"this": "is JSON"}')
+    vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: false, filePaths: [notAWorkspace] })
+
+    expect(await handler(QLAB_CHANNELS.importFile)('event')).toEqual({
+      ok: false,
+      error: '“Show.qlab5” is not a QLab workspace: QLab saves its workspaces as a binary property list, and this file is not one'
+    })
+  })
+
+  it('answers a cancelled dialog as the null inside the success arm, with no licence asked for', async () => {
+    vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] })
+
+    expect(await handler(QLAB_CHANNELS.importFile)('event')).toEqual({ ok: true, imported: null })
+  })
+
+  it('answers an address that is not one with its refusal arm, before any socket opens', async () => {
+    expect(await handler(QLAB_CHANNELS.listWorkspaces)('event', { host: '127.0.0.1', port: 0 })).toEqual({
+      ok: false,
+      error: '0 is not a port: QLab listens on 53000'
+    })
+    expect(await handler(QLAB_CHANNELS.importLive)('event', { host: '', port: 53000, workspaceId: 'W' })).toEqual({
+      ok: false,
+      error: 'type the address of the Mac running QLab, or 127.0.0.1 for this computer'
+    })
+  })
+
+  it('answers a folder search the operator cancelled as the null inside the success arm', async () => {
+    const workspace = {
+      ...showPayload('Imported'),
+      cues: [{
+        id: 'a1', number: '1', name: 'Gone', colorLabel: 'none', parentId: null, preWait: 0, postWait: 0,
+        timelineOffset: 0, duration: 0, advance: 'none', isArmed: true, notes: '', type: 'audio',
+        filePath: join(ends.userData.path, 'nowhere', 'gone.wav'), startTime: 0, endTime: null, fadeInDuration: 0,
+        volume: 1, pan: 0, outputs: null, loopCount: 0, playbackRate: 1, trim: 1
+      }]
+    } as Workspace
+    vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] })
+
+    expect(await handler(QLAB_CHANNELS.findMedia)('event', { workspace, workspacePath: null })).toEqual({ ok: true, found: null })
+  })
+
+  it('lets a dialog that failed through as a rejection: that is a fault, not an answer', async () => {
+    vi.mocked(dialog.showOpenDialog).mockRejectedValueOnce(new Error('the dialog itself failed'))
+
+    await expect(handler(QLAB_CHANNELS.importFile)('event')).rejects.toThrow('the dialog itself failed')
   })
 })

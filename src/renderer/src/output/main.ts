@@ -134,8 +134,9 @@ async function runOutput(): Promise<void> {
   window.__cuerunnerOutput = {
     renderer: () => renderer!.kind,
     size: () => ({ width: canvas.width, height: canvas.height }),
-    pixel: (x, y) => readPixel(canvas, x, y),
-    showing: () => stage.showing()
+    pixel: (x, y) => renderer!.readPixel(x, y),
+    showing: () => stage.showing(),
+    videos: () => stage.videos()
   }
 
   const tick = (): void => {
@@ -190,14 +191,4 @@ function element(tag: string, className: string): HTMLElement {
   node.className = className
   node.hidden = true
   return node
-}
-
-function readPixel(canvas: HTMLCanvasElement, x: number, y: number): number[] {
-  const probe = document.createElement('canvas')
-  probe.width = 1
-  probe.height = 1
-  const context = probe.getContext('2d')
-  if (context === null) return []
-  context.drawImage(canvas, x, y, 1, 1, 0, 0, 1, 1)
-  return Array.from(context.getImageData(0, 0, 1, 1).data)
 }

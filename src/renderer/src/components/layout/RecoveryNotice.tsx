@@ -103,6 +103,8 @@ export function RecoveryNotice() {
             midiSettings: store.midiSettings,
             showSettings: store.showSettings,
             triggerGuard: store.triggerGuard,
+            lighting: store.lighting,
+            timecode: store.timecode,
             videoOutputs: store.videoOutputs,
             cues: store.cues
           })
@@ -150,6 +152,11 @@ export function RecoveryNotice() {
       // The file's own record of its saves travels with the snapshot, for the same
       // reason: a recovered session is the same show, not a new one.
       snapshot.workspace.history ?? [],
+      // And its rig: recovering without it would hand back a show whose lights are gone.
+      snapshot.workspace.lighting,
+      // And how it follows timecode: recovering without it would hand back a show that had
+      // stopped chasing.
+      snapshot.workspace.timecode,
       // And its outputs: a recovered show still has its projectors.
       snapshot.workspace.videoOutputs
     )

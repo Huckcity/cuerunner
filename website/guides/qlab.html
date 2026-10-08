@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Coming from QLab — Cuerunner</title>
+  <meta name="description" content="Bring a QLab show into Cuerunner from its workspace file or from QLab while it runs, and read the report on what came across." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Coming from QLab — Cuerunner" />
+  <meta property="og:description" content="Bring a QLab show into Cuerunner from its workspace file or from QLab while it runs, and read the report on what came across." />
+  <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="../index.html" aria-label="Cuerunner home">
+        <img src="../assets/logo-mark.svg" alt="Cuerunner" class="brand-mark" />
+        <span>CUERUNNER</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../guide.html" aria-current="page">Guides</a>
+        <a href="../reference/index.html">Reference</a>
+        <a href="../pricing.html">Pricing</a>
+        <a href="../support.html">Support</a>
+        <a href="../interop.html">Other programs</a>
+        <a href="../reliability.html">Reliability</a>
+      </nav>
+      <a class="header-cta" href="../index.html#download">Download</a>
+    </div>
+  </header>
+
+  <main class="layout doc-layout">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="../guide.html">Guides</a>
+        <span aria-hidden="true">/</span>
+        <span>Coming from QLab</span>
+      </nav>
+
+    <section class="panel reveal">
+      <h1>Coming from QLab</h1>
+      <p class="doc-lede">
+        A QLab show comes across in one step: from the workspace file, or from QLab itself
+        while it is running. The cues keep their numbers, names, colours, notes and timing,
+        and a report says, cue by cue, what could not come across exactly.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1" id="file">
+      <h2>1. From the workspace file</h2>
+      <p>
+        <strong>Cuerunner &#9662; &rarr; Import QLab Workspace&hellip; &rarr; Choose Workspace
+        File&hellip;</strong>, and pick the <code>.qlab5</code>. A <code>.qlab4</code> and a
+        <code>.cues</code> file work the same way. A workspace saved as a folder can be picked
+        by the file inside it.
+      </p>
+      <p>
+        The show opens as a <strong>new show with no file of its own</strong>. Nothing is
+        written to the QLab workspace or beside it. <strong>Save As</strong> keeps the new
+        show where you choose, and closing without saving asks first, as it does for any
+        show with unsaved changes. The audio device, MIDI port and other settings of this
+        computer stay as they were: a QLab show's outputs name another machine's hardware.
+      </p>
+      <p>
+        Audio plays from where QLab kept it. QLab records each file relative to the
+        workspace, so copy the workspace together with its audio folder and every cue
+        plays straight away.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1" id="live">
+      <h2>2. From a running QLab</h2>
+      <p>
+        For a show on a Mac you can reach over the network, a workspace whose last changes
+        were never saved, or a QLab version whose files the import does not read. Cuerunner
+        asks QLab for the show over QLab's own OSC interface, cue by cue.
+      </p>
+      <ol>
+        <li>In QLab's workspace settings, let this computer in over OSC, with the
+            workspace's passcode if it has one.</li>
+        <li>In <strong>Import QLab Workspace&hellip;</strong>, type the Mac's address
+            (<code>127.0.0.1</code> if QLab is on this computer) and the port, which is
+            <code>53000</code> unless it has been changed.</li>
+        <li><strong>Find Workspaces</strong>, pick one, type the passcode if it asks for
+            one, and press <strong>Import from QLab</strong>.</li>
+      </ol>
+      <p>
+        The file paths QLab reports are where the audio is on that Mac, so the report
+        lists the files as missing. Copy the show's audio folder across and use
+        <strong>Find in Folder&hellip;</strong>, below.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="report">
+      <h2>3. Read the report</h2>
+      <p>
+        The report opens as soon as the show does. It lists every QLab cue type in the show,
+        how many cues of it there were, and what each became. Below that, by cue:
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Heading</th><th>What it means</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Placeholders</strong></td><td>Cuerunner has no cue of this kind yet: video, camera, text, light, live input, MIDI file, timecode, the start/pause/load/reset/go-to/target/arm/disarm cues, and AppleScript. Each is a <em>disarmed</em> wait cue under the QLab cue's own number and name, so the running order keeps its shape, and its notes say what it was and carry what it held — the script, the light command, the file, the cue it targeted. Nothing is dropped.</td></tr>
+            <tr><td><strong>Approximated</strong></td><td>Mapped, with one thing that could not be carried exactly: a level above unity, a fade of level and pan at once, a group whose children chain in a way no Cuerunner mode does, a network patch that does not say where it sends. The line says which.</td></tr>
+            <tr><td><strong>Retimed</strong></td><td>Fires at the moment it fired in QLab, with its times written differently. See <a href="#timing">timing</a>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>Audio files</strong> says whether every file the show plays was found. For
+        the ones that were not, <strong>Find in Folder&hellip;</strong> asks for a folder — the
+        show's audio folder, a copy of it, a stick — and links every missing file it holds
+        at once. It looks for each file by the path QLab knew it by, then by the last few
+        folders of that path, then by its name, and never searches: two files with one name
+        in different folders are never mistaken for each other. The bar across the top of
+        the window relinks one file at a time, as it does for any show.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="mapping">
+      <h2>What becomes what</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>QLab</th><th>Cuerunner</th></tr></thead>
+          <tbody>
+            <tr><td>Every cue</td><td>Number, name, colour (QLab's extra colours land in the nearest of the eight), notes, armed, pre-wait, continue mode, and QLab's own cue id.</td></tr>
+            <tr><td>Audio</td><td>Audio: the file, start and end, loops (an infinite loop is a vamp, released by a devamp), rate, master level and the pan its first two outputs make.</td></tr>
+            <tr><td>Fade</td><td>Fade: its target, its length, level or pan, and <em>stop target when done</em>. The curve is an S-curve, QLab's own default.</td></tr>
+            <tr><td>Stop, Devamp</td><td>Stop and Devamp, on the same target.</td></tr>
+            <tr><td>Group</td><td><em>Timeline</em> is Timeline, each child at its pre-wait. <em>Start random child</em> is Random. <em>Playlist</em> is Sequence. <em>Start first child and go to next cue</em> is a Timeline when its children auto-continue into each other and a Sequence when they auto-follow. <em>Start first child and enter into group</em> is Playlist: one child per GO.</td></tr>
+            <tr><td>Wait, Memo</td><td>Wait. A memo is a wait of no length, its notes kept.</td></tr>
+            <tr><td>MIDI</td><td>MIDI for note on, note off, control change, program change and SysEx, on the port the workspace's patch names; Show Control for MIDI Show Control's Go, Stop, Resume, Load and Reset.</td></tr>
+            <tr><td>Network (QLab 4: OSC)</td><td>OSC, to the host and port of the workspace's network patch, its arguments typed as QLab types them.</td></tr>
+            <tr><td>Second cue list, cart</td><td>Cuerunner runs one cue list. The first QLab list is the show; every other list and cart comes after it as a disarmed group, so GO never runs into it. Arm it, or move its cues, to use them.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-3" id="timing">
+      <h2>Timing</h2>
+      <p>
+        <em>Do not continue</em> is Advance <strong>None</strong>, <em>auto-continue</em> is
+        <strong>On start</strong> and <em>auto-follow</em> is <strong>On end</strong>.
+      </p>
+      <p>
+        QLab's auto-continue fires the next cue a post-wait after this one starts acting.
+        Cuerunner's On start fires the next cue the moment this one is fired, and reads no
+        post-wait. So the next cue's pre-wait is written to include this cue's pre-wait and
+        post-wait, which puts it at the same moment, and the report lists it as retimed. A
+        group whose children auto-continue into each other becomes a timeline with each
+        child where the chain reached it.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-3">
+      <h2>Next</h2>
+      <p>
+        <a href="./cue-list.html">Building a cue list</a> covers the cue types and groups
+        the show now has. The <a href="../reference/formats.html#qlab">file formats
+        reference</a> has what the import reads, its limits, and what each refusal means.
+      </p>
+      <div class="note">
+        QLab is a trademark of Figure 53, LLC. Cuerunner is not affiliated with or endorsed
+        by Figure 53. The import reads a show you already own, in the container format
+        Apple's own frameworks write.
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Cuerunner — show control for Windows, macOS and Linux. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+    <p class="seller">Cuerunner is provided by ALGD LTD, company number NI744090, 121 Glencam Road, Omagh, Tyrone, BT79 7HB, United Kingdom.</p>
+  </footer>
+</body>
+</html>

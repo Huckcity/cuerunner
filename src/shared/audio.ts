@@ -27,8 +27,13 @@
  * connection is still empty, rather than after it has already answered a verb and its
  * events have been interpreted. The greeting is a new message kind, which is why the
  * meaning changed with it: an engine that does not greet speaks a build from before it.
+ *
+ * 4 adds a voice held where it is and let go again (`pause`, `resume`), the master level and
+ * the meters, and the engine's linear timecode: its LTC voices and its reader (`ltcStart`
+ * through `ltcUnlisten`). They arrived together and none of them shipped under 3, so they
+ * are one meaning of one number rather than two.
  */
-export const AUDIO_PROTOCOL_VERSION = 3
+export const AUDIO_PROTOCOL_VERSION = 4
 
 /** The type a request field carries on the wire. */
 export type AudioWireFieldType = 'string' | 'number' | 'boolean' | 'object' | 'array'
@@ -258,6 +263,22 @@ export const AUDIO_WIRE = {
       cueId: { type: 'string', required: true },
       whenMs: { type: 'number', required: false, default: 0 }
     },
+    /** Hold a cue's voice where it stands; every timed thing about it waits with it. */
+    pause: {
+      cueId: { type: 'string', required: true },
+      whenMs: { type: 'number', required: false, default: 0 }
+    },
+    /** Let a held voice go on, moved on by however long it was held. */
+    resume: {
+      cueId: { type: 'string', required: true },
+      whenMs: { type: 'number', required: false, default: 0 }
+    },
+    /** The level everything leaves the engine at: 0 to 2 (+6 dB), ramped over a block. */
+    master: {
+      gain: { type: 'number', required: false, default: 1 }
+    },
+    /** The output's meter: each channel's peak over the last block, and the master level. */
+    meters: {},
     fade: {
       cueId: { type: 'string', required: true },
       param: { type: 'string', required: false, default: 'volume' },
@@ -307,7 +328,37 @@ export const AUDIO_WIRE = {
       type: { type: 'string', required: true },
       deliberate: { type: 'boolean', required: false, default: false }
     },
-    shutdown: {}
+    shutdown: {},
+    // ── Linear timecode (native/audio/src/ltc.h) ────────────────────────────
+    // The LTC voices a timecode cue runs, and the reader on a capture device. Main speaks
+    // these (src/main/timecode); the window never does, so they have no IPC channel.
+    /** Starts an LTC voice on an output channel, or moves one that is running. */
+    ltcStart: {
+      voiceId: { type: 'string', required: true },
+      channel: { type: 'number', required: false, default: 0 },
+      rate: { type: 'string', required: false, default: '25' },
+      frame: { type: 'number', required: false, default: 0 },
+      levelDb: { type: 'number', required: false, default: -12 }
+    },
+    /** `stop`, `pause`, `resume` or `locate` (to `frame`) a running voice. */
+    ltcControl: {
+      voiceId: { type: 'string', required: true },
+      action: { type: 'string', required: true },
+      frame: { type: 'number', required: false, default: 0 }
+    },
+    ltcStatus: {},
+    /** The capture devices LTC can be read from. */
+    ltcInputs: {},
+    /** Listens for LTC on one channel of a capture device; an empty device is the default one. */
+    ltcListen: {
+      device: { type: 'string', required: false, default: '' },
+      channel: { type: 'number', required: false, default: 0 }
+    },
+    /** The frames read since the last call, with the steady clock they were read on. */
+    ltcRead: {
+      limit: { type: 'number', required: false, default: 256 }
+    },
+    ltcUnlisten: {}
   },
   events: AUDIO_WIRE_EVENTS
 } as const satisfies {
@@ -440,6 +491,12 @@ export const AUDIO_CHANNELS = {
   /** Ends a voice's loop and plays it out to the end of the file. */
   release: 'audio:release',
   cancel: 'audio:cancel',
+  /** Holds a voice where it stands, and lets it go on. */
+  pause: 'audio:pause',
+  resume: 'audio:resume',
+  /** The engine's output level, and its meter. */
+  master: 'audio:master',
+  meters: 'audio:meters',
   fade: 'audio:fade',
   routing: 'audio:routing',
   progress: 'audio:progress',
@@ -987,6 +1044,18 @@ export interface AudioEngineBridge {
   /** Drop the cue's future-dated verbs (a scheduled start, a scheduled stop/fade). */
   cancel(cueId: string, whenMs?: number): Promise<AudioCancelResult>
   /**
+   * Hold a cue's voice where it stands: silent, not moving through its file, and every
+   * frame-stamped thing about it — a fade, a scheduled stop, a start not reached — waiting
+   * with it. `applied` is false for a voice already held or a cue with nothing playing.
+   */
+  pause(cueId: string, whenMs?: number): Promise<AudioCommandResult>
+  /** Let a held voice go on, its timed things moved on by the hold. */
+  resume(cueId: string, whenMs?: number): Promise<AudioCommandResult>
+  /** Set the level everything leaves the engine at, 0 to 2 (+6 dB). */
+  master(gain: number): Promise<AudioCommandResult>
+  /** Read the output's meter. */
+  meters(): Promise<AudioMeters>
+  /**
    * Replace a running cue's routing matrix live, without restarting it: `null` is
    * automatic routing, `[]` is silent, a list is the new matrix. Applies from the
    * next sample the engine renders.
@@ -1070,6 +1139,25 @@ export interface AudioReleasePayload {
   whenMs?: number
   /** Where to play out to, in file ms; absent is the end of the file. */
   endMs?: number
+}
+export interface AudioMasterPayload {
+  gain: number
+}
+
+/**
+ * The output's meter as the engine's last block left it: each output channel's peak, linear
+ * 0–1 and past 1 when it clips, after the master level — and the level itself.
+ */
+export interface AudioMeters {
+  /** Engine-clock ms of the block the reading is from. */
+  at: number
+  master: number
+  peaks: number[]
+}
+
+export interface AudioHoldPayload {
+  cueId: string
+  whenMs?: number
 }
 export interface AudioCancelPayload {
   cueId: string

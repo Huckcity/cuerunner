@@ -77,13 +77,18 @@ export function useOutputs(): void {
     return unsubscribe
   }, [])
 
-  // The next video is opened on its output before its GO, so its first frame is ready.
+  // The next video is opened on its output before its GO, so its first frame is ready: when
+  // it is stood on, and again when the cue stood on is given a file.
   const selectedId = useStore(s => s.selectedId)
+  const selectedVideoFile = useStore(s => {
+    const cue = s.cues.find(c => c.id === s.selectedId)
+    return cue?.type === 'video' ? cue.filePath : null
+  })
   useEffect(() => {
-    if (selectedId === null) return
+    if (selectedId === null || selectedVideoFile === null || selectedVideoFile === '') return
     const cue = useStore.getState().cues.find(c => c.id === selectedId)
     if (cue?.type === 'video') visualCues.prepare(cue)
-  }, [selectedId])
+  }, [selectedId, selectedVideoFile])
 
   // An edit to a picture that is up reaches it on its next frame.
   useEffect(() => {

@@ -19,6 +19,8 @@ export function useAutosave(): void {
         midiSettings,
         showSettings,
         triggerGuard,
+        lighting,
+        timecode,
         workspaceId,
         workspaceCreatedAt,
         showHistory,
@@ -36,6 +38,8 @@ export function useAutosave(): void {
         midiSettings,
         showSettings,
         triggerGuard,
+        lighting,
+        timecode,
         videoOutputs: useStore.getState().videoOutputs,
         cues
       })

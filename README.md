@@ -24,7 +24,7 @@ An Electron app with three layers — main process, preload bridge, renderer —
 exclusively over IPC. The renderer has no Node access; the audio engine is a native
 process of its own, so a renderer crash does not stop the sound.
 
-The **cue stack is free**: fourteen cue types, groups and timelines, the waveform editor,
+The **cue stack is free**: sixteen cue types, groups and timelines, the waveform editor,
 the run log, workspaces, undo — and the ears it needs: OSC and MIDI input, cue triggers,
 and the monitor that shows what arrived. **Cuerunner Pro** is the show around it —
 wireless and the mic plot, scenes and the desk, the script panel with its tablet view,
@@ -113,7 +113,7 @@ npm run preview           # Preview built app without packaging
 npm run dist              # Build and package for all platforms
 npm run dist:win          # Build and package for Windows only
 npm run dist:mac          # Build and package for macOS only
-npm run dist:linux        # Build and package for Linux only (AppImage)
+npm run dist:linux        # Build and package for Linux only (AppImage and .deb)
 npm run screenshots       # Regenerate website/assets/guide images (requires build)
 npm run demo:write        # Put resources/demo/Demo Show.cuerunner through the serialiser
 npm run demo:check        # Fail if the shipped demo is not what that writes
@@ -159,7 +159,7 @@ npm install
 # Run in development
 npm run dev
 
-# Package an AppImage into dist/
+# Package an AppImage and a .deb into dist/
 npm run dist:linux
 ```
 
@@ -169,6 +169,17 @@ extract and run it instead:
 ```bash
 ./dist/Cuerunner-*.AppImage --appimage-extract-and-run
 ```
+
+The Debian package is written beside it, as `dist/cuerunner_<version>_amd64.deb`. Unlike the
+AppImage it declares what it needs from the system — Electron's own libraries and ALSA
+(`libasound2t64 | libasound2`) — so `apt` pulls those in:
+
+```bash
+sudo apt install ./dist/cuerunner_*_amd64.deb
+```
+
+The release pipeline publishes the AppImage only for now; the `.deb` is built by
+`npm run dist:linux` and held to its declared dependencies by `scripts/linux-packages.test.ts`.
 
 ### Troubleshooting `Error: Electron uninstall`
 
@@ -504,6 +515,7 @@ cuerunner/
 │   │   │   ├── handlers.ts          # Main process IPC handlers, one per declared channel
 │   │   │   ├── windowHandlers.ts    # The two channels registered per window
 │   │   │   └── parity.test.ts       # Fails the build when the declaration and the registrations disagree
+│   │   ├── dmx/                     # sACN and Art-Net packets, the lighting state, its sockets and frame loop
 │   │   └── index.ts                 # Electron main process entry
 │   ├── preload/
 │   │   └── index.ts                 # IPC bridge (context isolation)
@@ -933,7 +945,8 @@ keys are verified on the machine they are entered on:
   computer it was entered on, not to a workspace or a show file. A machine's half of a
   redundant pair is kept the same way (`redundancy.json`), and for the same reason: both
   machines of a pair run the same workspace file, so which one is the main is a fact about
-  the machine rather than about the show.
+  the machine rather than about the show. The interface the lights leave by and the sACN
+  identity this machine sends as are kept there too (`dmx.json`).
 - **A key ends when it ends.** The key is checked when the app starts, when one is
   entered, and whenever anything asks what the license is; the app's own clock crosses a
   key's last day while it is open, with no operator action and no restart. The moment it

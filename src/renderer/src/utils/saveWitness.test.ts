@@ -29,6 +29,8 @@ function sent(): Workspace {
     midiSettings: s.midiSettings,
     showSettings: s.showSettings,
     triggerGuard: s.triggerGuard,
+    lighting: s.lighting,
+    timecode: s.timecode,
     videoOutputs: s.videoOutputs,
     cues: s.cues
   })
@@ -60,6 +62,10 @@ function editRouted(key: WorkspaceKey): void {
       useStore.getState().updateCompanionSettings({ enabled: !useStore.getState().showSettings.companion.enabled })
       return
     case 'triggerGuard': useStore.getState().updateTriggerGuard({ windowMs: 900 }); return
+    case 'lighting':
+      useStore.getState().setLighting({ ...useStore.getState().lighting, panic: 'blackout' })
+      return
+    case 'timecode': useStore.getState().setTimecode({ chase: !useStore.getState().timecode.chase }); return
     case 'videoOutputs': useStore.getState().addVideoOutput(); return
     default: throw new Error(`no edit for routed section '${key}': the witness walk needs one`)
   }

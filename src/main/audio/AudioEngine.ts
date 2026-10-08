@@ -21,6 +21,7 @@ import type {
   AudioClockReading,
   AudioErrorCode,
   AudioCommandResult,
+  AudioMeters,
   AudioCrosspoint,
   AudioDeviceInfo,
   AudioEndReason,
@@ -357,6 +358,22 @@ export class NativeAudioEngine {
 
   cancel(cueId: string, whenMs?: number): Promise<AudioCancelResult> {
     return this.request('cancel', { cueId, whenMs }) as Promise<AudioCancelResult>
+  }
+
+  pause(cueId: string, whenMs?: number): Promise<AudioCommandResult> {
+    return this.request('pause', { cueId, whenMs }) as Promise<AudioCommandResult>
+  }
+
+  resume(cueId: string, whenMs?: number): Promise<AudioCommandResult> {
+    return this.request('resume', { cueId, whenMs }) as Promise<AudioCommandResult>
+  }
+
+  master(gain: number): Promise<AudioCommandResult> {
+    return this.request('master', { gain }) as Promise<AudioCommandResult>
+  }
+
+  meters(): Promise<AudioMeters> {
+    return this.request('meters', {}) as Promise<AudioMeters>
   }
 
   fade(
@@ -898,6 +915,15 @@ export class NativeAudioEngine {
    */
   simulateDeviceLossForTest(): Promise<void> {
     return this.request('simulateDeviceNotification', { type: 'stopped', deliberate: false }).then(() => undefined)
+  }
+
+  /**
+   * One linear-timecode verb (native/audio/src/ltc.h), answered as the engine answers it.
+   * The timecode module owns the shapes on either side (src/main/timecode/ltc.ts); this is
+   * only the door to the socket, so the LTC block of the wire has one caller.
+   */
+  ltc(verb: Extract<AudioWireVerb, `ltc${string}`>, params: Record<string, unknown> = {}): Promise<unknown> {
+    return this.request(verb, params)
   }
 
   private failPending(error: Error): void {

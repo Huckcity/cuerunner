@@ -1,6 +1,7 @@
 import { useStore } from '../../store'
 import type { MidiMessageKind } from '../../../../shared/cue'
 import type { DeviceState, ShowEvent } from '../../../../shared/show'
+import { TimecodePanel } from '../timecode/TimecodeDisplay'
 import './MonitorPanel.css'
 
 function describeMidi(message: MidiMessageKind): string {
@@ -116,6 +117,8 @@ export function MonitorPanel({ onClose }: Props) {
           ))}
         </div>
       )}
+
+      <TimecodePanel />
 
       <div className="monitor-body">
         <div className="monitor-column monitor-services">

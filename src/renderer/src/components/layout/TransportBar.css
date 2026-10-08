@@ -42,9 +42,21 @@
 }
 
 .transport-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
   text-align: right;
   font-size: var(--text-base);
   color: var(--fg-muted);
+}
+
+/* The keys line gives way first when the window is narrow: the meter and the master stay. */
+.transport-right .transport-keys {
+  order: -1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .transport-right strong {
@@ -102,6 +114,38 @@
 
 .btn-stop:hover  { background: var(--state-stop-hover); }
 .btn-stop:active { background: var(--state-stop-active); }
+
+/* PAUSE sits with STOP, in STOP's own shape and tone: it is a hand on the show, not GO. While
+   the show is held it reads RESUME in the amber the app keeps for what is waiting on the
+   operator, so a held show is not mistaken for one that has simply gone quiet. */
+.btn-pause {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: var(--h-button-lg);
+  background: var(--state-stop);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-xl);
+  color: var(--fg-primary);
+  font-family: var(--font-cond);
+  font-size: var(--text-md);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-caps);
+  cursor: pointer;
+  transition: var(--transition-std);
+}
+
+.btn-pause:hover:not(:disabled)  { background: var(--state-stop-hover); }
+.btn-pause:active:not(:disabled) { background: var(--state-stop-active); }
+.btn-pause:disabled { color: var(--fg-disabled); cursor: default; }
+.btn-pause[data-held='true'] {
+  background: var(--accent-amber-bg);
+  border-color: var(--accent-amber);
+  color: var(--accent-amber);
+}
+
+.running-badge[data-held='true'] { color: var(--accent-amber); }
 
 .running-badge {
   flex-shrink: 0;

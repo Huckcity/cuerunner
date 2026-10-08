@@ -7,6 +7,7 @@
 // Everything else (device enumeration, limits, capture tee) is a flag on those.
 #include "engine.h"
 #include "offline.h"
+#include "ltc.h"
 #include "protocol.h"
 #include "transport.h"
 #include "util.h"
@@ -163,6 +164,14 @@ int main(int argc, char** argv) {
   // runtime too old to know the code page answers null and is left as it was.
   std::setlocale(LC_CTYPE, ".UTF8");
 #endif
+  // `--ltc-decode <file.wav> [--channel <n>]`: reads the LTC on one channel of a file and
+  // prints every frame it found — the native timecode test's reader (ltc.h). Handled
+  // before the engine's own flags, because it opens no engine at all.
+  if (argc >= 3 && std::string(argv[1]) == "--ltc-decode") {
+    int channel = 0;
+    if (argc >= 5 && std::string(argv[3]) == "--channel") channel = std::atoi(argv[4]);
+    return ws::printLtcDecode(argv[2], channel);
+  }
   ws::EngineOptions engineOptions;
   std::string socketPath;
   std::string scriptPath;

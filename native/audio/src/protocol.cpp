@@ -3,6 +3,9 @@
 #include "util.h"
 #include "wsaudio.h"
 
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
@@ -186,6 +189,17 @@ const WireField kCancelFields[] = {
     wireRequired("cueId", WireFieldType::String),
     wireNumber("whenMs", "0"),
 };
+const WireField kPauseFields[] = {
+    wireRequired("cueId", WireFieldType::String),
+    wireNumber("whenMs", "0"),
+};
+const WireField kResumeFields[] = {
+    wireRequired("cueId", WireFieldType::String),
+    wireNumber("whenMs", "0"),
+};
+const WireField kMasterFields[] = {
+    wireNumber("gain", "1"),
+};
 const WireField kFadeFields[] = {
     wireRequired("cueId", WireFieldType::String),
     wireText("param", "volume"),
@@ -229,6 +243,31 @@ const WireField kSimulateDeviceNotificationFields[] = {
     wireFlag("deliberate", false),
 };
 
+// ── Linear timecode (ltc.h) ──────────────────────────────────────────────────
+// The LTC verbs, kept together: a generator voice per timecode cue (`ltcStart`,
+// `ltcControl`, `ltcStatus`), and the reader that listens on a capture device
+// (`ltcInputs`, `ltcListen`, `ltcRead`, `ltcUnlisten`).
+const WireField kLtcStartFields[] = {
+    wireRequired("voiceId", WireFieldType::String),
+    wireNumber("channel", "0"),
+    wireText("rate", "25"),
+    wireNumber("frame", "0"),
+    wireNumber("levelDb", "-12"),
+};
+const WireField kLtcControlFields[] = {
+    wireRequired("voiceId", WireFieldType::String),
+    wireRequired("action", WireFieldType::String),
+    wireNumber("frame", "0"),
+};
+const WireField kLtcListenFields[] = {
+    wireText("device", ""),
+    wireNumber("channel", "0"),
+};
+const WireField kLtcReadFields[] = {
+    wireNumber("limit", "256"),
+};
+// ── end of the LTC fields ────────────────────────────────────────────────────
+
 // The dispatch chain below answers the same set, verb for verb and in the same order; it
 // is the table that decides what a request must carry, what an absent field means and what
 // `--protocol` prints.
@@ -241,6 +280,10 @@ const WireVerb kWireVerbs[] = {
     {"seek", fieldsOf(kSeekFields)},
     {"release", fieldsOf(kReleaseFields)},
     {"cancel", fieldsOf(kCancelFields)},
+    {"pause", fieldsOf(kPauseFields)},
+    {"resume", fieldsOf(kResumeFields)},
+    {"master", fieldsOf(kMasterFields)},
+    {"meters", {}},
     {"fade", fieldsOf(kFadeFields)},
     {"routing", fieldsOf(kRoutingFields)},
     {"progress", fieldsOf(kProgressFields)},
@@ -254,6 +297,14 @@ const WireVerb kWireVerbs[] = {
     {"silence", fieldsOf(kSilenceFields)},
     {"simulateDeviceNotification", fieldsOf(kSimulateDeviceNotificationFields)},
     {"shutdown", {}},
+    // Linear timecode (ltc.h).
+    {"ltcStart", fieldsOf(kLtcStartFields)},
+    {"ltcControl", fieldsOf(kLtcControlFields)},
+    {"ltcStatus", {}},
+    {"ltcInputs", {}},
+    {"ltcListen", fieldsOf(kLtcListenFields)},
+    {"ltcRead", fieldsOf(kLtcReadFields)},
+    {"ltcUnlisten", {}},
 };
 
 constexpr size_t kWireVerbCount = sizeof(kWireVerbs) / sizeof(kWireVerbs[0]);
@@ -1050,6 +1101,21 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
     } else {
       out = replyError(id, error.code, error.message);
     }
+  } else if (verb == "pause" || verb == "resume") {
+    CommandResultDTO result;
+    EngineError error;
+    const bool ok = verb == "pause"
+                        ? engine.pauseCue(textOf("cueId"), numberOf("whenMs"), result, error)
+                        : engine.resumeCue(textOf("cueId"), numberOf("whenMs"), result, error);
+    if (ok) {
+      cJSON* body = cJSON_CreateObject();
+      cJSON_AddBoolToObject(body, "ok", 1);
+      cJSON_AddNumberToObject(body, "at", result.atMs);
+      cJSON_AddBoolToObject(body, "applied", result.applied);
+      out = replyOk(id, body);
+    } else {
+      out = replyError(id, error.code, error.message);
+    }
   } else if (verb == "fade") {
     CommandResultDTO result;
     EngineError error;
@@ -1115,6 +1181,32 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
     } else {
       out = replyError(id, error.code, error.message);
     }
+  } else if (verb == "master") {
+    CommandResultDTO result;
+    EngineError error;
+    if (engine.setMaster(numberOf("gain"), result, error)) {
+      cJSON* body = cJSON_CreateObject();
+      cJSON_AddBoolToObject(body, "ok", 1);
+      cJSON_AddNumberToObject(body, "at", result.atMs);
+      cJSON_AddBoolToObject(body, "applied", result.applied);
+      out = replyOk(id, body);
+    } else {
+      out = replyError(id, error.code, error.message);
+    }
+  } else if (verb == "meters") {
+    int channels = 0;
+    float levels[kMaxOutputChannels] = {};
+    double master = 1.0;
+    double atMs = 0.0;
+    engine.meters(channels, levels, master, atMs);
+    cJSON* body = cJSON_CreateObject();
+    cJSON_AddNumberToObject(body, "at", atMs);
+    cJSON_AddNumberToObject(body, "master", master);
+    cJSON* peaks = cJSON_AddArrayToObject(body, "peaks");
+    for (int channel = 0; channel < channels; channel++) {
+      cJSON_AddItemToArray(peaks, cJSON_CreateNumber(levels[channel]));
+    }
+    out = replyOk(id, body);
   } else if (verb == "clock") {
     cJSON* body = cJSON_CreateObject();
     cJSON_AddNumberToObject(body, "clockMs", engine.clockMs());
@@ -1281,6 +1373,121 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
     cJSON* body = cJSON_CreateObject();
     cJSON_AddBoolToObject(body, "ok", 1);
     out = replyOk(id, body);
+  // ── Linear timecode (ltc.h) ────────────────────────────────────────────────
+  } else if (verb == "ltcStart") {
+    const std::string voiceId = textOf("voiceId");
+    LtcRate rate;
+    const int channel = static_cast<int>(numberOf("channel"));
+    if (voiceId.empty() || voiceId.size() >= sizeof(LtcOutputs::Command{}.id)) {
+      out = replyError(id, "invalid", "missing or over-long LTC voice id");
+    } else if (!ltcRateFromName(textOf("rate"), rate)) {
+      out = replyError(id, "invalid", "unknown timecode rate '" + textOf("rate") + "'");
+    } else if (channel < 0 || channel >= kMaxOutputChannels) {
+      out = replyError(id, "invalid", "LTC output channel is outside the device");
+    } else {
+      LtcOutputs::Command command;
+      command.op = LtcOutputs::Command::Start;
+      std::snprintf(command.id, sizeof(command.id), "%s", voiceId.c_str());
+      command.channel = channel;
+      command.rate = rate;
+      command.frame = static_cast<int64_t>(numberOf("frame"));
+      command.gain = static_cast<float>(std::pow(10.0, std::min(0.0, numberOf("levelDb")) / 20.0));
+      if (!engine.ltcOutputs().post(command)) {
+        out = replyError(id, "limit", "every LTC voice is in use");
+      } else {
+        cJSON* body = cJSON_CreateObject();
+        cJSON_AddBoolToObject(body, "ok", 1);
+        cJSON_AddNumberToObject(body, "atMs", engine.clockMs());
+        out = replyOk(id, body);
+      }
+    }
+  } else if (verb == "ltcControl") {
+    const std::string action = textOf("action");
+    LtcOutputs::Command command;
+    std::snprintf(command.id, sizeof(command.id), "%s", textOf("voiceId").c_str());
+    command.frame = static_cast<int64_t>(numberOf("frame"));
+    bool known = true;
+    if (action == "stop") command.op = LtcOutputs::Command::Stop;
+    else if (action == "pause") command.op = LtcOutputs::Command::Pause;
+    else if (action == "resume") command.op = LtcOutputs::Command::Resume;
+    else if (action == "locate") command.op = LtcOutputs::Command::Locate;
+    else known = false;
+    if (!known) {
+      out = replyError(id, "invalid", "unknown LTC action '" + action + "'");
+    } else {
+      // A voice that is not running has nothing to stop: that is the state asked for.
+      const bool applied = engine.ltcOutputs().post(command);
+      cJSON* body = cJSON_CreateObject();
+      cJSON_AddBoolToObject(body, "ok", 1);
+      cJSON_AddBoolToObject(body, "applied", applied);
+      out = replyOk(id, body);
+    }
+  } else if (verb == "ltcStatus") {
+    cJSON* body = cJSON_CreateObject();
+    cJSON* voices = cJSON_AddArrayToObject(body, "voices");
+    for (const LtcOutputs::SlotStatus& slot : engine.ltcOutputs().status()) {
+      cJSON* voice = cJSON_CreateObject();
+      cJSON_AddStringToObject(voice, "voiceId", slot.id.c_str());
+      cJSON_AddNumberToObject(voice, "channel", slot.channel);
+      cJSON_AddStringToObject(voice, "rate", ltcRateName(slot.rate));
+      cJSON_AddNumberToObject(voice, "frame", static_cast<double>(slot.frame));
+      cJSON_AddBoolToObject(voice, "running", slot.running);
+      cJSON_AddBoolToObject(voice, "paused", slot.paused);
+      cJSON_AddItemToArray(voices, voice);
+    }
+    out = replyOk(id, body);
+  } else if (verb == "ltcInputs") {
+    std::vector<std::pair<std::string, std::string>> inputs;
+    std::string listError;
+    if (!ltcCaptureDevices(inputs, listError)) {
+      out = replyError(id, "device", listError);
+    } else {
+      cJSON* body = cJSON_CreateObject();
+      cJSON* list = cJSON_AddArrayToObject(body, "inputs");
+      for (const auto& input : inputs) {
+        cJSON* entry = cJSON_CreateObject();
+        cJSON_AddStringToObject(entry, "id", input.first.c_str());
+        cJSON_AddStringToObject(entry, "name", input.second.c_str());
+        cJSON_AddItemToArray(list, entry);
+      }
+      out = replyOk(id, body);
+    }
+  } else if (verb == "ltcListen") {
+    std::string listenError;
+    if (!engine.ltcInput().listen(textOf("device"), static_cast<int>(numberOf("channel")), listenError)) {
+      out = replyError(id, "device", listenError);
+    } else {
+      cJSON* body = cJSON_CreateObject();
+      cJSON_AddBoolToObject(body, "ok", 1);
+      cJSON_AddStringToObject(body, "description", engine.ltcInput().description().c_str());
+      out = replyOk(id, body);
+    }
+  } else if (verb == "ltcRead") {
+    const double limit = std::max(1.0, std::min(1024.0, numberOf("limit")));
+    cJSON* body = cJSON_CreateObject();
+    cJSON_AddBoolToObject(body, "listening", engine.ltcInput().listening());
+    cJSON_AddStringToObject(body, "description", engine.ltcInput().description().c_str());
+    cJSON_AddNumberToObject(body, "nowMs", steadyNowMs());
+    cJSON* frames = cJSON_AddArrayToObject(body, "frames");
+    for (const LtcDecoded& decoded : engine.ltcInput().drain(static_cast<size_t>(limit))) {
+      cJSON* frame = cJSON_CreateObject();
+      cJSON_AddNumberToObject(frame, "hours", decoded.fields.hours);
+      cJSON_AddNumberToObject(frame, "minutes", decoded.fields.minutes);
+      cJSON_AddNumberToObject(frame, "seconds", decoded.fields.seconds);
+      cJSON_AddNumberToObject(frame, "frames", decoded.fields.frames);
+      cJSON_AddBoolToObject(frame, "dropFrame", decoded.fields.dropFrame);
+      cJSON_AddBoolToObject(frame, "reverse", decoded.reverse);
+      cJSON_AddNumberToObject(frame, "atMs", decoded.atMs);
+      cJSON_AddNumberToObject(frame, "cellSamples", decoded.cellSamples);
+      cJSON_AddItemToArray(frames, frame);
+    }
+    out = replyOk(id, body);
+  } else if (verb == "ltcUnlisten") {
+    engine.ltcInput().close();
+    cJSON* body = cJSON_CreateObject();
+    cJSON_AddBoolToObject(body, "ok", 1);
+    out = replyOk(id, body);
+  // ── end of the LTC verbs ───────────────────────────────────────────────────
   } else {
     out = replyError(id, "invalid", "unknown verb '" + verb + "'");
   }

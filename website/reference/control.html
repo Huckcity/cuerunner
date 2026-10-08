@@ -55,6 +55,7 @@
           <tbody>
             <tr><td>OSC</td><td>UDP port 53000</td><td>Every message is published to the Monitor and the run log with its sender and arguments.</td></tr>
             <tr><td>MIDI</td><td>the ports you tick</td><td>With none ticked, every input is opened. An interface that disappears mid-show is reported, because a cue sending down it would otherwise play nowhere in silence.</td></tr>
+            <tr><td>Timecode</td><td>one source at a time, chosen in Settings → Timecode.</td><td>MTC quarter frames and full-frame locates (<code>F1 0n</code>, <code>F0 7F dd 01 01 hh mm ss ff F7</code>) on a MIDI input; LTC on an audio input channel; ArtTimeCode (OpCode 0x9700) on UDP 6454. Lock and loss are alarms in the Monitor and the run log.</td></tr>
           </tbody>
         </table>
       </div>
@@ -74,8 +75,57 @@
       </div>
       <p>
         Both are acted on where the engine is rather than in the window, so the fade starts
-        whether or not the interface is answering. The run log records the sender:
+        whether or not the interface is answering. The lights follow the show's own
+        <strong>On panic</strong> rule (Lighting → Network): they hold where they are unless
+        the show says release or black out. A window that stops answering is not a panic for
+        the lights — they run beside the engine, not in the window. The run log records the sender:
         <code>[main] panic (osc): /cuerunner/panic from 192.168.1.24:8000</code>.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1" id="remote">
+      <h2>The remote</h2>
+      <p>
+        The OSC port also answers the transport, so a tablet or a console can run the show
+        without a cue written for each press. Two namespaces are answered: Cuerunner's own,
+        under <code>/cuerunner</code>, and QLab's bare one — with or without the
+        <code>/workspace/{id}</code> prefix QLab's remotes send — so a remote set up for QLab
+        on port 53000 runs a Cuerunner show unchanged. Verbs are read without regard to case
+        or underscores: <code>hardStop</code>, <code>hardstop</code> and <code>hard_stop</code>
+        are one address.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Address</th><th>Effect</th></tr></thead>
+          <tbody>
+            <tr><td><code>/go</code></td><td>GO, exactly as <kbd>Space</kbd>: the selected cue fires and the selection moves on.</td></tr>
+            <tr><td><code>/stop</code>, <code>/hardStop</code></td><td>STOP: everything is cut where it stands.</td></tr>
+            <tr><td><code>/panic</code></td><td>Panic, answered where the engine is, as <code>/cuerunner/panic</code> is.</td></tr>
+            <tr><td><code>/pause</code>, <code>/resume</code>, <code>/togglePause</code> (also <code>/pause_toggle</code>)</td><td>Hold the whole show, let it go on, or whichever it is not — as <kbd>P</kbd> does.</td></tr>
+            <tr><td><code>/cue/{number}/pause</code>, <code>/resume</code>, <code>/togglePause</code></td><td>Hold one playing audio cue while the rest of the show goes on, and let it go.</td></tr>
+            <tr><td><code>/select/next</code>, <code>/select/previous</code> (also <code>/playhead/…</code>)</td><td>Move the selection one row, over the rows the list shows. Nothing fires.</td></tr>
+            <tr><td><code>/select/{number}</code>, <code>/cue/{number}/select</code></td><td>Stand on that cue. Nothing fires.</td></tr>
+            <tr><td><code>/cue/{number}/go</code></td><td>Stand on that cue and press GO.</td></tr>
+            <tr><td><code>/cue/{number}/start</code></td><td>Fire that cue where it is; the selection stays where the operator left it. A disarmed cue is not fired, and the log says so.</td></tr>
+            <tr><td><code>/cue/{number}/stop</code></td><td>Stop that cue (and a group's children with it).</td></tr>
+            <tr><td><code>/cue/{number}/seek</code> <em>seconds</em></td><td>Move a running audio cue to that many seconds into its region.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <code>{number}</code> is the cue's number as the list shows it, or
+        <code>selected</code> / <code>playhead</code> for the cue the selection stands on.
+        Every press is written to the run log with its sender — <code>GO from OSC /go from
+        10.0.0.5:53001</code> — and a number the show does not have is an error line rather
+        than a silence. The repeat guard (Settings → General) stands in front of the remote
+        as it does in front of a trigger, so a desk that sends twice steps once. An address
+        a cue's own trigger answers is left to that cue: a show that wired <code>/go</code>
+        to one cue keeps it.
+      </p>
+      <p>
+        Turn the remote off with the Remote box under Settings → Network; triggers and
+        <code>/cuerunner/panic</code> still answer. <strong>Allow from</strong> closes the port
+        to everyone not on its list — triggers, remote and Monitor alike.
       </p>
     </section>
 
@@ -90,6 +140,7 @@
             <tr><td>MIDI control change</td><td>Port, channel and controller number.</td><td>Value.</td></tr>
             <tr><td>MIDI program change</td><td>Port, channel and program number.</td><td>—</td></tr>
             <tr><td>Show control</td><td>Every field the console sent: command, format, device ID, and the cue and list where they are carried.</td><td>—</td></tr>
+            <tr><td>Timecode<span class="pro">Pro</span></td><td>The frame of the incoming clock, at the rate it is read at — typed as a label, as seconds from midnight (<code>3610s</code>), or taken from the running clock with <strong>Take</strong>: the cue fires as the clock runs through it, once per pass, and again after the clock goes back before it. A skip of up to the tolerance still fires; a locate past it does not, unless chase is on.</td><td>Which wire the clock came in on.</td></tr>
           </tbody>
         </table>
       </div>
@@ -108,7 +159,10 @@
           <tbody>
             <tr><td>OSC cue</td><td>The address and its typed arguments, to the host and port on the cue.</td></tr>
             <tr><td>MIDI cue</td><td>Its list of messages, on the cue's port or the show's default output.</td></tr>
+            <tr><td>MIDI File cue</td><td>The file's own messages — notes, controllers, programs, bends, pressure and SysEx; never its meta events — at the file's times, through the cue's channel map and transposition, on the cue's port or the show's default output. On a stop: a Note Off for every note it started and Sustain (CC 64) 0 on each channel it used; on PANIC, All Notes Off (CC 123) on those channels too.</td></tr>
             <tr><td>Show Control cue</td><td>An MSC message: command, equipment format, device ID (127 reaches everything), and cue and list where the command carries them.</td></tr>
+            <tr><td>Light cue<span class="pro">Pro</span></td><td>Nothing of its own: it hands the lighting engine its look, and the engine sends every universe that has an output — on a change, and again every 800 ms unchanged, at up to 44 frames a second. sACN (E1.31) data packets carry the machine's source name and component identifier, the output's priority and, when the show synchronises, the sync universe, followed by a universe synchronisation packet; Art-Net 4 sends ArtDmx, then ArtSync when synchronised. Stopping the output sends sACN's stream-terminated packets three times, so a receiver lets go at once.</td></tr>
+            <tr><td>Timecode cue<span class="pro">Pro</span></td><td>MTC: a full-frame message (device 7F) where the clock starts, pauses or is located, then four quarter frames a frame, each set of eight starting on an even frame. LTC: the 80-bit SMPTE word, biphase-mark, at the cue's level on its output channel, with the drop-frame flag set at 29.97 drop-frame. ArtTimeCode: one 19-byte datagram a frame. 29.97 non-drop has no code of its own in MTC or Art-Net and is sent as 30.</td></tr>
             <tr><td>Mic cue<span class="pro">Pro</span></td><td>One request to the receiver: <code>{ "mute": true }</code> or <code>false</code>, for one channel, and nothing else — no name, no gain, no level. Then a read of that channel to confirm it took. Muting a channel that is already muted is not an error; it is the state asked for.</td></tr>
             <tr><td>Scene cue<span class="pro">Pro</span></td><td>The scene's membership first — which channels it places on which faders, and the faders it takes them off — then each mic's mute, for the channels a recall moves and no others. Nothing outside the show's own channels is named: a mute carries the channel's own number, never a fader's, and a channel the scene leaves off every fader is closed. A mic that changes fader is never muted by the move: it keeps playing and takes the new fader's position. The membership goes over the desk's own route — an SQ's control service on TCP 51326, an Avantis's NRPN <code>40</code> on the desk link — and a desk with no membership route reports the gap while the mutes go anyway.</td></tr>
           </tbody>

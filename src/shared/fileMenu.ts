@@ -13,12 +13,21 @@ export type FileMenuAction =
   | 'merge'
   | 'export-bundle'
   | 'import-bundle'
+  | 'import-qlab'
   | 'report-problem'
+  | 'open-logs'
   | 'show-settings'
   | 'settings'
 
+/**
+ * What the View menu asks of the window: show mode, the large-type operator view, and the cart,
+ * the list as a wall of buttons — each in and out. Not File items, so the Cuerunner ▾ button
+ * does not draw them; the window answers F5 and F6 itself.
+ */
+export type ViewMenuAction = 'show-mode' | 'cart'
+
 /** Everything the application menu can ask the window to do. */
-export type MenuAction = 'undo' | 'redo' | FileMenuAction
+export type MenuAction = 'undo' | 'redo' | FileMenuAction | ViewMenuAction
 
 export interface FileMenuItem {
   action: FileMenuAction
@@ -46,10 +55,14 @@ export const FILE_MENU: FileMenuEntry[] = [
   // Handover: the show and the audio it plays as one file, in and out.
   { action: 'export-bundle', label: 'Export Bundle…' },
   { action: 'import-bundle', label: 'Import Bundle…' },
+  // Coming from QLab: a workspace file, or a QLab that is running, as a new show.
+  { action: 'import-qlab', label: 'Import QLab Workspace…' },
   'separator',
   // Something went wrong, or is not clear: the report is built here, shown in full, and
   // goes nowhere until the operator copies it, saves it or mails it.
   { action: 'report-problem', label: 'Report a Problem…' },
+  // The session log on disk, which outlives the window: where last night's show is read.
+  { action: 'open-logs', label: 'Open Logs Folder' },
   'separator',
   // The show's own setup, beside the app's: one travels with the workspace, the other
   // with the machine.

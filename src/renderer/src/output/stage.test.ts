@@ -147,6 +147,29 @@ describe('the stage', () => {
   })
 })
 
+describe('a held picture', () => {
+  it('stands still with the show: its fade and its display time wait, then go on from there', () => {
+    const { stage, events, at } = stageAt()
+    stage.apply({ op: 'play', layer: textLayer('t1', { fadeInMs: 1000, displayMs: 3000 }) })
+    at(1000)
+    stage.frame()
+    at(1500)
+    stage.apply({ op: 'pause', cueId: 't1', at: 1500 })
+    at(10_000)
+    // Half faded in when it was held, and still: the display time has not run out either.
+    expect(drawn(stage)).toEqual([{ key: 't1', opacity: 0.5 }])
+    stage.apply({ op: 'resume', cueId: 't1', at: 10_000 })
+    at(10_500)
+    expect(drawn(stage)).toEqual([{ key: 't1', opacity: 1 }])
+    // Shown for 3 s of its own time: 0.5 s before the hold and 2.5 s after it.
+    at(12_499)
+    expect(drawn(stage)).toEqual([{ key: 't1', opacity: 1 }])
+    at(12_500)
+    expect(drawn(stage)).toEqual([])
+    expect(events.map(event => event.kind)).toEqual(['first-frame', 'ended', 'gone'])
+  })
+})
+
 describe('the timer', () => {
   it('reads a duration as minutes and seconds, and hours when there are some', () => {
     expect(formatTimer(0)).toBe('00:00')

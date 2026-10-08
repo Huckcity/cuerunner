@@ -232,4 +232,6 @@ export interface OutputProbe {
   size(): { width: number; height: number }
   pixel(x: number, y: number): number[]
   showing(): Array<{ cueId: string; opacity: number }>
+  /** Each video's element: its place in its file, and whether it is playing. */
+  videos(): Array<{ cueId: string; positionMs: number; paused: boolean; rate: number; heldAt: number | null; anchorPaused: boolean }>
 }

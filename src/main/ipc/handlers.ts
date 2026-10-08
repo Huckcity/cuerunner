@@ -5,6 +5,9 @@ import * as path from 'path'
 import { MidiEngine } from '../midi/MidiEngine'
 import type { MidiModuleLoader } from '../midi/MidiEngine'
 import { midiTcp } from '../midi/MidiTcpEngine'
+import { midiFiles } from '../midi/midiFileRuntime'
+import { installMidiLoopback } from '../midi/loopback'
+import { MIDI_FILE_EXTENSIONS } from '../../shared/midiFile'
 import { KeychainRefusedError, createEwDxCredentials } from '../ewdx/credentials'
 import { discoverEwDx } from '../ewdx/discovery'
 import { BatteryLog } from '../services/BatteryLog'
@@ -16,6 +19,8 @@ import {
   AUDIO_CHANNELS,
   type AudioCancelPayload,
   type AudioReleasePayload,
+  type AudioHoldPayload,
+  type AudioMasterPayload,
   type AudioOnsetsPayload,
   type AudioSilencePayload,
   type AudioConfigurePayload,
@@ -39,12 +44,27 @@ import {
   MIDI_CHANNELS,
   type MidiSendPayload,
   type MidiSendResult,
-  type MidiSendTcpPayload
+  type MidiSendTcpPayload,
+  type MidiFileCuePayload,
+  type MidiFileInspectPayload,
+  type MidiFileInspectResult,
+  type MidiFilePauseResult,
+  type MidiFilePlayPayload,
+  type MidiFilePlayResult,
+  type MidiFileResumeResult
 } from '../../shared/ipc/midi'
 import { NETWORK_CHANNELS } from '../../shared/ipc/network'
 import { OSC_CHANNELS, type OscSendPayload, type OscSendResult } from '../../shared/ipc/osc'
 import { PLAYBACK_CHANNELS } from '../../shared/ipc/playback'
 import { REDUNDANCY_CHANNELS, type RedundancyConfigureResult } from '../../shared/ipc/redundancy'
+import {
+  TIMECODE_CHANNELS,
+  type TimecodeControlPayload,
+  type TimecodeGenerateResult,
+  type TimecodeInputs
+} from '../../shared/ipc/timecode'
+import type { TimecodeGenerateRequest, TimecodeSettings, TimecodeShowSettings } from '../../shared/timecode'
+import { createTimecodeHub } from '../timecode/main'
 import {
   SCRIPT_CHANNELS,
   type ScriptReadDocumentPayload,
@@ -89,6 +109,9 @@ import { liveWindow, sendToWindow } from './broadcast'
 import { playbackSafety, noteEngineEvents } from '../safety/runtime'
 import { deviceFaultAlert } from '../safety/engineFaults'
 import { panicFromShowEvent } from '../safety/panicBindings'
+import { remotePanicFromEvent } from '../safety/remotePanic'
+import { openLogsFolder, sessionLogFile } from '../log/logsFolder'
+import { isLogBatch } from '../log/sessionLogFile'
 import { OscEngine } from '../osc/OscEngine'
 import {
   openWorkspace,
@@ -105,10 +128,20 @@ import {
 import { clearRecovery, writeRecovery } from '../workspace/recovery'
 import { exportBundle, importBundle } from '../workspace/bundle'
 import { openDemoWorkspace } from '../workspace/demo'
+import {
+  QLAB_CHANNELS,
+  type QLabFindMediaPayload,
+  type QLabFindMediaResult,
+  type QLabImportResult,
+  type QLabLivePayload,
+  type QLabWorkspacesResult
+} from '../../shared/ipc/qlab'
+import { findMediaInFolder, importQLabFile, importQLabLive, listLiveWorkspaces } from '../import/qlabImport'
 import { createShowRuntime, defaultServices } from '../show/runtime'
 import { createMachineRedundancy } from '../redundancy/machine'
+import { createMachineDmx } from '../dmx/machine'
 import type { RedundancySettings } from '../../shared/redundancy'
-import { drainMainErrors } from '../errors'
+import { drainMainErrors, onMainError } from '../errors'
 import { loadScriptDocument } from '../script/document'
 import { shellWorkingDirectory } from '../script/shellCwd'
 import { createLicenseManager } from '../license/LicenseManager'
@@ -122,6 +155,9 @@ import { AUDIO_FILE_EXTENSIONS } from '../../shared/media'
 import { registerOutputHandlers } from '../output/ipc'
 
 const midi = new MidiEngine(midiModuleLoader())
+// A MIDI File cue's players send through the same engine, so a port it names is the port
+// every other MIDI cue would reach by that name.
+midiFiles.useOutput((portName, messages) => midi.sendRaw(portName, messages))
 const osc = new OscEngine()
 
 // This machine's half of a redundant pair, read once at startup and written only when
@@ -163,12 +199,33 @@ function discoverReceivers(): Promise<EwDxDiscoverResult> {
 // show — a show is copied between machines and a pack is not — so it is kept here, beside the licence.
 const batteryLog = new BatteryLog({ filePath: path.join(app.getPath('userData'), 'rf-battery.json') })
 
+// SMPTE timecode: the clock this machine follows and the clocks its cues run. Its settings
+// are the machine's, kept beside the licence like the pair's: which port the clock arrives
+// on is a fact about this rack. The receiver is a show service, restarted on its own when
+// those settings change.
+const timecodeHub = createTimecodeHub({
+  filePath: path.join(app.getPath('userData'), 'timecode.json'),
+  sendMidi: (port, messages) => midi.sendRaw(port, messages),
+  listMidiInputs: () => midi.listInputPorts(),
+  ltc: (verb, params) => audioEngine.ltc(verb, params),
+  broadcast: status => broadcastToWindows(TIMECODE_CHANNELS.events, status),
+  restartReceiver: async () => {
+    if (settingsReceived) await show.restart('timecode')
+    else await show.configure(lastShowSettings)
+  }
+})
+
 const show = createShowRuntime(
   defaultServices({
+    timecode: () => timecodeHub,
     redundancy: () => machineRedundancy.current(),
     ewDx: ewDxCredentials,
     discoverReceivers,
-    batteryLog
+    batteryLog,
+    // Which interface the lights go out of and who this machine is on the wire: the
+    // machine's, beside the licence, so a show carried to another desk goes out of that
+    // desk's own network.
+    dmx: { machine: createMachineDmx({ filePath: path.join(app.getPath('userData'), 'dmx.json') }) }
   }),
   () => isPro(license.status())
 )
@@ -185,6 +242,11 @@ const network = new NetworkClient({ fetch: (url, init) => net.fetch(url, init) }
  * this branch, so nothing here can make a real installation look broken.
  */
 function midiModuleLoader(): MidiModuleLoader | undefined {
+  // The other harness: one output port, by the name the launch gives it, that writes down
+  // every message it is sent — so a spec can read what a MIDI File cue put on the wire on a
+  // machine with no MIDI at all (src/main/midi/loopback.ts).
+  const loopback = !app.isPackaged ? process.env['CUERUNNER_TEST_MIDI_LOOPBACK'] : undefined
+  if (loopback !== undefined && loopback !== '') return installMidiLoopback(loopback)
   if (!app.isPackaged && process.env['CUERUNNER_TEST_MIDI_MISSING'] === '1') {
     return () => {
       throw new Error("Cannot find module 'midi'")
@@ -270,7 +332,7 @@ show.subscribe(events => {
   // licensed show inputs — the same socket and the same ports as everything else the
   // panel shows — so nothing new is listening and nothing is loosened to make it work.
   for (const event of events) {
-    const binding = panicFromShowEvent(event)
+    const binding = panicFromShowEvent(event) ?? remotePanicFromEvent(event, lastShowSettings.oscIn)
     if (binding) playbackSafety.panic(binding.source, binding.reason)
   }
 })
@@ -380,6 +442,13 @@ export function registerIpcHandlers(): void {
     audioVerb(() => audioEngine.release(payload.cueId, payload.whenMs, payload.endMs)))
   ipcMain.handle(AUDIO_CHANNELS.cancel, (_, payload: AudioCancelPayload) =>
     audioVerb(() => audioEngine.cancel(payload.cueId, payload.whenMs)))
+  ipcMain.handle(AUDIO_CHANNELS.pause, (_, payload: AudioHoldPayload) =>
+    audioVerb(() => audioEngine.pause(payload.cueId, payload.whenMs)))
+  ipcMain.handle(AUDIO_CHANNELS.resume, (_, payload: AudioHoldPayload) =>
+    audioVerb(() => audioEngine.resume(payload.cueId, payload.whenMs)))
+  ipcMain.handle(AUDIO_CHANNELS.master, (_, payload: AudioMasterPayload) =>
+    audioVerb(() => audioEngine.master(payload.gain)))
+  ipcMain.handle(AUDIO_CHANNELS.meters, () => audioVerb(() => audioEngine.meters()))
   ipcMain.handle(AUDIO_CHANNELS.routing, (_, payload: AudioRoutingPayload) =>
     audioVerb(() => audioEngine.routing(payload.cueId, payload.outputs)))
   ipcMain.handle(AUDIO_CHANNELS.fade, (_, payload: AudioFadePayload) =>
@@ -441,6 +510,30 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(MIDI_CHANNELS.sendTcp, async (_, cmd: MidiSendTcpPayload): Promise<MidiSendResult> =>
     midiTcp.send(cmd.host, cmd.port, cmd.messages))
 
+  // MIDI File cues. Free, like every other MIDI cue. The file is read and played here, where
+  // the port is; the window is told what the file holds and how long a run will take, and a
+  // file that cannot be played or a port that is not there is an answer, not a fault.
+  ipcMain.handle(MIDI_CHANNELS.pickFile, async (event) => {
+    const result = await dialog.showOpenDialog(getWin(event), {
+      title: 'Select MIDI File',
+      filters: [
+        { name: 'MIDI Files', extensions: [...MIDI_FILE_EXTENSIONS] },
+        { name: 'All Files', extensions: ['*'] }
+      ],
+      properties: ['openFile']
+    })
+    return result.canceled ? null : result.filePaths[0]
+  })
+  ipcMain.handle(MIDI_CHANNELS.fileInspect, (_, cmd: MidiFileInspectPayload): Promise<MidiFileInspectResult> =>
+    refusalValue(async () => ({ ok: true as const, summary: await midiFiles.inspect(cmd.filePath) })))
+  ipcMain.handle(MIDI_CHANNELS.filePlay, (_, cmd: MidiFilePlayPayload): Promise<MidiFilePlayResult> =>
+    refusalValue(async () => ({ ok: true as const, ...await midiFiles.play(cmd) })))
+  ipcMain.handle(MIDI_CHANNELS.filePause, (_, cmd: MidiFileCuePayload): Promise<MidiFilePauseResult> =>
+    refusalValue(async () => ({ ok: true as const, ...midiFiles.pause(cmd.cueId) })))
+  ipcMain.handle(MIDI_CHANNELS.fileResume, (_, cmd: MidiFileCuePayload): Promise<MidiFileResumeResult> =>
+    refusalValue(async () => ({ ok: true as const, ...midiFiles.resume(cmd.cueId) })))
+  ipcMain.handle(MIDI_CHANNELS.fileStop, (_, cmd: MidiFileCuePayload): boolean => midiFiles.stop(cmd.cueId))
+
   // OSC
   ipcMain.handle(OSC_CHANNELS.send, async (_, cmd: OscSendPayload): Promise<OscSendResult> =>
     osc.send(cmd.host, cmd.port, cmd.address, cmd.args))
@@ -482,6 +575,16 @@ export function registerIpcHandlers(): void {
     refusalValue(() => saveReport(getWin(event), text)))
   ipcMain.handle(APP_CHANNELS.emailReport, (_, text: unknown) =>
     refusalValue(() => emailReport(text)))
+
+  // The session log on disk: the window's lines as it writes them, and main's own failures,
+  // which reach the file even when there is no window left to forward them. A batch that is
+  // not a bounded list of lines is not written — the file is not a place a window can pour into.
+  const logFile = sessionLogFile()
+  onMainError(message => { void logFile.append([`ERROR [main] ${message}`]) })
+  ipcMain.handle(APP_CHANNELS.writeLog, async (_, lines: unknown) => {
+    if (isLogBatch(lines)) await logFile.append(lines)
+  })
+  ipcMain.handle(APP_CHANNELS.openLogs, () => refusalValue(() => openLogsFolder()))
 
   ipcMain.handle(SHOW_CHANNELS.configure, async (_, settings: ShowSettings) => {
     lastShowSettings = settings
@@ -596,6 +699,32 @@ export function registerIpcHandlers(): void {
     else await show.configure(lastShowSettings)
     return { ok: true, settings }
   })
+
+  // Timecode. The settings are the machine's and free to read and write — they only say
+  // where to listen, and the receiver that listens is a Pro service the host answers for.
+  // Starting a clock is the Pro half, refused here where the licence is known.
+  ipcMain.handle(TIMECODE_CHANNELS.settings, (): TimecodeSettings => timecodeHub.current())
+  ipcMain.handle(TIMECODE_CHANNELS.configure, (_, patch: Partial<TimecodeSettings>): Promise<TimecodeSettings> =>
+    timecodeHub.update(patch))
+  ipcMain.handle(TIMECODE_CHANNELS.show, (_, settings: TimecodeShowSettings): TimecodeShowSettings =>
+    timecodeHub.applyShow(settings))
+  ipcMain.handle(TIMECODE_CHANNELS.status, () => timecodeHub.status())
+  ipcMain.handle(TIMECODE_CHANNELS.inputs, async (): Promise<TimecodeInputs> => {
+    // An engine that is not running has no capture devices to offer; the MIDI ports remain.
+    const audio = await timecodeHub.ltcInputs().catch(() => [])
+    return { midi: midi.listInputPorts(), audio }
+  })
+  ipcMain.handle(TIMECODE_CHANNELS.generate, (_, request: TimecodeGenerateRequest): Promise<TimecodeGenerateResult> =>
+    refusalValue(async () => {
+      if (!isPro(license.status())) throw new Refusal('Cuerunner Pro is required to generate timecode')
+      const result = await timecodeHub.generate(request)
+      if (!result.ok) throw new Refusal(result.error)
+      return result
+    }))
+  ipcMain.handle(TIMECODE_CHANNELS.control, (_, payload: TimecodeControlPayload): Promise<boolean> =>
+    timecodeHub.control(payload.cueId, payload.action))
+  // The clocks a cue started stop with the app, and so does the reader.
+  app.on('will-quit', () => timecodeHub.dispose())
 
   // License. The window reads the status, asks for a key to be checked, and is told
   // when it changes — including the change it asked for.
@@ -826,4 +955,29 @@ export function registerIpcHandlers(): void {
     // declared answer is the three it does have, so anything else reads as Save.
     return result.response === 1 ? 1 : result.response === 2 ? 2 : 0
   })
+
+  // QLab import. Free: it is how a QLab user arrives, and the show it makes is theirs. The
+  // file is read and the socket opened here, never in the window; a file that is not a
+  // workspace, a QLab that is not there and a passcode it would not take are the refusal
+  // arm, said where each was found (`src/main/import/`).
+  ipcMain.handle(QLAB_CHANNELS.importFile, (event): Promise<QLabImportResult> =>
+    refusalValue(async (): Promise<QLabImportResult> => ({ ok: true, imported: await importQLabFile(getWin(event)) })))
+
+  ipcMain.handle(
+    QLAB_CHANNELS.listWorkspaces,
+    (_, address: { host: unknown; port: unknown }): Promise<QLabWorkspacesResult> =>
+      refusalValue(async (): Promise<QLabWorkspacesResult> => ({
+        ok: true,
+        workspaces: await listLiveWorkspaces(address?.host, address?.port)
+      }))
+  )
+
+  ipcMain.handle(QLAB_CHANNELS.importLive, (_, payload: QLabLivePayload): Promise<QLabImportResult> =>
+    refusalValue(async (): Promise<QLabImportResult> => ({ ok: true, imported: await importQLabLive(payload) })))
+
+  ipcMain.handle(QLAB_CHANNELS.findMedia, (event, payload: QLabFindMediaPayload): Promise<QLabFindMediaResult> =>
+    refusalValue(async (): Promise<QLabFindMediaResult> => ({
+      ok: true,
+      found: await findMediaInFolder(getWin(event), payload.workspace, payload.workspacePath)
+    })))
 }

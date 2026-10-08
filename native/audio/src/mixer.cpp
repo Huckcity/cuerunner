@@ -369,6 +369,12 @@ Voice* Mixer::startVoice(const Command& cmd) {
 }
 
 void Mixer::stopVoice(Voice& voice, int64_t frame, double fadeFrames, EndReason reason) {
+  if (voice.pausedSince >= 0) {
+    // A held voice is already silent, and its stamped frames are not moving: a stop's fade
+    // or its later frame would wait for a resume that is not coming. It ends where it is.
+    finishVoice(voice, clockFrames_, voice.started ? reason : EndReason::Cancelled);
+    return;
+  }
   if (!voice.started) {
     // A run that was scheduled but never became audible: it is dropped, and the
     // caller's stop is reported as having applied.
@@ -437,6 +443,94 @@ void Mixer::panic(double atFrame, double fadeFrames, EndReason soundingReason) {
   event.fadeMs = fadeFrames;
   event.atMs = static_cast<double>(frame) * 1000.0 / static_cast<double>(sampleRate_);
   emit(event);
+}
+
+// How long the edge of a pause takes: long enough that the cut and the restart do not
+// click, short enough to read as the press.
+static constexpr double kHoldEdgeMs = 8.0;
+
+/**
+ * Holds a voice where it stands from `frame`. A voice that is sounding is taken down over
+ * the hold edge first and held once it is silent; one that has not begun yet is held at
+ * once, so its start waits with it. A voice already held, or already on its way to being
+ * held, is left as it is and the caller is told nothing changed.
+ */
+bool Mixer::pauseVoice(Voice& voice, int64_t frame) {
+  if (voice.pausedSince >= 0) {
+    // Already held: a pause that lands before a pending resume takes the resume back.
+    if (voice.resumeAt < 0) return false;
+    voice.resumeAt = -1;
+    return true;
+  }
+  if (voice.pauseAt >= 0) return false;
+  if (!voice.started || frame < voice.startFrame) {
+    voice.pausedSince = std::max(frame, clockFrames_);
+    return true;
+  }
+  // From wherever the edge stands now — all the way up, unless a resume is still bringing
+  // the voice back — so a press in the middle of an edge does not jump.
+  const double current = rampValue(voice.holdRamp, frame);
+  const int64_t edge = frameForMs(kHoldEdgeMs, sampleRate_);
+  voice.holdRamp.active = true;
+  voice.holdRamp.from = current;
+  voice.holdRamp.to = 0.0;
+  voice.holdRamp.startFrame = frame;
+  voice.holdRamp.endFrame = frame + edge;
+  voice.holdRamp.curve = Curve::Linear;
+  voice.pauseAt = frame + edge;
+  return true;
+}
+
+/**
+ * Lets a held voice go on from `frame`: the hold ends at that frame, in the render, so the
+ * frames before it are still held rather than spent. A pause still taking hold is called
+ * off where its edge has got to.
+ */
+bool Mixer::resumeVoice(Voice& voice, int64_t frame) {
+  if (voice.pauseAt >= 0) {
+    const double current = rampValue(voice.holdRamp, frame);
+    voice.pauseAt = -1;
+    voice.holdRamp.from = current;
+    voice.holdRamp.to = 1.0;
+    voice.holdRamp.startFrame = frame;
+    voice.holdRamp.endFrame = frame + frameForMs(kHoldEdgeMs, sampleRate_);
+    return true;
+  }
+  if (voice.pausedSince < 0 || voice.resumeAt >= 0) return false;
+  voice.resumeAt = std::max(frame, voice.pausedSince);
+  return true;
+}
+
+/**
+ * The end of a hold, at the frame it was asked for. Every frame-stamped field moves on by
+ * however long the voice was held — a fade half-way through is half-way through again, a
+ * stop scheduled for two seconds after the pause is two seconds after the resume, a start
+ * not yet reached is that much later — and the sound comes back over the hold edge.
+ */
+void Mixer::letGo(Voice& voice, int64_t frame) {
+  const int64_t held = frame - voice.pausedSince;
+  auto shift = [held](FadeRamp& ramp) {
+    if (!ramp.active) return;
+    ramp.startFrame += held;
+    ramp.endFrame += held;
+  };
+  if (!voice.started) voice.startFrame += held;
+  if (voice.stopFrame >= 0) voice.stopFrame += held;
+  shift(voice.fadeIn);
+  shift(voice.stopFade);
+  for (FadeRamp& ramp : voice.ramps) shift(ramp);
+  voice.pausedSince = -1;
+  voice.resumeAt = -1;
+  if (voice.started) {
+    voice.holdRamp.active = true;
+    voice.holdRamp.from = 0.0;
+    voice.holdRamp.to = 1.0;
+    voice.holdRamp.startFrame = frame;
+    voice.holdRamp.endFrame = frame + frameForMs(kHoldEdgeMs, sampleRate_);
+    voice.holdRamp.curve = Curve::Linear;
+  } else {
+    voice.holdRamp.active = false;
+  }
 }
 
 void Mixer::cancelUnstartedVoices() {
@@ -558,6 +652,28 @@ void Mixer::apply(const Command& cmd) {
       applied = canceled > 0;
       break;
     }
+    case Command::Pause: {
+      Voice* voice = findVoice(cmd.cueId);
+      if (voice != nullptr) {
+        applied = pauseVoice(*voice, atOrNow(cmd.whenMs, sampleRate_, now));
+        ackState = static_cast<int>(voice->state);
+      }
+      break;
+    }
+    case Command::Resume: {
+      Voice* voice = findVoice(cmd.cueId);
+      if (voice != nullptr) {
+        applied = resumeVoice(*voice, atOrNow(cmd.whenMs, sampleRate_, now));
+        ackState = static_cast<int>(voice->state);
+      }
+      break;
+    }
+    case Command::Master: {
+      // Bounded where the window's fader is: silence up to twice unity, +6 dB.
+      masterTarget_ = std::min(2.0, std::max(0.0, cmd.value));
+      applied = true;
+      break;
+    }
     case Command::Fade: {
       Voice* voice = findVoice(cmd.cueId);
       if (voice != nullptr) {
@@ -662,6 +778,16 @@ void Mixer::render(float* out, int frames, int channels) {
 
     for (Voice& voice : voices_) {
       if (!voice.active) continue;
+      // A held voice spends no time: nothing about it moves until it is let go.
+      if (voice.pausedSince >= 0) {
+        if (voice.resumeAt < 0 || frame < voice.resumeAt) continue;
+        letGo(voice, frame);
+      }
+      if (voice.pauseAt >= 0 && frame >= voice.pauseAt) {
+        voice.pausedSince = frame;
+        voice.pauseAt = -1;
+        continue;
+      }
       if (frame < voice.startFrame) continue;
       if (!voice.started) {
         beginVoice(voice, frame);
@@ -751,7 +877,7 @@ void Mixer::render(float* out, int frames, int channels) {
 
       const double gain = paramValue(voice, static_cast<int>(Param::Volume), frame) *
                           paramValue(voice, static_cast<int>(Param::Trim), frame) * rampValue(voice.fadeIn, frame) *
-                          rampValue(voice.stopFade, frame);
+                          rampValue(voice.stopFade, frame) * rampValue(voice.holdRamp, frame);
 
       double panLeft = 1.0;
       double panRight = 1.0;
@@ -818,6 +944,33 @@ void Mixer::render(float* out, int frames, int channels) {
       }
     }
   }
+  applyMaster(out, frames, channels);
+}
+
+/**
+ * The master level and the meter, over a block every voice has already been mixed into: the
+ * level is ramped from where the last block left it to where it is asked to be, and each
+ * channel's peak is taken after it, so the meter reads what leaves the engine.
+ */
+void Mixer::applyMaster(float* out, int frames, int channels) {
+  const int metered = std::min(channels, kMaxOutputChannels);
+  meterChannels_ = metered;
+  for (int channel = 0; channel < metered; channel++) blockPeak_[channel] = 0.0f;
+  const double from = masterCurrent_;
+  const double to = masterTarget_;
+  const bool flat = from == to;
+  for (int frame = 0; frame < frames; frame++) {
+    const double gain = flat ? to : from + (to - from) * static_cast<double>(frame + 1) / static_cast<double>(frames);
+    float* outFrame = out + static_cast<size_t>(frame) * static_cast<size_t>(channels);
+    for (int channel = 0; channel < channels; channel++) {
+      if (gain != 1.0) outFrame[channel] = static_cast<float>(static_cast<double>(outFrame[channel]) * gain);
+      if (channel < metered) {
+        const float level = std::fabs(outFrame[channel]);
+        if (level > blockPeak_[channel]) blockPeak_[channel] = level;
+      }
+    }
+  }
+  masterCurrent_ = to;
 }
 
 void Mixer::snapshotVoice(const Voice& voice, VoiceSnapshot& out) const {
@@ -867,6 +1020,11 @@ void Mixer::writeSnapshot(MixSnapshot& staging, SnapshotCell<MixSnapshot>& cell,
     if (voice.streamSlot >= 0) staging.streamingVoices++;
   }
   staging.active = staging.activeVoices > 0;
+  staging.meterChannels = meterChannels_;
+  for (int channel = 0; channel < kMaxOutputChannels; channel++) {
+    staging.meterPeak[channel] = channel < meterChannels_ ? blockPeak_[channel] : 0.0f;
+  }
+  staging.masterGain = masterTarget_;
   cell.publish(staging);
 }
 

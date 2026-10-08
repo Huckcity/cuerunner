@@ -30,6 +30,8 @@ function savedShape(): Workspace {
     midiSettings: s.midiSettings,
     showSettings: s.showSettings,
     triggerGuard: s.triggerGuard,
+    lighting: s.lighting,
+    timecode: s.timecode,
     videoOutputs: s.videoOutputs,
     cues: s.cues
   })

@@ -118,6 +118,9 @@ const MAX_SETTING_DEPTH = 2
  * keeps a later version's field from going silently unrecorded.
  */
 function isEdit(type: CueType, field: string): boolean {
+  // A MIDI File cue's length is what main read its file's tempo map to come to, written
+  // when the file is chosen or played: a measurement, like an audio cue's.
+  if (type === 'midiFile' && field === 'duration') return false
   switch (field) {
     // A cue's identity, where it sits, and the route to its file on this machine are the
     // app's own bookkeeping, at every type. `media` — the saved route to the file — is

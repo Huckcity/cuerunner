@@ -29,7 +29,7 @@ async function menu(): Promise<{ top: string[]; file: string[] }> {
 
 test('the menu bar is the conventional one for this platform, with no second Cuerunner', async () => {
   const { top } = await menu()
-  expect(top).toEqual(mac ? ['Cuerunner', 'File', 'Edit', 'Playback'] : ['File', 'Edit', 'Playback', 'Help'])
+  expect(top).toEqual(mac ? ['Cuerunner', 'File', 'Edit', 'View', 'Playback'] : ['File', 'Edit', 'View', 'Playback', 'Help'])
 })
 
 test('the Cuerunner button and the File menu offer the same things', async () => {

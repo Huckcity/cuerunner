@@ -16,13 +16,15 @@ import { Advanced, ServiceBlock } from '../common/SettingsBlock'
 import { formatBytes } from '../../utils/mediaFootprint'
 import { currentPlatform } from '../../utils/shortcuts'
 import { DEFAULT_POLL_MS, DEFAULT_TIMEOUT_MS } from '../../../../shared/show'
-import { TRIGGER_GUARD_MAX_MS, TRIGGER_GUARD_MIN_MS } from '../../../../shared/workspace'
+import { STOP_FADE_MAX_MS, TRIGGER_GUARD_MAX_MS, TRIGGER_GUARD_MIN_MS } from '../../../../shared/workspace'
 import { AUDIO_SILENCE_THRESHOLD_DB } from '../../../../shared/audio'
+import { isAllowEntry, remoteEnabled } from '../../../../shared/oscRemote'
 import type { EwDxFound } from '../../../../shared/ipc/show'
 import type { RfThresholds, TelemetrySource, TelemetrySourceKind } from '../../../../shared/show'
 import type { SettingsTab } from '../../store'
 import { LicenseSection } from '../license/LicenseSection'
 import { RedundancySection } from '../redundancy/RedundancySection'
+import { TimecodeSection } from '../timecode/TimecodeSection'
 import './SettingsDialog.css'
 
 interface Props {
@@ -77,6 +79,7 @@ const SETTINGS_TABS: { id: SettingsTab; label: string; scope: 'show' | 'machine'
   { id: 'network', label: 'Network', scope: 'show' },
   { id: 'wireless', label: 'Wireless', scope: 'show' },
   { id: 'redundancy', label: 'Backup machine', scope: 'machine' },
+  { id: 'timecode', label: 'Timecode', scope: 'machine' },
   { id: 'license', label: 'License', scope: 'machine' }
 ]
 
@@ -88,7 +91,8 @@ const TAB_BLURB: Record<SettingsTab, string> = {
   network: 'How consoles, tablets and other gear reach this show.',
   wireless: 'Where pack readings come from, and when to warn about them.',
   redundancy: 'A second computer, ready to take the show over.',
-  license: 'Cuerunner Pro on this machine.'
+  license: 'Cuerunner Pro on this machine.',
+  timecode: 'The SMPTE clock this machine follows, and how the cue list follows it.'
 }
 
 /** Which service reports for a tab, so the sidebar can show whether it is on. */
@@ -96,13 +100,19 @@ const TAB_SERVICE: Partial<Record<SettingsTab, string>> = {
   midi: 'midi-in',
   network: 'osc-in',
   wireless: 'rf',
-  redundancy: 'redundancy'
+  redundancy: 'redundancy',
+  timecode: 'timecode'
 }
 
 /**
  * Why a Pro service's settings are here but not running. The settings travel with the
  * show whatever the license says; only the listening waits for one.
  */
+/** The allow list as it is typed: entries by comma or space, blanks dropped. */
+export function splitAllowList(text: string): string[] {
+  return text.split(/[,\s]+/).map(entry => entry.trim()).filter(Boolean)
+}
+
 function ProHint({ onUnlock, children }: { onUnlock: () => void; children?: React.ReactNode }) {
   return (
     <p className="inspector-hint license-hint">
@@ -355,6 +365,21 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
               <p className="inspector-hint">
                 Ignores a second GO that arrives this soon after the first — a footswitch
                 that bounces, a desk that sends twice, a key held down. 0 turns it off.
+              </p>
+              <div className="field-row">
+                <label htmlFor="settings-stop-fade">STOP fade</label>
+                <NumberField
+                  id="settings-stop-fade"
+                  value={triggerGuard.stopFadeMs ?? 0}
+                  min={0}
+                  max={STOP_FADE_MAX_MS}
+                  step={10}
+                  onValue={next => { if (next !== null) updateTriggerGuard({ stopFadeMs: next }) }}
+                />
+                <span className="settings-info">ms</span>
+              </div>
+              <p className="inspector-hint">
+                0 cuts at once. With a fade, a second STOP during it cuts what is left.
               </p>
             </>
           )}
@@ -658,6 +683,37 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                   disabled={!showSettings.oscIn.enabled}
                   onValue={port => updateOscInSettings({ port })}
                 />
+                <div className="field-row">
+                  <label htmlFor="settings-osc-remote">Remote</label>
+                  <input
+                    id="settings-osc-remote"
+                    type="checkbox"
+                    checked={remoteEnabled(showSettings.oscIn)}
+                    disabled={!showSettings.oscIn.enabled}
+                    onChange={e => updateOscInSettings({ remote: e.target.checked })}
+                  />
+                  <span className="settings-info">Answer /go, /stop and /cue/12/start</span>
+                </div>
+                <p className="inspector-hint" data-scope="panel">
+                  Cuerunner's addresses and QLab's, so a QLab remote runs this show.
+                </p>
+                <div className="field-row">
+                  <label htmlFor="settings-osc-allow">Allow from</label>
+                  <TextField
+                    id="settings-osc-allow"
+                    placeholder="anyone"
+                    value={(showSettings.oscIn.allowFrom ?? []).join(', ')}
+                    disabled={!showSettings.oscIn.enabled}
+                    validate={text => {
+                      const bad = splitAllowList(text).find(entry => !isAllowEntry(entry))
+                      return bad === undefined ? null : `“${bad}” is not an address or a range like 10.0.0.0/24`
+                    }}
+                    onValue={text => updateOscInSettings({ allowFrom: splitAllowList(text) })}
+                  />
+                </div>
+                <p className="inspector-hint" data-scope="panel">
+                  Addresses or ranges, comma-separated. Empty hears everyone.
+                </p>
               </ServiceBlock>
 
               {!pro && (
@@ -858,6 +914,8 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
           {tab === 'redundancy' && <RedundancySection />}
 
           {tab === 'license' && <LicenseSection />}
+
+          {tab === 'timecode' && <TimecodeSection />}
         </div>
       </div>
     </div>

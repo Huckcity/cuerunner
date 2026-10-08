@@ -41,12 +41,94 @@
    rather than by a padding that has to be kept in step with them. The header is laid out
    with the same gap as a row (App.css --space-2), so a column heading sits over its
    column whatever is in it. */
-.col-num   { width: 68px; flex-shrink: 0; }
-.col-name  { flex: 1; min-width: 0; }
-.col-dur   { width: 76px; flex-shrink: 0; text-align: right; }
-.col-pre   { width: 64px; flex-shrink: 0; text-align: right; }
-.col-post  { width: 64px; flex-shrink: 0; text-align: right; }
-.col-adv   { width: 80px; flex-shrink: 0; text-align: right; }
+.col-num   { width: 68px; flex-shrink: 0; order: 1; }
+.col-name  { flex: 1; min-width: 0; order: 2; }
+/* The columns after the name are the operator's to arrange (utils/cueColumns.ts): the list's
+   container carries each one's width and place as a custom property, and the defaults here
+   are the layout the list has always had. */
+.col-dur   { width: var(--col-dur-w, 76px); flex-shrink: 0; text-align: right; order: var(--col-dur-order, 10); }
+.col-pre   { width: var(--col-pre-w, 64px); flex-shrink: 0; text-align: right; order: var(--col-pre-order, 11); }
+.col-post  { width: var(--col-post-w, 64px); flex-shrink: 0; text-align: right; order: var(--col-post-order, 12); }
+.col-adv   { width: var(--col-adv-w, 80px); flex-shrink: 0; text-align: right; order: var(--col-adv-order, 13); }
+.col-notes {
+  width: var(--col-notes-w, 180px);
+  flex-shrink: 0;
+  order: var(--col-notes-order, 14);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cue-list-container[data-hidden~='dur'] .col-dur,
+.cue-list-container[data-hidden~='pre'] .col-pre,
+.cue-list-container[data-hidden~='post'] .col-post,
+.cue-list-container[data-hidden~='adv'] .col-adv,
+.cue-list-container[data-hidden~='notes'] .col-notes { display: none; }
+
+/* A heading is a handle: it moves its column, and its left edge sizes it. */
+.column-heading {
+  position: relative;
+  cursor: grab;
+  user-select: none;
+}
+
+.column-heading[data-drop-before] { box-shadow: inset 2px 0 0 var(--accent-blue); }
+
+.column-resize {
+  position: absolute;
+  left: calc(-1 * var(--space-2));
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+}
+
+.column-resize:hover { box-shadow: inset 2px 0 0 var(--border-input); }
+
+.column-menu {
+  position: fixed;
+  z-index: 300;
+  min-width: 160px;
+  padding: var(--space-1) 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.column-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  color: var(--fg-body);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.column-menu-item:hover { background: var(--bg-hover); }
+
+.column-menu-separator {
+  height: 1px;
+  margin: var(--space-1) 0;
+  background: var(--border);
+}
+
+.column-menu-reset {
+  width: 100%;
+  padding: var(--space-1) var(--space-3);
+  background: transparent;
+  border: none;
+  color: var(--fg-body);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.column-menu-reset:hover { background: var(--bg-hover); }
+
+/* A note in the list is read, not edited: the tone the list keeps for what is said. */
+.cue-row .col-notes { color: var(--fg-muted); font-size: var(--text-sm); }
 
 /* In the header the number column is only the number: the rows keep the rest of it for
    the icon slot, which has no heading of its own. */

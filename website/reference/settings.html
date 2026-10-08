@@ -58,6 +58,7 @@
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
             <tr><td>Repeat guard</td><td>300 ms</td><td>Ignores a second GO arriving this soon after the first, from the space bar, a trigger or a console. 0 turns it off.</td></tr>
+            <tr><td>STOP fade</td><td>0 ms</td><td>How long STOP — <kbd>Esc</kbd>, the button, a remote's <code>/stop</code> — fades everything over. 0 cuts at once. With a fade, the show lets go at once and the sound fades; a second STOP during the fade cuts what is left. Saved with the show.</td></tr>
           </tbody>
         </table>
       </div>
@@ -110,6 +111,8 @@
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
             <tr><td>OSC control</td><td>on, port 53000</td><td>Takes cues and commands from consoles, desks and tablets. A port another program holds is reported rather than taken.</td></tr>
+            <tr><td>↳ Remote</td><td>on</td><td>Answers the transport addresses — <code>/go</code>, <code>/stop</code>, <code>/cue/12/start</code> and the rest, in Cuerunner's namespace and QLab's. See <a href="control.html#remote">the remote</a>.</td></tr>
+            <tr><td>↳ Allow from</td><td>anyone</td><td>Addresses or IPv4 ranges (<code>10.0.0.5, 192.168.1.0/24</code>). Anyone else's datagrams are dropped before a trigger, the remote or the Monitor sees them, and each refused sender is named once in the log.</td></tr>
             <tr><td>Find devices<span class="pro">Pro</span></td><td>off</td><td>Lists gear that announces itself on the network — Dante endpoints among them — in the Monitor, and warns when one drops off.</td></tr>
             <tr><td>↳ Service types</td><td><code>_netaudio-arc._udp.local</code>, <code>_netaudio-cmc._udp.local</code></td><td>Under Advanced. What to browse for.</td></tr>
             <tr><td>↳ Gone after</td><td>30 s</td><td>Under Advanced. How long a device can go unseen before it counts as gone.</td></tr>
@@ -178,6 +181,26 @@
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section class="panel reveal delay-3" id="timecode">
+      <h2>Timecode</h2>
+      <p>Two halves. <strong>Source</strong> and where it arrives — the MIDI input, the audio input and channel, the UDP port — are kept on the computer: which port the clock is on is a fact about this rack. Everything under <strong>This show</strong> — rate, freewheel, chase, what happens when it stops, offset and tolerance — is saved in the show file, so the show follows its clock the same way on any machine that opens it; a show that leaves them all at their defaults carries nothing for them, and an edit to them goes back with undo. The receiver is part of Cuerunner Pro. The <a href="../guides/console.html#timecode">guide</a> shows it in use.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Source</td><td>None</td><td>Where the clock comes from: <strong>MTC</strong> on a MIDI input (the first one there is, if none is chosen; a port MIDI input already has open is shared with it), <strong>LTC</strong> on a channel of an audio input, read by the audio engine, or <strong>Art-Net</strong> ArtTimeCode on a UDP port (6454).</td></tr>
+            <tr><td>Rate</td><td>Detect from the stream</td><td>Takes the rate MTC and ArtTimeCode declare, and measures the rest: 29.97 non-drop is told from 30 by timing the stream (a few seconds of it), and LTC's 24, 25 and 30 by its frame numbers. A fixed rate reads every label at that rate instead.</td></tr>
+            <tr><td>Freewheel</td><td>1000 ms</td><td>How long a clock that stops arriving is carried on at its own rate before it counts as lost (0–10000). A cue on a frame inside the gap still fires.</td></tr>
+            <tr><td>Chase</td><td>off</td><td>The cue list goes where the clock goes: a locate starts each audio or wait cue whose trigger is behind the clock and whose length reaches past it, that far into itself, and stops what the clock started and has left behind. Off, a locate only arms again what the clock is now before.</td></tr>
+            <tr><td>When it stops</td><td>Hold</td><td>With chase on, what the cues the clock started do when it stops or is lost: <strong>Hold</strong> stops them and picks them up again where the clock comes back; <strong>Stop</strong> stops them; <strong>Let them run on</strong>.</td></tr>
+            <tr><td>Offset</td><td>00:00:00:00</td><td>Added to the incoming clock before any cue reads it, written in 30 fps labels; a leading minus subtracts. How a show written at 10:00:00:00 runs against a clock that starts at 01:00:00:00.</td></tr>
+            <tr><td>Tolerance</td><td>10 frames</td><td>How far the clock may skip forward and still fire the triggers it skipped (0–300). A jump further than that is a locate.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The panel under the source reads back the clock as it is heard: position, <strong>Locked</strong>, <strong>Freewheel</strong>, <strong>Stopped</strong>, <strong>Lost</strong> or <strong>Waiting</strong>, the rate and whether it was detected, and what the timecode cues are sending. The same readout is in the transport bar and the show monitor.</p>
     </section>
 
     <section class="panel reveal delay-3" id="license">

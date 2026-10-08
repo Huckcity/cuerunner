@@ -1,3 +1,6 @@
+import type { IntensityRule, LightEffect, LightLevel } from './dmx'
+import type { TimecodeRate } from './timecode'
+
 /** A cue's colour label, or none. */
 export type CueColor = 'none' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink'
 
@@ -9,6 +12,8 @@ export type CueColor = 'none' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' |
 export const CUE_TYPES = [
   'audio', 'midi', 'osc', 'wait', 'fade', 'stop',
   'group', 'network', 'script', 'scene', 'devamp', 'msc', 'mic',
+  'memo', 'midiFile', 'light',
+  'timecode',
   'video', 'image', 'text'
 ] as const
 
@@ -24,8 +29,14 @@ export type CueType = (typeof CUE_TYPES)[number]
  * live equipment on the show's behalf, where a send the operator's own hand caused is not,
  * whichever socket it uses. The runner refuses these through `isProCueType` when the machine
  * is unlicensed.
+ *
+ * `light` too: a Light cue puts a look on the rig that the lighting engine holds and sends on
+ * the show's behalf for as long as the show runs, the way the desk is held by a scene.
+ *
+ * `timecode` too: a clock that drives the lighting desk, the video server and the band's
+ * click from the cue list is the production running the building, not a send of its own.
  */
-export const PRO_CUE_TYPES = ['scene', 'mic'] as const satisfies readonly CueType[]
+export const PRO_CUE_TYPES = ['scene', 'mic', 'light', 'timecode'] as const satisfies readonly CueType[]
 
 export type ProCueType = (typeof PRO_CUE_TYPES)[number]
 
@@ -77,6 +88,13 @@ export type CueTrigger =
       cueNumber: string
       cueList: string
     }
+  /**
+   * A frame of the incoming SMPTE clock: the cue fires when the clock runs through it. The
+   * label is read at the rate the clock arrives at, as an operator reads it off the desk.
+   * Whichever wire the clock came in on, the trigger is the same — the receiver is the
+   * machine's, the moment is the show's.
+   */
+  | { id: string; kind: 'timecode'; timecode: string }
 
 export interface CueBase {
   id: string
@@ -127,6 +145,13 @@ export interface AudioCue extends CueBase {
   startTime: number
   endTime: number | null
   fadeInDuration: number
+  /**
+   * How long, in ms, the cue fades to silence before its own end — the end of its region, or
+   * of its last loop. Optional on disk: a show saved before it existed has none, and absent
+   * is no fade, which is what that show did. A cue that loops for ever has no end to land a
+   * fade on; it is faded by a fade cue or a stop cue, as it always was.
+   */
+  fadeOutDuration?: number
   /** Master level, 0–1, applied to every output. */
   volume: number
   /** Master pan, −1 (left) to 1 (right); automatic routing spreads it across the pair. */
@@ -216,6 +241,12 @@ export interface FadeCue extends CueBase {
    */
   fadeProperty: 'volume' | 'pan' | 'opacity'
   targetValue: number
+  /**
+   * Where a volume fade takes the pan as well, −1 to 1, over the same time and curve — the
+   * sound that walks off to one side as it goes. Optional on disk, and absent or null is a
+   * fade of the one property, which is what a show saved before it existed did.
+   */
+  panTargetValue?: number | null
   curve: FadeCurve
   stopTargetWhenDone: boolean
 }
@@ -286,6 +317,16 @@ export interface MicCue extends CueBase {
   action: 'mute' | 'unmute'
 }
 
+/**
+ * A note in the stack: what the show needs said where it happens — "hold for the bow",
+ * "LX 40 is called by the SM" — and nothing else. Its words are the cue's own name and
+ * notes, so it carries no field of its own. GO on it completes at once and passes any
+ * chain through it, so a memo between two cues never holds the show.
+ */
+export interface MemoCue extends CueBase {
+  type: 'memo'
+}
+
 export interface SceneCue extends CueBase {
   type: 'scene'
   /** The scene to recall, or empty for a cue that has not been pointed at one yet. */
@@ -333,6 +374,94 @@ export interface MscCue extends CueBase {
   portName: string
 }
 
+/**
+ * A cue that plays a Standard MIDI File to one MIDI output port: a backing track's keys,
+ * a click, a lighting desk's own timecoded show — whatever the file holds, at the file's own
+ * tempo map, from main, where the port is.
+ *
+ * Everything about the performance is the file's. What the cue adds is where it goes and how
+ * it is played there: the rate, the part of the file, how often it loops, which of its
+ * channels reach the port and as which channel, and a transposition.
+ */
+export interface MidiFileCue extends CueBase {
+  type: 'midiFile'
+  /** The `.mid` on this machine, or empty for a cue that has not been given one. */
+  filePath: string
+  /** The output port, or empty for the show's own MIDI output port. */
+  portName: string
+  /** 1 is the file's own tempo; 2 plays it in half the time. */
+  playbackRate: number
+  /** Where in the file the cue starts, ms of the file at its own tempo. */
+  startTime: number
+  /** Where it stops, the same way, or null for the end of the file. */
+  endTime: number | null
+  /** 0 plays the region once, n plays it n more times, and −1 loops it until stopped. */
+  loopCount: number
+  /**
+   * Sixteen entries, one per channel of the file: the channel it is sent on, 1–16, or 0 for
+   * a channel that is not sent at all. `[1, 2, … 16]` is the file as written.
+   */
+  channelMap: number[]
+  /** Semitones every note moves by; 0 is the file as written. */
+  transpose: number
+  /**
+   * Whether the transposition reaches the file's channel 10 too. Off by default: that is
+   * where a General MIDI file keeps its drums, and a transposed drum kit is other drums.
+   */
+  transposeDrums: boolean
+}
+
+/**
+ * A cue that puts a look on the lighting rig: the parameters it names fade to its values over
+ * its duration, and everything it does not name stays where the cues before it left it —
+ * tracking, the way a lighting console runs a cue list. A later cue that sets the same
+ * parameter takes it (latest takes precedence); intensity may instead combine highest takes
+ * precedence with every other cue that asks for that.
+ *
+ * Stopping a Light cue stops its fade where it is and leaves the light on; a Stop cue with a
+ * fade-out releases it, so what it holds fades home. A Fade cue aimed at one moves its
+ * intensity to a share of what it set.
+ */
+export interface LightCue extends CueBase {
+  type: 'light'
+  /** What the cue changes, and nothing it tracks. */
+  look: LightLevel[]
+  /** Parameters that keep moving once the cue has run — a sine, a chase. */
+  effects: LightEffect[]
+  curve: FadeCurve
+  intensity: IntensityRule
+}
+
+/**
+ * A cue that runs a SMPTE clock: from a start time, to an end time or until it is stopped,
+ * out of whichever of the three wires the rest of the building listens on — MTC to a MIDI
+ * port, LTC from an output channel of the audio engine, ArtTimeCode to the lighting
+ * network. The clock is one position read by all three, so they cannot disagree.
+ */
+export interface TimecodeCue extends CueBase {
+  type: 'timecode'
+  rate: TimecodeRate
+  /** The label the clock starts from: `01:00:00:00`. */
+  startTimecode: string
+  /** The label it stops itself at, or empty to run until it is stopped. */
+  endTimecode: string
+  /**
+   * Start from the clock being received instead, keep to it while it runs, and carry on
+   * alone when it drops out: a jam sync, which is what regenerates a clock cleanly.
+   */
+  jamSync: boolean
+  mtc: boolean
+  /** The MIDI output for MTC; empty is the show's own MIDI port. */
+  mtcPortName: string
+  ltc: boolean
+  /** The engine output channel LTC is written to, zero-based: a channel of its own. */
+  ltcChannel: number
+  /** LTC's level, dBFS. */
+  ltcLevelDb: number
+  artnet: boolean
+  /** Where ArtTimeCode goes: a broadcast address, a node, or "host:port". */
+  artnetHost: string
+}
 // The picture cues. Their shapes live with the rest of the visual model — outputs, geometry,
 // layers — in src/shared/visual.ts, which imports nothing from here but `CueBase`.
 import type { VideoCue, ImageCue, TextCue } from './visual'
@@ -352,6 +481,10 @@ export type Cue =
   | DevampCue
   | MscCue
   | MicCue
+  | MemoCue
+  | MidiFileCue
+  | LightCue
+  | TimecodeCue
   | VideoCue
   | ImageCue
   | TextCue

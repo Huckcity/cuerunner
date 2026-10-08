@@ -85,6 +85,8 @@ export const WORKSPACE_SECTIONS = [
   { key: 'midiSettings', route: 'midi', merge: 'section' },
   { key: 'showSettings', route: 'show', merge: 'keys' },
   { key: 'triggerGuard', route: 'guard', merge: 'section' },
+  { key: 'lighting', route: 'lighting', merge: 'section' },
+  { key: 'timecode', route: 'timecode', merge: 'section' },
   { key: 'videoOutputs', route: 'outputs', merge: 'section' },
   { key: 'cues', route: null, merge: 'cue' }
 ] as const satisfies readonly WorkspaceSection[]
@@ -294,7 +296,12 @@ export type BoundedNumber = { readonly bounded: readonly [min: number, max: numb
  * holds the declaration against a value of the whole of `ShowSettings`.
  */
 export const SHOW_SETTINGS_SHAPE = {
-  oscIn: { enabled: 'boolean', port: 'number' },
+  oscIn: {
+    enabled: 'boolean',
+    port: 'number',
+    remote: { absent: true, of: 'boolean' },
+    allowFrom: { absent: true, of: { items: 'string' } }
+  },
   midiIn: { enabled: 'boolean', portNames: { items: 'string' } },
   desk: {
     kind: 'string',
@@ -518,6 +525,7 @@ export const CUE_FIELD_SHAPE = {
     startTime: 'number',
     endTime: { nothing: true, of: 'number' },
     fadeInDuration: 'number',
+    fadeOutDuration: { absent: true, of: 'number' },
     // Bounded where the app's own controls bound them: the inspector's sliders are min={0}
     // max={1} and min={-1} max={1}, and a hand-edited file reached the engine as a gain of
     // five before this was declared.
@@ -568,6 +576,7 @@ export const CUE_FIELD_SHAPE = {
     targetCueId: 'string',
     fadeProperty: 'string',
     targetValue: 'number',
+    panTargetValue: { absent: true, of: { nothing: true, of: { bounded: [-1, 1] } } },
     curve: 'string',
     stopTargetWhenDone: 'boolean'
   },
@@ -601,6 +610,7 @@ export const CUE_FIELD_SHAPE = {
   scene: { ...CUE_BASE_SHAPE, type: 'string', sceneId: 'string' },
   devamp: { ...CUE_BASE_SHAPE, type: 'string', targetCueId: 'string' },
   mic: { ...CUE_BASE_SHAPE, type: 'string', channelId: 'string', label: 'string', action: 'string' },
+  memo: { ...CUE_BASE_SHAPE, type: 'string' },
   msc: {
     ...CUE_BASE_SHAPE,
     type: 'string',
@@ -611,6 +621,59 @@ export const CUE_FIELD_SHAPE = {
     cueList: 'string',
     destination: 'string',
     portName: 'string'
+  },
+  midiFile: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    filePath: 'string',
+    portName: 'string',
+    playbackRate: 'number',
+    startTime: 'number',
+    endTime: { nothing: true, of: 'number' },
+    loopCount: 'number',
+    // Sixteen output channels, one per channel of the file; the bounds are the player's to
+    // refuse, where a channel map that is not one is a sentence rather than a load failure.
+    channelMap: { items: 'number' },
+    transpose: 'number',
+    transposeDrums: 'boolean'
+  },
+  // A look is a list of levels and an effect list beside it: each element is one shape, and a
+  // value is bounded the way the window's own faders bound it.
+  light: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    look: {
+      elements: { target: 'string', id: 'string', param: 'string', value: { bounded: [0, 1] } }
+    },
+    effects: {
+      elements: {
+        target: 'string',
+        id: 'string',
+        param: 'string',
+        shape: 'string',
+        rate: { bounded: [0.01, 25] },
+        low: { bounded: [0, 1] },
+        high: { bounded: [0, 1] },
+        spread: { bounded: [0, 1] }
+      }
+    },
+    curve: 'string',
+    intensity: 'string'
+  },
+  timecode: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    rate: 'string',
+    startTimecode: 'string',
+    endTimecode: 'string',
+    jamSync: 'boolean',
+    mtc: 'boolean',
+    mtcPortName: 'string',
+    ltc: 'boolean',
+    ltcChannel: 'number',
+    ltcLevelDb: 'number',
+    artnet: 'boolean',
+    artnetHost: 'string'
   },
   // The picture cues (src/shared/visual.ts): what every one of them carries, then its own.
   video: {

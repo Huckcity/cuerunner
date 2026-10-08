@@ -416,8 +416,69 @@ const REFUSED: readonly Refused[] = [
     }),
     fact: 'settings have scenes.list.0.dcas.0.memberId as a number, ' +
       'where this version of Cuerunner writes a string'
+  },
+  {
+    what: 'a lighting rig with a field this build does not write',
+    // The rig is this build's own whole, the way the settings are: a field it does not name
+    // is a field a later build added.
+    show: show({ lighting: { ...lightingOnDisk(), grandMaster: 1 } }),
+    fact: 'has a field this version of Cuerunner does not know (lighting.grandMaster)'
+  },
+  {
+    what: 'a fixture patched past the end of a universe',
+    show: show({
+      lighting: {
+        ...lightingOnDisk(),
+        fixtures: [{ id: 'f1', name: 'Par', typeId: 'builtin:dimmer', mode: '1 channel', universe: 1, address: 513 }]
+      }
+    }),
+    fact: 'has lighting.fixtures.0.address as a number, where this version of Cuerunner writes a number from 1 to 512'
+  },
+  {
+    what: 'an output speaking a protocol this build does not',
+    show: show({
+      lighting: {
+        ...lightingOnDisk(),
+        outputs: [{
+          id: 'o1', universe: 1, protocol: 'kinet', transport: 'unicast', address: '10.0.0.9',
+          wireUniverse: 1, priority: 100, enabled: true
+        }]
+      }
+    }),
+    fact: 'lighting has an output that speaks “kinet”'
+  },
+  {
+    what: 'a timecode section with a field this build does not write',
+    // How a show follows timecode is this build's own whole, the way the settings are.
+    show: show({ timecode: { ...timecodeOnDisk(), lockAfter: 3 } }),
+    fact: 'has a field this version of Cuerunner does not know (timecode.lockAfter)'
+  },
+  {
+    what: 'a timecode section that leaves out a field this build writes',
+    show: show({ timecode: { rate: 'auto', holdMs: 1000, chase: true, offsetFrames: 0, onStop: 'hold' } }),
+    fact: 'timecode.toleranceFrames'
+  },
+  {
+    what: 'a timecode section read at a rate this build has no word for',
+    show: show({ timecode: { ...timecodeOnDisk(), rate: '23.976' } }),
+    fact: 'has a timecode rate of “23.976”'
+  },
+  {
+    what: 'a timecode hold past the range the window allows',
+    show: show({ timecode: { ...timecodeOnDisk(), holdMs: 60_000 } }),
+    fact: 'timecode.holdMs as a number, where this version of Cuerunner writes a number from 0 to 10000'
   }
 ]
+
+/** An empty rig as this build writes one: what the lighting cases above are one change away from. */
+function lightingOnDisk(): Record<string, unknown> {
+  return { fixtures: [], groups: [], types: [], outputs: [], inputs: [], sync: false, syncUniverse: 63999, panic: 'hold' }
+}
+
+/** A chasing show's timecode as this build writes one: what the timecode cases are one change away from. */
+function timecodeOnDisk(): Record<string, unknown> {
+  return { rate: 'auto', holdMs: 1000, chase: true, offsetFrames: 0, onStop: 'hold', toleranceFrames: 10 }
+}
 
 /**
  * Drives one entry point with one refused file and holds the answer. The thrown value has

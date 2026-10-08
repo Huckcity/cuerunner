@@ -60,6 +60,12 @@ interface Layer {
   framePending: boolean
   /** Its fade-in was a dissolve from what was on the output. */
   dissolvedIn: boolean
+  /**
+   * The engine time a pause held it at, or null while it runs. Held, a picture's own clocks —
+   * its fades, an image's display time — stand still with it; a video's place in its file is
+   * its anchor's to hold.
+   */
+  heldAt: number | null
 }
 
 interface Dissolve {
@@ -131,6 +137,7 @@ export class Stage {
       layer.level = { ...layer.level, startMs: layer.level.startMs + deltaMs }
       if (layer.shownAt !== null) layer.shownAt += deltaMs
       if (layer.stop !== null) layer.stop = { ...layer.stop, atMs: layer.stop.atMs + deltaMs }
+      if (layer.heldAt !== null) layer.heldAt += deltaMs
     }
     if (this.dissolve !== null) this.dissolve.firstFrameMs += deltaMs
     if (this.timerFeed.elapsedFrom !== null || this.timerFeed.remaining !== null) {
@@ -190,9 +197,21 @@ export class Stage {
       case 'pause':
         layer.anchor = reanchor(layer.anchor, at, true)
         layer.video?.pause()
+        if (layer.heldAt === null) layer.heldAt = at
         return
       case 'resume':
         layer.anchor = reanchor(layer.anchor, at, false)
+        if (layer.heldAt !== null) {
+          // Everything the picture keeps on the clock moves on by the time it was held.
+          const held = Math.max(0, at - layer.heldAt)
+          layer.heldAt = null
+          layer.spec = { ...layer.spec, at: layer.spec.at + held }
+          if (layer.shownAt !== null) layer.shownAt += held
+          layer.level = { ...layer.level, startMs: layer.level.startMs + held }
+          if (layer.stop !== null) layer.stop = { ...layer.stop, atMs: layer.stop.atMs + held }
+          // A dissolve into it was held with it.
+          if (this.dissolve !== null && this.dissolve.incoming === layer.spec.cueId) this.dissolve.firstFrameMs += held
+        }
         if (layer.started && layer.video !== null && !layer.holding) void layer.video.play().catch(() => {})
         return
       case 'seek':
@@ -244,7 +263,8 @@ export class Stage {
       durationMs: spec.timeline?.durationMs ?? null,
       elementEnded: false,
       framePending: false,
-      dissolvedIn: false
+      dissolvedIn: false,
+      heldAt: null
     }
     if (spec.kind === 'video' && spec.src !== null) {
       const prepared = this.prepared.get(spec.cueId)
@@ -331,7 +351,7 @@ export class Stage {
     const plan = planComposition(planLayers, this.dissolve === null ? null : {
       incoming: this.dissolve.incoming,
       outgoing: this.dissolve.outgoing,
-      progress: dissolveProgress(this.dissolve.firstFrameMs, this.dissolve.durationMs, now)
+      progress: dissolveProgress(this.dissolve.firstFrameMs, this.dissolve.durationMs, this.layers.get(this.dissolve.incoming)?.heldAt ?? now)
     })
     const toItems = (list: PlanLayer[]): DrawItem[] => list.map(entry => items.get(entry.cueId)).filter((item): item is DrawItem => item !== undefined)
 
@@ -353,6 +373,20 @@ export class Stage {
       overlays,
       warp: this.output?.warp ?? { corners: [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 0 }], blend: { left: 0, right: 0, top: 0, bottom: 0 }, gamma: 1 }
     }
+  }
+
+  /** Each video's element, as it stands: where it is in its file, and whether it is playing. */
+  videos(): Array<{ cueId: string; positionMs: number; paused: boolean; rate: number; heldAt: number | null; anchorPaused: boolean }> {
+    return [...this.layers.values()]
+      .filter(layer => layer.video !== null)
+      .map(layer => ({
+        cueId: layer.spec.cueId,
+        positionMs: Math.round(layer.video!.currentTime * 1000),
+        paused: layer.video!.paused,
+        rate: layer.video!.playbackRate,
+        heldAt: layer.heldAt,
+        anchorPaused: layer.anchor.paused
+      }))
   }
 
   /** The cues showing, back to front, with the opacity each is drawn at — for the tests and the status. */
@@ -381,7 +415,8 @@ export class Stage {
     return layer.spec.displayMs !== null && layer.spec.displayMs > 0 ? layer.spec.at + layer.spec.displayMs : null
   }
 
-  private opacityOf(layer: Layer, now: number): number {
+  private opacityOf(layer: Layer, wallNow: number): number {
+    const now = layer.heldAt ?? wallNow
     // A picture that dissolved in has the mix for its fade-in; one that had nothing to
     // dissolve from fades up over black like any other.
     const fadeIn = layer.dissolvedIn ? 1 : fadeInFactor(layer.shownAt, layer.spec.fadeInMs, now)
@@ -400,7 +435,7 @@ export class Stage {
     } else if (layer.shownAt === null && layer.drawable.ready && now >= spec.at) {
       this.shown(layer, now)
     }
-    if (spec.kind !== 'video') {
+    if (spec.kind !== 'video' && layer.heldAt === null) {
       const ends = this.endsAt(layer)
       if (ends !== null && now >= ends && layer.shownAt !== null) {
         this.host.emit({ kind: 'ended', cueId: spec.cueId, outputId: spec.outputId, at: ends, held: false })
@@ -427,10 +462,19 @@ export class Stage {
       return
     }
 
-    if (layer.shownAt === null && video.readyState >= 2 && !layer.framePending) {
-      // A frame is there but none has been presented since the play: a video that was asked
-      // to start paused, or a window that missed the callback. Shown now.
-      if (layer.anchor.paused) this.shown(layer, now)
+    if (layer.shownAt === null && video.readyState >= 2) {
+      // A frame is there but no presentation callback has said so: a video that was asked to
+      // start paused, or one whose element Chromium is decoding without presenting — a
+      // detached element it has not composited, an element woken from a suspended preload.
+      // Once it is playing and has moved, its frame is on the texture the next draw uploads.
+      const moving = !video.paused && video.currentTime * 1000 > (spec.timeline?.startMs ?? 0) + spec.elapsedMs + 40
+      if (layer.anchor.paused || moving) {
+        layer.framePending = false
+        layer.drawable.width = video.videoWidth
+        layer.drawable.height = video.videoHeight
+        layer.drawable.version++
+        this.shown(layer, now)
+      }
     }
 
     if (layer.holding) return
@@ -521,7 +565,8 @@ export class Stage {
       this.dissolve = null
       return
     }
-    if (dissolveProgress(dissolve.firstFrameMs, dissolve.durationMs, now) >= 1) this.finishDissolve()
+    const held = this.layers.get(dissolve.incoming)?.heldAt ?? null
+    if (dissolveProgress(dissolve.firstFrameMs, dissolve.durationMs, held ?? now) >= 1) this.finishDissolve()
   }
 
   /**

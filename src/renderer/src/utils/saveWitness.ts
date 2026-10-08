@@ -31,7 +31,7 @@ import { buildWorkspace } from './workspace'
 export function witnessSave(sent: Workspace): boolean {
   const {
     workspaceId, workspaceName, workspaceCreatedAt, showHistory,
-    audioSettings, midiSettings, showSettings, triggerGuard, cues, markDirty
+    audioSettings, midiSettings, showSettings, triggerGuard, lighting, timecode, cues, markDirty
   } = useStore.getState()
   // The session as a save would carry it out now, built through the one constructor:
   // whatever section the saved shape gains, the witness compares it without knowing it.
@@ -44,6 +44,8 @@ export function witnessSave(sent: Workspace): boolean {
     midiSettings,
     showSettings,
     triggerGuard,
+    lighting,
+    timecode,
     videoOutputs: useStore.getState().videoOutputs,
     cues
   })
