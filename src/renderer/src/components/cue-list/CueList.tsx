@@ -4,6 +4,7 @@ import { useStore } from '../../store'
 import { CueRow } from './CueRow'
 import { CueContextMenu } from './CueContextMenu'
 import { BatchEditDialog } from './BatchEditDialog'
+import { clipboardHandlers } from '../../hooks/useCueClipboard'
 import { groupDurationMs } from '../../utils/cueDuration'
 import { createCue, cueNameFromFile, nextCueNumber } from '../../utils/cueDefaults'
 import { droppedCueType, isNewCueDrag } from '../../utils/newCueDrag'
@@ -470,6 +471,9 @@ export function CueList() {
     }
   }, [renderItems, selectedId, selectedIds, select, removeCues, duplicateCues, updateCues, cues, ctxMenu, closeCtxMenu])
 
+  // Edit → Copy, Cut and Paste, and their keys, as the list's own clipboard events.
+  const clipboard = useMemo(() => clipboardHandlers(() => useStore.getState().selectedIds), [])
+
   // ── Drop indicator ────────────────────────────────────────────────────────
 
   const showDropIndicator = dropRenderIndex !== null && (newCueOver || (
@@ -499,6 +503,7 @@ export function CueList() {
       className="cue-list-container"
       tabIndex={0}
       onKeyDown={handleKeyDown}
+      {...clipboard}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}

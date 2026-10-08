@@ -7,6 +7,7 @@ import { regionEndMs } from '../../utils/cueSplit'
 import { formatShortcut } from '../../utils/shortcuts'
 import { canTarget, targetingBlock, type TargetingKind } from '../../utils/batchEdit'
 import { nextCueNumber } from '../../utils/cueDefaults'
+import { canPaste, copyCues, pasteCues } from '../../hooks/useCueClipboard'
 import './CueContextMenu.css'
 
 interface Props {
@@ -173,8 +174,18 @@ export function CueContextMenu({ x, y, cue, onClose, onRename, onBatchEdit }: Pr
         {allArmed ? 'Disarm' : 'Arm'}{count}
         <kbd>{formatShortcut('Mod+Shift+A')}</kbd>
       </button>
-      {((several && onBatchEdit) || fadeCount > 0 || stopCount > 0) && (
-        <div className="cue-context-menu-separator" />
+      <div className="cue-context-menu-separator" />
+      <button className="cue-context-menu-item" data-action="copy" onClick={() => { copyCues(targets); onClose() }} onMouseEnter={e => e.currentTarget.focus()}>
+        <span className="cue-context-menu-icon">⎘</span>
+        Copy{count}
+        <kbd>{formatShortcut('Mod+C')}</kbd>
+      </button>
+      {canPaste() && (
+        <button className="cue-context-menu-item" data-action="paste" onClick={() => { pasteCues(); onClose() }} onMouseEnter={e => e.currentTarget.focus()}>
+          <span className="cue-context-menu-icon">⎗</span>
+          Paste after
+          <kbd>{formatShortcut('Mod+V')}</kbd>
+        </button>
       )}
       {several && onBatchEdit && (
         <button className="cue-context-menu-item" data-action="batch-edit" onClick={handleBatchEdit} onMouseEnter={e => e.currentTarget.focus()}>
