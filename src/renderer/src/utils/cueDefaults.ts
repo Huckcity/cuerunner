@@ -28,6 +28,7 @@ export const AUDIO_DEFAULTS = {
   startTime: 0,
   endTime: null as number | null,
   fadeInDuration: 0,
+  fadeOutDuration: 0,
   volume: 1,
   pan: 0,
   // Automatic channel routing: the file's own channel layout decides where it goes.

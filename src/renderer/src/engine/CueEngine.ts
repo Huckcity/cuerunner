@@ -136,6 +136,12 @@ interface CueRun {
   releasedRun: CueRun | null
   /** Wall-clock moment execution began, for the log line and the run report. */
   beganAt: number
+  /** An audio cue's fade to silence before its end, and the level it fades from; null for none. */
+  fadeOut?: { ms: number; volume: number } | null
+  /** The task that sends that fade, while it has not gone out. */
+  fadeOutTask?: number | null
+  /** Whether the fade has gone to the engine, so a re-planned end knows to undo it first. */
+  fadeOutSent?: boolean
 }
 
 /**
@@ -524,7 +530,12 @@ export class CueEngine {
 
     // Native commands carry this cue's absolute time and go out as soon as the moment
     // is within the lookahead — the pre-wait tick must not become the start latency.
-    if (cue.type === 'audio') this.planAudio(cue as AudioCue, run, executeAt, finish)
+    if (cue.type === 'audio') {
+      const audio = cue as AudioCue
+      const fadeOutMs = audio.fadeOutDuration ?? 0
+      run.fadeOut = fadeOutMs > 0 ? { ms: fadeOutMs, volume: audio.volume } : null
+      this.planAudio(audio, run, executeAt, finish)
+    }
 
     const begin = (): void => {
       if (run.phase !== 'pending' || run.cancelled || this.isStale(generation)) return
@@ -831,6 +842,53 @@ export class CueEngine {
         finish(endAt)
       }
     })
+    // Every path that moves a run's end comes through here — the first plan, a start that
+    // went out late, a seek, a rate change — so the fade-out is landed on the end here too.
+    this.armFadeOut(run)
+  }
+
+  /**
+   * Lands an audio cue's fade-out on its end: the ramp to silence starts `fadeOut.ms` before
+   * the run's planned end and reaches it exactly there. It goes out inside the lookahead with
+   * its absolute time, as a start does, so the engine — not a renderer tick — times it.
+   *
+   * An end that moves after the fade has begun puts the level back where the cue set it
+   * before planning the fade again, or a seek out of the fade would leave the cue half-faded.
+   */
+  private armFadeOut(run: CueRun): void {
+    const fade = run.fadeOut
+    if (!fade || fade.ms <= 0 || run.endAt === null) return
+    if (run.fadeOutTask != null) {
+      this.scheduler!.cancel(run.fadeOutTask)
+      run.fadeOutTask = null
+    }
+    if (run.fadeOutSent) {
+      run.fadeOutSent = false
+      void audioEngine.fade(run.cueId, 'volume', fade.volume, 0, 'linear').catch(() => {
+        // A voice that has gone has no level to restore.
+      })
+    }
+    const endAt = run.endAt
+    // A cue shorter than its fade fades for all of itself.
+    const at = Math.min(Math.max(endAt - fade.ms, run.startAt), endAt)
+    // A fade already inside the lookahead is dispatched by `schedule` before it returns, and
+    // then there is no task left to keep.
+    let dispatched = false
+    const task = this.scheduler!.schedule({
+      at,
+      early: () => {
+        dispatched = true
+        run.fadeOutTask = null
+        if (run.cancelled) return
+        run.fadeOutSent = true
+        const from = Math.max(at, this.now())
+        void audioEngine.fade(run.cueId, 'volume', 0, Math.max(0, endAt - from), 'sCurve', from).catch(() => {
+          // The voice ended before its fade: there is nothing left to fade.
+        })
+      }
+    })
+    if (!dispatched) run.fadeOutTask = task
+    this.track(run, task)
   }
 
   private executeMidi(cue: MidiCue, finish: Finish): void {

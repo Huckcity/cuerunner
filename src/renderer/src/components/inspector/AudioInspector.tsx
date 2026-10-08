@@ -240,6 +240,16 @@ export function AudioInspector({ cue, tab }: Props) {
             onReset={() => set({ fadeInDuration: AUDIO_DEFAULTS.fadeInDuration })} />
         </div>
         <div className="field-row">
+          <label>Fade out (s)</label>
+          <NumberField when="typed" min={0} step={0.1} value={toSeconds(cue.fadeOutDuration ?? 0)}
+            onValue={seconds => { if (seconds !== null) set({ fadeOutDuration: fromSeconds(seconds) }) }} />
+          <ResetButton label="Fade out" value={cue.fadeOutDuration ?? 0} defaultValue={AUDIO_DEFAULTS.fadeOutDuration}
+            onReset={() => set({ fadeOutDuration: AUDIO_DEFAULTS.fadeOutDuration })} />
+        </div>
+        {(cue.fadeOutDuration ?? 0) > 0 && cue.loopCount < 0 && (
+          <p className="inspector-hint">A cue that loops for ever has no end to fade into.</p>
+        )}
+        <div className="field-row">
           <label>Loop count</label>
           <NumberField when="typed" min={-1} value={cue.loopCount}
             onValue={loopCount => { if (loopCount !== null) set({ loopCount }) }} />

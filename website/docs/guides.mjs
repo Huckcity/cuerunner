@@ -383,7 +383,9 @@ export const GUIDES = [
       <p>
         <strong>Volume</strong> and <strong>Pan</strong> are the cue's own, applied as it
         plays. <strong>Fade in</strong> ramps it up from silence over that many seconds
-        when it starts.
+        when it starts, and <strong>Fade out</strong> takes it down to silence over that
+        many seconds before its own end — the end of its region, or of its last loop — so a
+        track that should not stop dead does not.
       </p>
       <p>
         To change a level while a cue is already playing, use a <strong>fade cue</strong>

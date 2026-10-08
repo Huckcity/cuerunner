@@ -127,6 +127,13 @@ export interface AudioCue extends CueBase {
   startTime: number
   endTime: number | null
   fadeInDuration: number
+  /**
+   * How long, in ms, the cue fades to silence before its own end — the end of its region, or
+   * of its last loop. Optional on disk: a show saved before it existed has none, and absent
+   * is no fade, which is what that show did. A cue that loops for ever has no end to land a
+   * fade on; it is faded by a fade cue or a stop cue, as it always was.
+   */
+  fadeOutDuration?: number
   /** Master level, 0–1, applied to every output. */
   volume: number
   /** Master pan, −1 (left) to 1 (right); automatic routing spreads it across the pair. */

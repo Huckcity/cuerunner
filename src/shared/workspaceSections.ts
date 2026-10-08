@@ -496,6 +496,7 @@ export const CUE_FIELD_SHAPE = {
     startTime: 'number',
     endTime: { nothing: true, of: 'number' },
     fadeInDuration: 'number',
+    fadeOutDuration: { absent: true, of: 'number' },
     // Bounded where the app's own controls bound them: the inspector's sliders are min={0}
     // max={1} and min={-1} max={1}, and a hand-edited file reached the engine as a gain of
     // five before this was declared.

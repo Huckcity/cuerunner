@@ -235,6 +235,7 @@ export const REFERENCE = [
             <tr><td>Start time / End time</td><td>0 / end of file</td><td>The part of the file this cue plays. Draggable on the waveform.</td></tr>
             <tr><td>Trim silence</td><td>off</td><td>Starts at the first sound in the file and ends at the last, where silence is anything below −60 dBFS. Never rewrites the region you set: turning it off plays the whole region again.</td></tr>
             <tr><td>Fade in</td><td>0 s</td><td>Ramps up from silence over this long when the cue starts.</td></tr>
+            <tr><td>Fade out</td><td>0 s</td><td>Ramps down to silence over this long so that the ramp ends where the cue does: the end of its region, or of its last loop. The engine times it from the cue's planned end, and a seek or a rate change moves it with the end. A cue that loops for ever has no end to land on; fade it with a fade or stop cue. STOP still cuts at once.</td></tr>
             <tr><td>Volume</td><td>100%</td><td>The cue's own level, applied to every output.</td></tr>
             <tr><td>Pan</td><td>centre</td><td>−1 to 1. Automatic routing spreads it across the pair.</td></tr>
             <tr><td>Rate</td><td>1.00×</td><td>Playback speed, 0.25× to 4×.</td></tr>

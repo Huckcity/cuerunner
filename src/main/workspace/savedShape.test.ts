@@ -455,7 +455,8 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     refire: 'restart',
     scriptLine: 12,
     trimSilence: true,
-    soundRegion: { startMs: 0, endMs: 4000, durationMs: 5200, silent: false }
+    soundRegion: { startMs: 0, endMs: 4000, durationMs: 5200, silent: false },
+    fadeOutDuration: 1500
   },
   midi: {
     ...cueBase('m1'),
