@@ -1,12 +1,14 @@
-// SMPTE timecode, this machine's half: the settings for the clock it follows, the clocks the
-// timecode cues run, and the status of both. Reading is free, and so is the setting — it is
-// the machine's own — while starting a clock is the Pro half, and the refusal says so.
+// SMPTE timecode: where this machine hears the clock (its own settings), how the open show
+// follows it (the show's section, sent on whenever it changes), the clocks the timecode cues
+// run, and the status of all of it. Reading and setting are free — they only say where to
+// listen and how — while starting a clock is the Pro half, and the refusal says so.
 
 import type { Refusal } from './refusal'
 import type {
   TimecodeGenerateRequest,
   TimecodeGeneratorAction,
   TimecodeSettings,
+  TimecodeShowSettings,
   TimecodeStatus
 } from '../timecode'
 
@@ -14,6 +16,8 @@ import type {
 export const TIMECODE_CHANNELS = {
   settings: 'timecode:settings',
   configure: 'timecode:configure',
+  /** The open show's own timecode section: how the cue list follows the clock. */
+  show: 'timecode:show',
   status: 'timecode:status',
   /** The inputs the clock can be heard on: MIDI ports, and the engine's capture devices. */
   inputs: 'timecode:inputs',
@@ -43,6 +47,8 @@ export interface TimecodeInputs {
 export interface TimecodeBridge {
   settings(): Promise<TimecodeSettings>
   configure(patch: Partial<TimecodeSettings>): Promise<TimecodeSettings>
+  /** Tells main how the open show follows the clock; answers with what it applied. */
+  show(settings: TimecodeShowSettings): Promise<TimecodeShowSettings>
   status(): Promise<TimecodeStatus>
   inputs(): Promise<TimecodeInputs>
   generate(request: TimecodeGenerateRequest): Promise<TimecodeGenerateResult>

@@ -43,7 +43,7 @@ function asWritten(sent: Workspace, saved: SavedName): Workspace {
 // The File menu and the cue list's empty state both open the demo, so the flows read the
 // store imperatively instead of closing over hook state.
 async function guardDirty(): Promise<boolean> {
-  const { isDirty, workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
+  const { isDirty, workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, timecode, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
     useStore.getState()
   if (!isDirty) return true
 
@@ -61,7 +61,7 @@ async function guardDirty(): Promise<boolean> {
       audioSettings,
       midiSettings,
       showSettings,
-      triggerGuard,
+      triggerGuard, timecode,
       cues
     })
     let saved: { path: string; history: ShowHistoryEntry[]; name?: string } | null
@@ -126,7 +126,8 @@ function loadIntoStore(
     workspace.showSettings,
     identity ?? { id: workspace.id, createdAt: workspace.createdAt },
     workspace.triggerGuard,
-    workspace.history ?? []
+    workspace.history ?? [],
+    workspace.timecode
   )
   // The guard remembers what pressed what; a show that has just opened has no presses
   // behind it, and the first GO of the night must not be mistaken for a repeat of the
@@ -170,7 +171,7 @@ export async function openDemoWorkspace(): Promise<void> {
  * Whatever is left is reported again for another pick.
  */
 export async function relinkMissingMedia(cueId: string): Promise<void> {
-  const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt } =
+  const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, timecode, workspaceId, workspaceCreatedAt } =
     useStore.getState()
   const workspace = buildWorkspace({
     id: workspaceId,
@@ -179,7 +180,7 @@ export async function relinkMissingMedia(cueId: string): Promise<void> {
     audioSettings,
     midiSettings,
     showSettings,
-    triggerGuard,
+    triggerGuard, timecode,
     cues
   })
   try {
@@ -211,7 +212,7 @@ export async function relinkMissingMedia(cueId: string): Promise<void> {
 export async function exportShowBundle(): Promise<void> {
   const {
     workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings,
-    triggerGuard, workspaceId, workspaceCreatedAt, showHistory
+    triggerGuard, timecode, workspaceId, workspaceCreatedAt, showHistory
   } = useStore.getState()
   // A show with unsaved edits is the show as it stands: what the bundle carries is what
   // is on screen, not what was last written.
@@ -223,7 +224,7 @@ export async function exportShowBundle(): Promise<void> {
     audioSettings,
     midiSettings,
     showSettings,
-    triggerGuard,
+    triggerGuard, timecode,
     cues
   })
   try {
@@ -259,7 +260,7 @@ export async function exportShowBundle(): Promise<void> {
 export async function mergeAnotherShow(policy: 'ours' | 'theirs' = 'ours', again = false): Promise<void> {
   const {
     workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings,
-    triggerGuard, workspaceId, workspaceCreatedAt, showHistory, setMergeReport
+    triggerGuard, timecode, workspaceId, workspaceCreatedAt, showHistory, setMergeReport
   } = useStore.getState()
   // The show as it stands, unsaved edits included: merging in a version of a show that is
   // not what is on screen is merging the wrong thing.
@@ -271,7 +272,7 @@ export async function mergeAnotherShow(policy: 'ours' | 'theirs' = 'ours', again
     audioSettings,
     midiSettings,
     showSettings,
-    triggerGuard,
+    triggerGuard, timecode,
     cues
   })
   try {
@@ -423,7 +424,7 @@ export function useWorkspace() {
   }, [])
 
   const save = useCallback(async (): Promise<boolean> => {
-    const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
+    const { workspaceName, workspacePath, cues, audioSettings, midiSettings, showSettings, triggerGuard, timecode, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
       useStore.getState()
     // The saved shape the bridge is handed, kept as that exact object: the round trip's
     // witness compares it against the session, so it must be the bytes that went out
@@ -436,7 +437,7 @@ export function useWorkspace() {
       audioSettings,
       midiSettings,
       showSettings,
-      triggerGuard,
+      triggerGuard, timecode,
       cues
     })
     try {
@@ -471,7 +472,7 @@ export function useWorkspace() {
   }, [])
 
   const saveAs = useCallback(async (): Promise<boolean> => {
-    const { workspaceName, cues, audioSettings, midiSettings, showSettings, triggerGuard, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
+    const { workspaceName, cues, audioSettings, midiSettings, showSettings, triggerGuard, timecode, workspaceId, workspaceCreatedAt, showHistory, saveSucceeded } =
       useStore.getState()
     // Saving under another name is the same show in another file: the identity travels
     // with it, so both copies stay recognisably the same show. The same round-trip
@@ -484,7 +485,7 @@ export function useWorkspace() {
       audioSettings,
       midiSettings,
       showSettings,
-      triggerGuard,
+      triggerGuard, timecode,
       cues
     })
     try {

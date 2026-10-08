@@ -51,9 +51,21 @@ export function useTimecodeSettings(): TimecodeSettings | null {
   return useSyncExternalStore(subscribeTimecode, timecodeSettings)
 }
 
-/** Applies a change to this machine's settings, and keeps what main accepted. */
+/**
+ * Applies a change to this machine's settings. The window shows the change at once and then
+ * keeps what main accepted: main writes the file and restarts the receiver before it answers,
+ * which on a slow disk is long enough for a control bound to the answer to snap back under
+ * the hand that changed it. A change main refuses puts the settings back as they were.
+ */
 export async function configureTimecode(patch: Partial<TimecodeSettings>): Promise<TimecodeSettings> {
-  const accepted = await window.cuerunner.timecode.configure(patch)
-  setTimecodeSettings(accepted)
-  return accepted
+  const before = settings
+  if (before !== null) setTimecodeSettings({ ...before, ...patch })
+  try {
+    const accepted = await window.cuerunner.timecode.configure(patch)
+    setTimecodeSettings(accepted)
+    return accepted
+  } catch (error) {
+    if (before !== null) setTimecodeSettings(before)
+    throw error
+  }
 }

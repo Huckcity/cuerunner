@@ -16,11 +16,14 @@ import { TimecodeGenerators, type GeneratorDeps } from './generator'
 import type { ServiceContext } from '../bus/ServiceHost'
 import {
   formatFrames,
+  defaultTimecodeShowSettings,
   normalizeTimecodeSettings,
+  normalizeTimecodeShowSettings,
   type TimecodeGenerateRequest,
   type TimecodeGeneratorAction,
   type TimecodeLockState,
   type TimecodeSettings,
+  type TimecodeShowSettings,
   type TimecodeStatus
 } from '../../shared/timecode'
 
@@ -44,6 +47,8 @@ export class TimecodeHub {
   readonly receiver: TimecodeReceiver
   readonly generators: TimecodeGenerators
   private settings: TimecodeSettings
+  /** How the open show follows the clock, as the window last said: the show's own section. */
+  private show: TimecodeShowSettings = defaultTimecodeShowSettings()
   private context: ServiceContext | null = null
   private timer: ReturnType<typeof setInterval> | null = null
   private lastState: TimecodeLockState = 'off'
@@ -78,6 +83,14 @@ export class TimecodeHub {
     return (await ltc.inputs()).map(input => input.name)
   }
 
+  /** The open show's timecode section, applied to the stream as it runs. */
+  applyShow(show: TimecodeShowSettings): TimecodeShowSettings {
+    this.show = normalizeTimecodeShowSettings(show)
+    this.receiver.configureShow(this.show)
+    this.push(true)
+    return this.show
+  }
+
   status(): TimecodeStatus {
     return { receiver: this.receiver.status(), generators: this.generators.status() }
   }
@@ -98,7 +111,7 @@ export class TimecodeHub {
   /** The receiver's half of the show service. */
   async startReceiving(context: ServiceContext): Promise<void> {
     this.context = context
-    const started = await this.receiver.start(this.settings)
+    const started = await this.receiver.start(this.settings, this.show)
     context.setState(started.state, started.detail)
     this.lastState = this.receiver.status().state
     this.ensurePush()

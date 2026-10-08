@@ -54,6 +54,12 @@ import { incidentsFrom, MAX_INCIDENTS } from '../utils/rfIncidents'
 import type { RfIncident } from '../utils/rfIncidents'
 import { liveCue } from '../utils/liveCue'
 import type { LicenseStatus } from '../../../shared/license'
+import {
+  defaultTimecodeShowSettings,
+  heldTimecode,
+  normalizeTimecodeShowSettings,
+  type TimecodeShowSettings
+} from '../../../shared/timecode'
 
 export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait'
 
@@ -282,6 +288,14 @@ interface CueListState {
    */
   triggerGuard: TriggerGuardSettings
   updateTriggerGuard: (patch: Partial<TriggerGuardSettings>) => void
+
+  /**
+   * How the show follows an incoming SMPTE clock: chase, what the cues do when it stops, the
+   * offset, the rate it is read at. Workspace content — it travels in the file — so an edit
+   * dirties the show and enters undo. Where the clock arrives is the machine's, not here.
+   */
+  timecode: TimecodeShowSettings
+  setTimecode: (patch: Partial<TimecodeShowSettings>) => void
 
   // Show services. Everything here is reported by the main process and rendered by the
   // monitor panel: what is listening, what is on stage, and what has gone wrong. None
@@ -528,7 +542,8 @@ interface CueListState {
     showSettings?: ShowSettings,
     identity?: WorkspaceIdentity,
     triggerGuard?: TriggerGuardSettings,
-    history?: ShowHistoryEntry[]
+    history?: ShowHistoryEntry[],
+    timecode?: TimecodeShowSettings
   ) => void
   /** A save that reached the disk: its path, and the history it wrote into the file. */
   saveSucceeded: (path: string, name: string, history: ShowHistoryEntry[]) => void
@@ -548,6 +563,7 @@ interface EditSnapshot {
   cast: CastSettings
   desk: DeskSettings
   plot: RfPlot
+  timecode: TimecodeShowSettings
 }
 
 function snapshotOf(state: CueListState): EditSnapshot {
@@ -556,7 +572,8 @@ function snapshotOf(state: CueListState): EditSnapshot {
     scenes: state.showSettings.scenes,
     cast: state.showSettings.cast,
     desk: state.showSettings.desk,
-    plot: state.showSettings.rf.plot
+    plot: state.showSettings.rf.plot,
+    timecode: state.timecode
   }
 }
 
@@ -804,6 +821,7 @@ export const useStore = create<CueListState>((set) => ({
   log: [],
   showSettings: defaultShowSettings(),
   triggerGuard: { ...DEFAULT_TRIGGER_GUARD },
+  timecode: defaultTimecodeShowSettings(),
   showServices: [],
   showDevices: [],
   showAlerts: [],
@@ -1102,6 +1120,7 @@ export const useStore = create<CueListState>((set) => ({
       cues: snapshot.cues,
       ...pruneSelection(snapshot.cues, s),
       showSettings: restoreSettings(s.showSettings, snapshot),
+      timecode: snapshot.timecode,
       past,
       future: [snapshotOf(s), ...s.future.slice(0, HISTORY_LIMIT - 1)],
       // An undo after a save moves the cues away from the file's bytes: the session is
@@ -1117,6 +1136,7 @@ export const useStore = create<CueListState>((set) => ({
       cues: snapshot.cues,
       ...pruneSelection(snapshot.cues, s),
       showSettings: restoreSettings(s.showSettings, snapshot),
+      timecode: snapshot.timecode,
       future,
       past: pushPast(s.past, snapshotOf(s)),
       // A redo after a save is an edit like any other: it leaves the file behind.
@@ -1473,7 +1493,7 @@ export const useStore = create<CueListState>((set) => ({
 
   markDirty: () => set({ isDirty: true }),
 
-  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history) => set(() => {
+  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history, timecode) => set(() => {
     // Where the operator was standing when the file was saved is not in the file; a load
     // starts on the show's first cue.
     const first = cues.find(c => c.parentId === null)?.id ?? cues[0]?.id ?? null
@@ -1506,6 +1526,8 @@ export const useStore = create<CueListState>((set) => ({
       // A file written before the guard existed has none: the normalizer both fills it in
       // and holds a value typed outside its range to the range.
       triggerGuard: normalizeTriggerGuard(triggerGuard),
+      // A show that says nothing about timecode follows it with the defaults.
+      timecode: heldTimecode(timecode),
       // The file's own record of its saves. A file that has never been saved has none.
       showHistory: history ?? [],
       // Where the last show's cursor sat says nothing about this one.
@@ -1547,6 +1569,13 @@ export const useStore = create<CueListState>((set) => ({
   updateTriggerGuard: (patch) => set(s => ({
     triggerGuard: normalizeTriggerGuard({ ...s.triggerGuard, ...patch }),
     isDirty: true
+  })),
+
+  setTimecode: (patch) => set(s => ({
+    timecode: normalizeTimecodeShowSettings({ ...s.timecode, ...patch }),
+    isDirty: true,
+    past: pushPast(s.past, snapshotOf(s)),
+    future: []
   })),
 
   updateOscInSettings: (patch) => set(s => ({

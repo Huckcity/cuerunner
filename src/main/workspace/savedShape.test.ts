@@ -39,6 +39,7 @@ import {
 import { CUE_TYPES, type AudioCue, type Cue, type CueBase } from '../../shared/cue'
 import type { ShowSettings } from '../../shared/show'
 import type { Workspace } from '../../shared/workspace'
+import { TIMECODE_SHOW_SHAPE } from '../../shared/timecodeShape'
 
 vi.mock('electron', () => ({
   // Nothing here touches the user-data folder; the serialiser needs no Electron at all.
@@ -93,6 +94,8 @@ const fixture: Required<Workspace> = {
   midiSettings: { outputPortName: 'Desk' },
   showSettings: defaultShowSettings(),
   triggerGuard: { windowMs: 300 },
+  // Moved from its defaults, as a show that chases a clock carries it.
+  timecode: { rate: '29.97df', holdMs: 1500, chase: true, offsetFrames: -108000, onStop: 'continue', toleranceFrames: 12 },
   cues: [cue('a1', 'Walk-in'), cue('a2', 'Interval')]
 }
 
@@ -144,6 +147,7 @@ const declared: readonly WorkspaceKey[] = [
   'midiSettings',
   'showSettings',
   'triggerGuard',
+  'timecode',
   'cues'
 ]
 
@@ -162,12 +166,14 @@ describe('the saved shape', () => {
 
   it('leaves an unset section out of the file rather than writing an empty one', () => {
     const bare = serialiseWorkspace(
-      { ...fixture, history: undefined, showSettings: undefined, triggerGuard: undefined },
+      { ...fixture, history: undefined, showSettings: undefined, triggerGuard: undefined, timecode: undefined },
       SHOWS
     )
 
     expect(Object.keys(JSON.parse(bare))).toEqual(
-      declared.filter(key => key !== 'history' && key !== 'showSettings' && key !== 'triggerGuard')
+      declared.filter(
+        key => key !== 'history' && key !== 'showSettings' && key !== 'triggerGuard' && key !== 'timecode'
+      )
     )
   })
 
@@ -554,6 +560,12 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     triggers: [{ id: 'tr-tc', kind: 'timecode', timecode: '00:59:50:00' }]
   }
 }
+
+describe('the timecode shape', () => {
+  it('declares every field a show’s timecode carries, with the kind it is written as', () => {
+    expect(shapeDifferences(fixture.timecode, TIMECODE_SHOW_SHAPE, 'timecode')).toEqual([])
+  })
+})
 
 describe('the cue-field shape', () => {
   it('declares every field a cue of every type carries, with the kind it is written as', () => {

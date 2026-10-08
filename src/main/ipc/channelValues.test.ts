@@ -81,6 +81,7 @@ const FROZEN_CHANNELS = [
   'timecode:generate',
   'timecode:inputs',
   'timecode:settings',
+  'timecode:show',
   'timecode:status',
   'workspace:autosave',
   'workspace:clearRecovery',

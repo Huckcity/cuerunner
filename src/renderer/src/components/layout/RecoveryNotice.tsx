@@ -103,6 +103,7 @@ export function RecoveryNotice() {
             midiSettings: store.midiSettings,
             showSettings: store.showSettings,
             triggerGuard: store.triggerGuard,
+            timecode: store.timecode,
             cues: store.cues
           })
           const answer = await window.cuerunner.workspace.save(ws, store.workspacePath)
@@ -148,7 +149,10 @@ export function RecoveryNotice() {
       snapshot.workspace.triggerGuard,
       // The file's own record of its saves travels with the snapshot, for the same
       // reason: a recovered session is the same show, not a new one.
-      snapshot.workspace.history ?? []
+      snapshot.workspace.history ?? [],
+      // And how it follows timecode: recovering without it would hand back a show that had
+      // stopped chasing.
+      snapshot.workspace.timecode
     )
     // The place, not just the cues: standing where the session stood means the next GO
     // fires what it would have fired.

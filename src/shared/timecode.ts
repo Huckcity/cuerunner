@@ -245,7 +245,8 @@ export type TimecodeLockState = 'off' | 'waiting' | 'locked' | 'freewheel' | 'st
 /**
  * The machine's timecode settings. They live beside the licence rather than in the show:
  * which MIDI port the clock arrives on and which input the LTC cable is in are facts about
- * the rack this machine sits in.
+ * the rack this machine sits in. What the show does with the clock is the show's own
+ * (`TimecodeShowSettings`), and travels in the file.
  */
 export interface TimecodeSettings {
   source: TimecodeSourceKind
@@ -257,6 +258,15 @@ export interface TimecodeSettings {
   ltcChannel: number
   /** UDP port ArtTimeCode is heard on: 6454 is Art-Net's own. */
   artnetPort: number
+}
+
+/**
+ * How the show follows the clock: written into the show file, so a show built against a
+ * playback rig's timecode opens on another machine following it the same way. Optional on
+ * disk, and absent while every field is its default — a show that never touched timecode
+ * writes the bytes it always wrote.
+ */
+export interface TimecodeShowSettings {
   /**
    * The rate to read the stream at, or `auto` to take what the stream declares and
    * measure the rest (30 against 29.97 non-drop, and LTC's 24 against 25).
@@ -284,9 +294,12 @@ export interface TimecodeSettings {
  */
 export type TimecodeOnStop = 'hold' | 'continue' | 'stop'
 
+export const TIMECODE_ON_STOP: readonly TimecodeOnStop[] = ['hold', 'continue', 'stop']
 export const TIMECODE_HOLD_MIN_MS = 0
 export const TIMECODE_HOLD_MAX_MS = 10_000
 export const TIMECODE_TOLERANCE_MAX_FRAMES = 300
+/** The offset's reach: a day of 30 fps labels either way. */
+export const TIMECODE_OFFSET_MAX_FRAMES = 30 * 60 * 60 * 24
 export const ARTNET_PORT = 6454
 
 export function defaultTimecodeSettings(): TimecodeSettings {
@@ -295,7 +308,33 @@ export function defaultTimecodeSettings(): TimecodeSettings {
     mtcPort: '',
     ltcDevice: '',
     ltcChannel: 0,
-    artnetPort: ARTNET_PORT,
+    artnetPort: ARTNET_PORT
+  }
+}
+
+function boundedInt(field: unknown, min: number, max: number, fallback: number): number {
+  return typeof field === 'number' && Number.isFinite(field)
+    ? Math.min(max, Math.max(min, Math.round(field)))
+    : fallback
+}
+
+/** Settings read from disk or a window, with every field held to what it may be. */
+export function normalizeTimecodeSettings(value: unknown): TimecodeSettings {
+  const base = defaultTimecodeSettings()
+  if (typeof value !== 'object' || value === null) return base
+  const raw = value as Record<string, unknown>
+  const source = raw.source
+  return {
+    source: source === 'mtc' || source === 'ltc' || source === 'artnet' || source === 'none' ? source : base.source,
+    mtcPort: typeof raw.mtcPort === 'string' ? raw.mtcPort : base.mtcPort,
+    ltcDevice: typeof raw.ltcDevice === 'string' ? raw.ltcDevice : base.ltcDevice,
+    ltcChannel: boundedInt(raw.ltcChannel, 0, 31, base.ltcChannel),
+    artnetPort: boundedInt(raw.artnetPort, 1, 65535, base.artnetPort)
+  }
+}
+
+export function defaultTimecodeShowSettings(): TimecodeShowSettings {
+  return {
     rate: 'auto',
     holdMs: 1000,
     chase: false,
@@ -305,30 +344,44 @@ export function defaultTimecodeSettings(): TimecodeSettings {
   }
 }
 
-/** Settings read from disk or a window, with every field held to what it may be. */
-export function normalizeTimecodeSettings(value: unknown): TimecodeSettings {
-  const base = defaultTimecodeSettings()
+/** A show's timecode as a window edits it, every field held to what it may be. */
+export function normalizeTimecodeShowSettings(value: unknown): TimecodeShowSettings {
+  const base = defaultTimecodeShowSettings()
   if (typeof value !== 'object' || value === null) return base
   const raw = value as Record<string, unknown>
-  const int = (field: unknown, min: number, max: number, fallback: number): number =>
-    typeof field === 'number' && Number.isFinite(field)
-      ? Math.min(max, Math.max(min, Math.round(field)))
-      : fallback
-  const source = raw.source
   const onStop = raw.onStop
   return {
-    source: source === 'mtc' || source === 'ltc' || source === 'artnet' || source === 'none' ? source : base.source,
-    mtcPort: typeof raw.mtcPort === 'string' ? raw.mtcPort : base.mtcPort,
-    ltcDevice: typeof raw.ltcDevice === 'string' ? raw.ltcDevice : base.ltcDevice,
-    ltcChannel: int(raw.ltcChannel, 0, 31, base.ltcChannel),
-    artnetPort: int(raw.artnetPort, 1, 65535, base.artnetPort),
     rate: raw.rate === 'auto' || isTimecodeRate(raw.rate) ? raw.rate : base.rate,
-    holdMs: int(raw.holdMs, TIMECODE_HOLD_MIN_MS, TIMECODE_HOLD_MAX_MS, base.holdMs),
+    holdMs: boundedInt(raw.holdMs, TIMECODE_HOLD_MIN_MS, TIMECODE_HOLD_MAX_MS, base.holdMs),
     chase: typeof raw.chase === 'boolean' ? raw.chase : base.chase,
-    offsetFrames: int(raw.offsetFrames, -framesPerDay('30'), framesPerDay('30'), base.offsetFrames),
+    offsetFrames: boundedInt(raw.offsetFrames, -TIMECODE_OFFSET_MAX_FRAMES, TIMECODE_OFFSET_MAX_FRAMES, base.offsetFrames),
     onStop: onStop === 'hold' || onStop === 'continue' || onStop === 'stop' ? onStop : base.onStop,
-    toleranceFrames: int(raw.toleranceFrames, 0, TIMECODE_TOLERANCE_MAX_FRAMES, base.toleranceFrames)
+    toleranceFrames: boundedInt(raw.toleranceFrames, 0, TIMECODE_TOLERANCE_MAX_FRAMES, base.toleranceFrames)
   }
+}
+
+/** Whether a show's timecode says nothing the defaults do not: then the file carries no section. */
+export function isDefaultTimecodeShow(settings: TimecodeShowSettings): boolean {
+  const base = defaultTimecodeShowSettings()
+  return (Object.keys(base) as (keyof TimecodeShowSettings)[]).every(key => settings[key] === base[key])
+}
+
+/** A show's timecode as the window holds it: a file that carries none follows with the defaults. */
+export function heldTimecode(settings: TimecodeShowSettings | undefined): TimecodeShowSettings {
+  return settings ?? defaultTimecodeShowSettings()
+}
+
+/**
+ * What a file's timecode section says that this build cannot follow, once its fields have been
+ * held to their kinds: a rate or a stop behaviour it has no word for. Null when there is none.
+ */
+export function timecodeShowRefusal(settings: TimecodeShowSettings): string | null {
+  if (settings.rate !== 'auto' && !isTimecodeRate(settings.rate)) return `a timecode rate of “${String(settings.rate)}”`
+  if (!TIMECODE_ON_STOP.includes(settings.onStop)) return `timecode that does “${String(settings.onStop)}” when it stops`
+  if (!Number.isInteger(settings.offsetFrames) || !Number.isInteger(settings.toleranceFrames) || !Number.isInteger(settings.holdMs)) {
+    return 'a timecode offset, tolerance or hold that is not a whole number'
+  }
+  return null
 }
 
 /** The incoming clock, as the window is told it. */

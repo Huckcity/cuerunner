@@ -16,6 +16,7 @@ import {
   timecodeToFrames,
   type TimecodeOnStop,
   type TimecodeSettings,
+  type TimecodeShowSettings,
   type TimecodeSourceKind
 } from '../../../../shared/timecode'
 import type { TimecodeInputs } from '../../../../shared/ipc/timecode'
@@ -51,6 +52,10 @@ function parseOffset(text: string): number | null {
 export function TimecodeSection(): React.JSX.Element {
   const pro = usePro()
   const settings = useTimecodeSettings()
+  // How the show follows the clock is the show's own: it is saved in the file, dirties it, and
+  // goes back with undo. Where the clock arrives is the machine's, above.
+  const show = useStore(s => s.timecode)
+  const setShow = useStore(s => s.setTimecode)
   const service = useStore(s => s.showServices.find(candidate => candidate.id === 'timecode'))
   const [inputs, setInputs] = useState<TimecodeInputs>({ midi: [], audio: [] })
   const [failed, setFailed] = useState<string | null>(null)
@@ -158,12 +163,24 @@ export function TimecodeSection(): React.JSX.Element {
           </div>
         )}
 
+
+        <TimecodePanel />
+      </section>
+
+      <section className="settings-block" data-enabled={show.chase}>
+        <div className="settings-block-head">
+          <div className="settings-block-text">
+            <h3 className="settings-block-title">This show</h3>
+            <p className="settings-block-blurb">How the cue list follows the clock. Saved with the show.</p>
+          </div>
+        </div>
+
         <div className="field-row">
           <label htmlFor="settings-timecode-rate">Rate</label>
           <select
             id="settings-timecode-rate"
-            value={settings.rate}
-            onChange={e => update({ rate: e.target.value as TimecodeSettings['rate'] })}
+            value={show.rate}
+            onChange={e => setShow({ rate: e.target.value as TimecodeShowSettings['rate'] })}
           >
             <option value="auto">Detect from the stream</option>
             {TIMECODE_RATES.map(rate => <option key={rate} value={rate}>{rateInfo(rate).label}</option>)}
@@ -176,22 +193,11 @@ export function TimecodeSection(): React.JSX.Element {
             id="settings-timecode-hold"
             min={0}
             max={TIMECODE_HOLD_MAX_MS}
-            value={settings.holdMs}
+            value={show.holdMs}
             title="How long a clock that stops arriving is carried on before it is lost, ms."
-            onValue={holdMs => { if (holdMs !== null) update({ holdMs }) }}
+            onValue={holdMs => { if (holdMs !== null) setShow({ holdMs }) }}
           />
           <span className="inspector-hint">ms</span>
-        </div>
-
-        <TimecodePanel />
-      </section>
-
-      <section className="settings-block" data-enabled={settings.chase}>
-        <div className="settings-block-head">
-          <div className="settings-block-text">
-            <h3 className="settings-block-title">Cue list</h3>
-            <p className="settings-block-blurb">How the cues with timecode triggers follow the clock.</p>
-          </div>
         </div>
 
         <div className="field-row">
@@ -199,8 +205,8 @@ export function TimecodeSection(): React.JSX.Element {
           <input
             id="settings-timecode-chase"
             type="checkbox"
-            checked={settings.chase}
-            onChange={e => update({ chase: e.target.checked })}
+            checked={show.chase}
+            onChange={e => setShow({ chase: e.target.checked })}
           />
           <span className="inspector-hint">A locate puts each cue where the clock is.</span>
         </div>
@@ -209,9 +215,9 @@ export function TimecodeSection(): React.JSX.Element {
           <label htmlFor="settings-timecode-on-stop">When it stops</label>
           <select
             id="settings-timecode-on-stop"
-            value={settings.onStop}
-            disabled={!settings.chase}
-            onChange={e => update({ onStop: e.target.value as TimecodeOnStop })}
+            value={show.onStop}
+            disabled={!show.chase}
+            onChange={e => setShow({ onStop: e.target.value as TimecodeOnStop })}
           >
             <option value="hold">Hold the cues, and pick them up again</option>
             <option value="stop">Stop the cues</option>
@@ -223,14 +229,14 @@ export function TimecodeSection(): React.JSX.Element {
           <label htmlFor="settings-timecode-offset">Offset</label>
           <input
             id="settings-timecode-offset"
-            value={offsetText ?? formatOffset(settings.offsetFrames)}
+            value={offsetText ?? formatOffset(show.offsetFrames)}
             title="Added to the incoming clock before any cue reads it, as hh:mm:ss:ff at 30 fps labels; a minus sign subtracts."
             onChange={e => setOffsetText(e.target.value)}
             onBlur={() => {
               if (offsetText === null) return
               const frames = parseOffset(offsetText)
               setOffsetText(null)
-              if (frames !== null) update({ offsetFrames: frames })
+              if (frames !== null) setShow({ offsetFrames: frames })
             }}
           />
         </div>
@@ -241,9 +247,9 @@ export function TimecodeSection(): React.JSX.Element {
             id="settings-timecode-tolerance"
             min={0}
             max={TIMECODE_TOLERANCE_MAX_FRAMES}
-            value={settings.toleranceFrames}
+            value={show.toleranceFrames}
             title="How many frames the clock may skip and still fire what it skipped."
-            onValue={toleranceFrames => { if (toleranceFrames !== null) update({ toleranceFrames }) }}
+            onValue={toleranceFrames => { if (toleranceFrames !== null) setShow({ toleranceFrames }) }}
           />
           <span className="inspector-hint">frames</span>
         </div>

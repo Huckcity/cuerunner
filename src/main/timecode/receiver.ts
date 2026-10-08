@@ -3,7 +3,7 @@
  * capture channel, or ArtTimeCode on the network — decoded into positions and handed to
  * the follower that carries it between them and through dropouts.
  */
-import { TimecodeFollower } from './follower'
+import { TimecodeFollower, type FollowerOptions } from './follower'
 import { MtcDecoder } from './mtc'
 import { decodeArtTimecode } from './artnet'
 import type { MidiTimecodeTap } from './midiTap'
@@ -13,7 +13,8 @@ import {
   timecodeToFrames,
   type TimecodeRate,
   type TimecodeReceiverStatus,
-  type TimecodeSettings
+  type TimecodeSettings,
+  type TimecodeShowSettings
 } from '../../shared/timecode'
 
 /** A port or a socket the receiver opened, and the one thing to do with it afterwards. */
@@ -74,14 +75,15 @@ export class TimecodeReceiver {
     })
   }
 
-  async start(settings: TimecodeSettings): Promise<ReceiverStart> {
+  /** What the show's own settings make of the stream: its rate, its hold and its offset. */
+  private followWith(show: TimecodeShowSettings): FollowerOptions {
+    return { rate: show.rate, holdMs: show.holdMs, offsetFrames: show.offsetFrames }
+  }
+
+  async start(settings: TimecodeSettings, show: TimecodeShowSettings): Promise<ReceiverStart> {
     await this.stop()
     this.settings = settings
-    this.follower = new TimecodeFollower(settings.source, {
-      rate: settings.rate,
-      holdMs: settings.holdMs,
-      offsetFrames: settings.offsetFrames
-    })
+    this.follower = new TimecodeFollower(settings.source, this.followWith(show))
     this.mtc = this.decoderFor()
     this.ltcHighest = -1
     this.ltcWrapped = false
@@ -179,6 +181,14 @@ export class TimecodeReceiver {
   private waiting(detail: string): ReceiverStart {
     this.follower.describe(detail)
     return { state: 'degraded', detail }
+  }
+
+  /**
+   * A show was opened, or its timecode edited: the stream is read the new way from the next
+   * position on. Nothing is reopened — the port, the input and the socket are the machine's.
+   */
+  configureShow(show: TimecodeShowSettings): void {
+    this.follower.configure(this.followWith(show))
   }
 
   /** Bytes of MIDI from wherever MTC arrived: a port, the tap, or a test. */

@@ -7,7 +7,7 @@ import { MidiTimecodeTap } from './midiTap'
 import { encodeArtTimecode } from './artnet'
 import { artnetAddress } from './main'
 import { ShowBus } from '../bus/ShowBus'
-import { framesToTimecode, type TimecodeStatus } from '../../shared/timecode'
+import { defaultTimecodeShowSettings, framesToTimecode, type TimecodeStatus } from '../../shared/timecode'
 
 const dirs: string[] = []
 const hubs: TimecodeHub[] = []
@@ -59,20 +59,24 @@ describe('the timecode hub', () => {
   it('starts on the defaults with no file, and keeps what it is given beside the licence', async () => {
     const h = harness()
     expect(h.hub.current().source).toBe('none')
-    const updated = await h.hub.update({ source: 'artnet', holdMs: 500, chase: true })
-    expect(updated).toMatchObject({ source: 'artnet', holdMs: 500, chase: true })
-    expect(JSON.parse(readFileSync(h.filePath, 'utf8'))).toMatchObject({ source: 'artnet', holdMs: 500, chase: true })
+    const updated = await h.hub.update({ source: 'artnet', artnetPort: 47001 })
+    expect(updated).toMatchObject({ source: 'artnet', artnetPort: 47001 })
+    // Only the machine's own settings: how a show follows the clock is the show's file's.
+    expect(JSON.parse(readFileSync(h.filePath, 'utf8'))).toEqual({
+      source: 'artnet', mtcPort: '', ltcDevice: '', ltcChannel: 0, artnetPort: 47001
+    })
     expect(h.restarts).toHaveBeenCalledTimes(1)
     expect(h.pushed.length).toBeGreaterThan(0)
   })
 
   it('reads a file a previous run wrote, holding each field to what it may be', () => {
-    const h = harness({ source: 'mtc', mtcPort: 'Clock', holdMs: -5 })
-    expect(h.hub.current()).toMatchObject({ source: 'mtc', mtcPort: 'Clock', holdMs: 0 })
+    const h = harness({ source: 'mtc', mtcPort: 'Clock', ltcChannel: -5 })
+    expect(h.hub.current()).toMatchObject({ source: 'mtc', mtcPort: 'Clock', ltcChannel: 0 })
   })
 
   it('raises lock and loss on the show’s alarm strip, and says so in the service status', async () => {
-    const h = harness({ source: 'artnet', holdMs: 200 })
+    const h = harness({ source: 'artnet' })
+    h.hub.applyShow({ ...defaultTimecodeShowSettings(), holdMs: 200 })
     await h.hub.startReceiving(h.context)
     for (let n = 0; n < 6; n++) {
       h.packet(1000 + n)
@@ -87,6 +91,19 @@ describe('the timecode hub', () => {
     expect(alerts[0]).toMatch(/^info: Timecode locked at 00:00:40:0\d \(ArtTimeCode on UDP 6454\)$/)
     expect(alerts[1]).toMatch(/^warning: Timecode lost at 00:00:40:\d\d \(ArtTimeCode on UDP 6454\)$/)
     expect(h.states.map(([state]) => state)).toEqual(['running', 'running', 'degraded'])
+  })
+})
+
+describe('the show’s own timecode', () => {
+  it('is applied to the stream as it runs, without reopening anything', async () => {
+    const h = harness({ source: 'artnet' })
+    await h.hub.startReceiving(h.context)
+    h.packet(1000)
+    expect(h.hub.status().receiver.frames).toBe(1000)
+    const applied = h.hub.applyShow({ ...defaultTimecodeShowSettings(), offsetFrames: 250, rate: '25', chase: true })
+    expect(applied).toMatchObject({ offsetFrames: 250, rate: '25', chase: true })
+    expect(h.hub.status().receiver.frames).toBe(1250)
+    expect(h.restarts).not.toHaveBeenCalled()
   })
 })
 

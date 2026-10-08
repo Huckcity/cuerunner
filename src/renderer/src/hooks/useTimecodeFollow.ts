@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
 import { cueEngine } from '../engine/CueEngine'
 import { TimecodeChase } from '../engine/timecodeChase'
-import { setTimecodeSettings, setTimecodeStatus, timecodeSettings, timecodeStatus } from '../engine/timecodeStatus'
+import { setTimecodeSettings, setTimecodeStatus, timecodeStatus } from '../engine/timecodeStatus'
 import { useStore } from '../store'
 import { isPro } from '../../../shared/license'
-import { defaultTimecodeSettings, formatFrames } from '../../../shared/timecode'
+import { formatFrames } from '../../../shared/timecode'
 
 /** How often the cue list looks at the clock between pushes, ms: well inside a frame. */
 const LOOK_MS = 10
@@ -28,7 +28,7 @@ export function useTimecodeFollow(): void {
 
     const chase = new TimecodeChase({
       getCues: () => useStore.getState().cues,
-      settings: () => timecodeSettings() ?? defaultTimecodeSettings(),
+      settings: () => useStore.getState().timecode,
       isPro: () => isPro(useStore.getState().license),
       fire: (cue, frames, rate) => {
         // The cause first, so the log reads in the order the show happened.
@@ -67,4 +67,16 @@ export function useTimecodeFollow(): void {
       clearInterval(look)
     }
   }, [])
+
+  // How the open show follows the clock is the show's, and main reads the stream with it:
+  // its rate, its hold and its offset go over whenever a show is opened or they are edited.
+  const show = useStore(s => s.timecode)
+  useEffect(() => {
+    window.cuerunner.timecode.show(show).catch(error => {
+      useStore.getState().appendLog([{
+        level: 'error',
+        message: `Could not apply the show’s timecode settings: ${error instanceof Error ? error.message : String(error)}`
+      }])
+    })
+  }, [show])
 }

@@ -84,6 +84,7 @@ export const WORKSPACE_SECTIONS = [
   { key: 'midiSettings', route: 'midi', merge: 'section' },
   { key: 'showSettings', route: 'show', merge: 'keys' },
   { key: 'triggerGuard', route: 'guard', merge: 'section' },
+  { key: 'timecode', route: 'timecode', merge: 'section' },
   { key: 'cues', route: null, merge: 'cue' }
 ] as const satisfies readonly WorkspaceSection[]
 

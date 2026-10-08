@@ -460,7 +460,7 @@ export const REFERENCE = [
 
     <section class="panel reveal delay-3" id="timecode">
       <h2>Timecode</h2>
-      <p>Kept on the computer, not in the show: which port the clock arrives on is a fact about this rack. The receiver is part of Cuerunner Pro. The <a href="../guides/console.html#timecode">guide</a> shows it in use.</p>
+      <p>Two halves. <strong>Source</strong> and where it arrives — the MIDI input, the audio input and channel, the UDP port — are kept on the computer: which port the clock is on is a fact about this rack. Everything under <strong>This show</strong> — rate, freewheel, chase, what happens when it stops, offset and tolerance — is saved in the show file, so the show follows its clock the same way on any machine that opens it; a show that leaves them all at their defaults carries nothing for them, and an edit to them goes back with undo. The receiver is part of Cuerunner Pro. The <a href="../guides/console.html#timecode">guide</a> shows it in use.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
@@ -589,7 +589,8 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
       </div>
       <div class="note">
         Undo is one stack for everything an edit destroys — the cue list, the scenes, the
-        desk setup, the cast and the mic plot — so an undo is never half a change. It
+        desk setup, the cast, the mic plot and how the show follows timecode — so an undo is
+        never half a change. It
         keeps the last 50 edits. In a focused text field, the field's own undo applies
         instead.
       </div>

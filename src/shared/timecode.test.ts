@@ -20,6 +20,11 @@ import {
   timecodeToFrames,
   wrapFrames,
   defaultTimecodeSettings,
+  defaultTimecodeShowSettings,
+  heldTimecode,
+  isDefaultTimecodeShow,
+  normalizeTimecodeShowSettings,
+  timecodeShowRefusal,
   type Timecode,
   type TimecodeReceiverStatus
 } from './timecode'
@@ -156,15 +161,36 @@ describe('rate codes', () => {
 })
 
 describe('settings', () => {
-  it('holds every field to what it may be', () => {
+  it('holds every machine field to what it may be', () => {
     expect(normalizeTimecodeSettings(null)).toEqual(defaultTimecodeSettings())
-    const odd = normalizeTimecodeSettings({ source: 'radio', holdMs: 99_999, ltcChannel: -3, rate: '23.976', toleranceFrames: 2.6, chase: 'yes' })
+    const odd = normalizeTimecodeSettings({ source: 'radio', ltcChannel: -3, artnetPort: 70_000 })
     expect(odd.source).toBe('none')
-    expect(odd.holdMs).toBe(10_000)
     expect(odd.ltcChannel).toBe(0)
+    expect(odd.artnetPort).toBe(65535)
+  })
+
+  it('holds every show field to what it may be', () => {
+    expect(normalizeTimecodeShowSettings(null)).toEqual(defaultTimecodeShowSettings())
+    const odd = normalizeTimecodeShowSettings({ holdMs: 99_999, rate: '23.976', toleranceFrames: 2.6, chase: 'yes', onStop: 'explode' })
+    expect(odd.holdMs).toBe(10_000)
     expect(odd.rate).toBe('auto')
     expect(odd.toleranceFrames).toBe(3)
     expect(odd.chase).toBe(false)
+    expect(odd.onStop).toBe('hold')
+  })
+
+  it('says a show at the defaults has nothing to write, and anything else has', () => {
+    expect(isDefaultTimecodeShow(defaultTimecodeShowSettings())).toBe(true)
+    expect(isDefaultTimecodeShow({ ...defaultTimecodeShowSettings(), chase: true })).toBe(false)
+    expect(isDefaultTimecodeShow({ ...defaultTimecodeShowSettings(), offsetFrames: -1 })).toBe(false)
+    expect(heldTimecode(undefined)).toEqual(defaultTimecodeShowSettings())
+  })
+
+  it('names what a file says that this build cannot follow', () => {
+    expect(timecodeShowRefusal(defaultTimecodeShowSettings())).toBeNull()
+    expect(timecodeShowRefusal({ ...defaultTimecodeShowSettings(), rate: '23.976' as never })).toBe('a timecode rate of “23.976”')
+    expect(timecodeShowRefusal({ ...defaultTimecodeShowSettings(), onStop: 'pause' as never })).toBe('timecode that does “pause” when it stops')
+    expect(timecodeShowRefusal({ ...defaultTimecodeShowSettings(), offsetFrames: 1.5 })).toMatch(/whole number/)
   })
 })
 

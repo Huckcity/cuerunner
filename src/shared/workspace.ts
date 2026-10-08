@@ -1,6 +1,7 @@
 import type { Cue } from './cue'
 import type { ShowSettings } from './show'
 import type { ShowHistoryEntry } from './showfile'
+import type { TimecodeShowSettings } from './timecode'
 
 export interface AudioSettings {
   /**
@@ -136,6 +137,14 @@ export interface Workspace {
    * bounced key truncates a cue.
    */
   triggerGuard?: TriggerGuardSettings
+  /**
+   * How the show follows an incoming SMPTE clock: chase, what the cues do when it stops, the
+   * offset and the rate it is read at. Optional: a show that leaves every one of them at its
+   * default carries no such section, so a show saved before timecode existed — or never
+   * touched it — writes the bytes it always wrote. Which port or input the clock arrives on
+   * is the machine's, not here.
+   */
+  timecode?: TimecodeShowSettings
   cues: Cue[]
 }
 

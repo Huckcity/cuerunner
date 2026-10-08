@@ -51,7 +51,7 @@ import {
   type TimecodeGenerateResult,
   type TimecodeInputs
 } from '../../shared/ipc/timecode'
-import type { TimecodeGenerateRequest, TimecodeSettings } from '../../shared/timecode'
+import type { TimecodeGenerateRequest, TimecodeSettings, TimecodeShowSettings } from '../../shared/timecode'
 import { createTimecodeHub } from '../timecode/main'
 import {
   SCRIPT_CHANNELS,
@@ -624,6 +624,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(TIMECODE_CHANNELS.settings, (): TimecodeSettings => timecodeHub.current())
   ipcMain.handle(TIMECODE_CHANNELS.configure, (_, patch: Partial<TimecodeSettings>): Promise<TimecodeSettings> =>
     timecodeHub.update(patch))
+  ipcMain.handle(TIMECODE_CHANNELS.show, (_, settings: TimecodeShowSettings): TimecodeShowSettings =>
+    timecodeHub.applyShow(settings))
   ipcMain.handle(TIMECODE_CHANNELS.status, () => timecodeHub.status())
   ipcMain.handle(TIMECODE_CHANNELS.inputs, async (): Promise<TimecodeInputs> => {
     // An engine that is not running has no capture devices to offer; the MIDI ports remain.

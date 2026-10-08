@@ -5,15 +5,19 @@
 // LTC feed too.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { createSocket, type Socket } from 'node:dgram'
-import { addCueFromMoreMenu, closeApp, launchApp, mintLicense, openLogPanel, toolbarCueBtn } from './helpers'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { addCueFromMoreMenu, closeApp, launchApp, mintLicense, openFromRecent, openLogPanel, toolbarCueBtn } from './helpers'
 
 let app: ElectronApplication
 let page: Page
+let userDataDir: string
 const sockets: Socket[] = []
 const timers: NodeJS.Timeout[] = []
 
 test.beforeEach(async () => {
-  ;({ app, page } = await launchApp({ license: mintLicense() }))
+  ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
 })
 
 test.afterEach(async () => {
@@ -170,4 +174,45 @@ test('a timecode cue sends a clock a receiver reads back frame by frame', async 
   const paused = heard.length
   await page.waitForTimeout(400)
   expect(heard.length - paused).toBeLessThanOrEqual(1)
+})
+
+test('how the show follows timecode travels in the show file, and a show that never set it saves without it', async () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'cuerunner-feat-timecode-e2e-'))
+  try {
+    const showPath = path.join(root, 'Chase Show.cuerunner')
+    const base = {
+      version: 1,
+      id: 'w-timecode-e2e',
+      name: 'Chase Show',
+      createdAt: '2026-10-01T00:00:00.000Z',
+      audioSettings: { outputDeviceId: 'default' },
+      midiSettings: { outputPortName: '' },
+      cues: []
+    }
+    writeFileSync(showPath, JSON.stringify({
+      ...base,
+      timecode: { rate: '25', holdMs: 1500, chase: true, offsetFrames: 0, onStop: 'continue', toleranceFrames: 10 }
+    }, null, 2))
+    await openFromRecent(page, userDataDir, showPath)
+    await expect(page.locator('.workspace-name')).toContainText('Chase Show')
+
+    // The file's own settings are on the tab, under the show's heading.
+    const dialog = await openTimecodeSettings()
+    await expect(dialog.locator('#settings-timecode-chase')).toBeChecked()
+    await expect(dialog.locator('#settings-timecode-on-stop')).toHaveValue('continue')
+    await expect(dialog.locator('#settings-timecode-rate')).toHaveValue('25')
+    // Turning chase off is an edit to the show: the control takes it at once, and the show is dirty.
+    await dialog.locator('#settings-timecode-chase').uncheck()
+    await expect(dialog.locator('#settings-timecode-on-stop')).toBeDisabled()
+    await dialog.getByRole('button', { name: 'Close' }).click()
+    await expect(page.locator('.workspace-name')).toContainText('●')
+
+    await page.locator('.toolbar-brand').click()
+    await page.locator('.file-menu button[data-action="save"]').click()
+    await expect(page.locator('.workspace-name')).not.toContainText('●')
+    await expect.poll(() => JSON.parse(readFileSync(showPath, 'utf8')).timecode?.chase).toBe(false)
+    expect(JSON.parse(readFileSync(showPath, 'utf8')).timecode).toMatchObject({ rate: '25', onStop: 'continue', holdMs: 1500 })
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
 })

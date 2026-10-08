@@ -1,5 +1,6 @@
 import { savedShape, type WorkspaceValues } from '../../../shared/workspaceSections'
 import type { Workspace } from '../../../shared/workspace'
+import { isDefaultTimecodeShow, type TimecodeShowSettings } from '../../../shared/timecode'
 
 // The saved form of the current session. A real save and an autosave snapshot are built
 // the same way, so a recovered workspace has the shape a saved one does.
@@ -20,12 +21,20 @@ import type { Workspace } from '../../../shared/workspace'
 // direction: the main process compares the file about to be replaced with what is about
 // to replace it and writes the entry itself. The store carries the result back, so a save
 // appends to the file's history rather than replacing it with this session's.
-export function buildWorkspace(values: Omit<WorkspaceValues, 'version'>): Workspace {
+//
+// The show's timecode is a section every caller has to name, even as nothing: it is
+// optional on the saved form, so a call site that forgot it would compile and save a show
+// that had stopped chasing. A show that leaves it at the defaults writes no section — so a
+// show saved before timecode existed, or that never touched it, stays byte-identical.
+export function buildWorkspace(
+  values: Omit<WorkspaceValues, 'version' | 'timecode'> & { timecode: TimecodeShowSettings | undefined }
+): Workspace {
   return savedShape({
     version: 1,
     ...values,
     // A file with nothing to say about its past says nothing: an empty array here would
     // be the key every save of every show carries for no reason.
-    history: values.history && values.history.length > 0 ? values.history : undefined
+    history: values.history && values.history.length > 0 ? values.history : undefined,
+    timecode: values.timecode === undefined || isDefaultTimecodeShow(values.timecode) ? undefined : values.timecode
   })
 }

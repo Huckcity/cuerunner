@@ -26,6 +26,8 @@ import type { LoadNote, Workspace } from '../../shared/workspace'
 import type { AudioCue, Cue } from '../../shared/cue'
 import { CUE_TYPES } from '../../shared/cue'
 import { heldShowSettings } from '../../shared/show'
+import { TIMECODE_SHOW_SHAPE } from '../../shared/timecodeShape'
+import { timecodeShowRefusal, type TimecodeShowSettings } from '../../shared/timecode'
 import { hasCueList, isUnnamedShow, normalizeTriggerGuard, UNTITLED_SHOW } from '../../shared/workspace'
 import {
   CUE_FIELD_SHAPE,
@@ -687,8 +689,21 @@ function refuseUnknownShape(workspace: Workspace, source: string): void {
     // before one of them existed differs at.
     refuseForeignFields(sections, DECLARED_SETTINGS_FIELDS, '', -1, source, SETTINGS_VOICE, null)
   }
+  // How the show follows timecode is read field by field the way the settings are — a field
+  // this build does not write refuses, and so does one it writes and the file left out — and
+  // then for the words a kind cannot hold: a rate or a stop behaviour this build has none for.
+  if (Object.hasOwn(workspace, 'timecode') && workspace.timecode !== undefined) {
+    refuseForeignFields(workspace.timecode, TIMECODE_SHOW_SHAPE, 'timecode', -1, source, TIMECODE_VOICE, null)
+    const refusal = timecodeShowRefusal(workspace.timecode as TimecodeShowSettings)
+    if (refusal !== null) {
+      throw new Refusal(`that show has ${refusal} — ${source} was probably saved by another build`)
+    }
+  }
   refuseForeignCues(workspace.cues, source)
 }
+
+/** The show's voice for its timecode section, which is this build's own whole. */
+const TIMECODE_VOICE: RefusalVoice = { subject: 'that show', verb: 'has', refuseForeignFields: true }
 
 /** A document as the window holds it: its settings read with this build's defaults in. */
 const asHeld = (workspace: Workspace): Workspace => ({

@@ -6,6 +6,7 @@ import { encodeArtTimecode } from './artnet'
 import { MtcClock, encodeFullFrame } from './mtc'
 import {
   defaultTimecodeSettings,
+  defaultTimecodeShowSettings,
   framesToTimecode,
   parseTimecodeFrames,
   type TimecodeSettings
@@ -56,7 +57,7 @@ const settings = (patch: Partial<TimecodeSettings>): TimecodeSettings => ({ ...d
 describe('the receiver, over Art-Net', () => {
   it('locks on a running stream, and reports where the clock is between datagrams', async () => {
     const h = harness()
-    expect(await h.receiver.start(settings({ source: 'artnet' }))).toMatchObject({ state: 'running' })
+    expect(await h.receiver.start(settings({ source: 'artnet' }), defaultTimecodeShowSettings())).toMatchObject({ state: 'running' })
     const start = parseTimecodeFrames('10:00:00:00', '25')!
     for (let n = 0; n < 10; n++) {
       h.packet(encodeArtTimecode(framesToTimecode(start + n, '25'), '25'))
@@ -70,7 +71,7 @@ describe('the receiver, over Art-Net', () => {
 
   it('calls a console that repeats one frame a clock standing still', async () => {
     const h = harness()
-    await h.receiver.start(settings({ source: 'artnet' }))
+    await h.receiver.start(settings({ source: 'artnet' }), defaultTimecodeShowSettings())
     const packet = encodeArtTimecode(framesToTimecode(500, '30'), '30')
     for (let n = 0; n < 4; n++) {
       h.packet(packet)
@@ -81,7 +82,7 @@ describe('the receiver, over Art-Net', () => {
 
   it('says why when the port is taken', async () => {
     const h = harness({ bindUdp: () => Promise.reject(new Error('bind EADDRINUSE 0.0.0.0:6454')) })
-    expect(await h.receiver.start(settings({ source: 'artnet' }))).toEqual({
+    expect(await h.receiver.start(settings({ source: 'artnet' }), defaultTimecodeShowSettings())).toEqual({
       state: 'degraded',
       detail: 'could not listen on UDP 6454: bind EADDRINUSE 0.0.0.0:6454'
     })
@@ -91,7 +92,7 @@ describe('the receiver, over Art-Net', () => {
 describe('the receiver, over MTC', () => {
   it('opens the port itself when the MIDI input service does not hold it', async () => {
     const h = harness()
-    expect(await h.receiver.start(settings({ source: 'mtc', mtcPort: 'Clock In' }))).toEqual({ state: 'running', detail: 'MTC on "Clock In"' })
+    expect(await h.receiver.start(settings({ source: 'mtc', mtcPort: 'Clock In' }), defaultTimecodeShowSettings())).toEqual({ state: 'running', detail: 'MTC on "Clock In"' })
     expect(h.opened).toEqual(['Clock In'])
     h.midi(encodeFullFrame(framesToTimecode(1234, '25'), '25'))
     expect(h.receiver.status()).toMatchObject({ state: 'stopped', frames: 1234 })
@@ -101,7 +102,7 @@ describe('the receiver, over MTC', () => {
     const h = harness()
     const turnedOn: boolean[] = []
     h.tap.opened('Clock In', { setTimecode: on => turnedOn.push(on) })
-    await h.receiver.start(settings({ source: 'mtc', mtcPort: 'Clock In' }))
+    await h.receiver.start(settings({ source: 'mtc', mtcPort: 'Clock In' }), defaultTimecodeShowSettings())
     expect(h.opened).toEqual([])
     expect(turnedOn).toEqual([true])
     // The service hands the tap what arrives, and the tap keeps it from the show.
@@ -119,7 +120,7 @@ describe('the receiver, over MTC', () => {
 
   it('waits, saying so, for a port that is not there', async () => {
     const h = harness()
-    expect(await h.receiver.start(settings({ source: 'mtc', mtcPort: 'Gone' }))).toEqual({
+    expect(await h.receiver.start(settings({ source: 'mtc', mtcPort: 'Gone' }), defaultTimecodeShowSettings())).toEqual({
       state: 'degraded',
       detail: 'no MIDI input port named "Gone"'
     })
@@ -138,7 +139,7 @@ describe('the receiver, over LTC', () => {
       return {}
     })
     const h = harness({ ltc, ltcPollMs: 5 })
-    await h.receiver.start(settings({ source: 'ltc', ltcDevice: 'Interface' }))
+    await h.receiver.start(settings({ source: 'ltc', ltcDevice: 'Interface' }), defaultTimecodeShowSettings())
     await new Promise(resolve => setTimeout(resolve, 30))
     expect(listens).toEqual(['Interface', 'Interface'])
   })
@@ -156,7 +157,7 @@ describe('the receiver, over LTC', () => {
       return {}
     })
     const h = harness({ ltc, ltcPollMs: 5 })
-    expect(await h.receiver.start(settings({ source: 'ltc', ltcChannel: 2 }))).toEqual({
+    expect(await h.receiver.start(settings({ source: 'ltc', ltcChannel: 2 }), defaultTimecodeShowSettings())).toEqual({
       state: 'running',
       detail: 'LTC on Interface, channel 3'
     })

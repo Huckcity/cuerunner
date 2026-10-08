@@ -62,7 +62,7 @@ import {
   type TimecodeGenerateResult,
   type TimecodeInputs
 } from '../shared/ipc/timecode'
-import type { TimecodeGenerateRequest, TimecodeSettings, TimecodeStatus } from '../shared/timecode'
+import type { TimecodeGenerateRequest, TimecodeSettings, TimecodeShowSettings, TimecodeStatus } from '../shared/timecode'
 import {
   SCRIPT_CHANNELS,
   type ScriptReadDocumentPayload,
@@ -401,6 +401,8 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invoke(TIMECODE_CHANNELS.settings),
     configure: (patch: Partial<TimecodeSettings>): Promise<TimecodeSettings> =>
       invoke(TIMECODE_CHANNELS.configure, patch),
+    show: (settings: TimecodeShowSettings): Promise<TimecodeShowSettings> =>
+      invoke(TIMECODE_CHANNELS.show, settings),
     status: (): Promise<TimecodeStatus> =>
       invoke(TIMECODE_CHANNELS.status),
     inputs: (): Promise<TimecodeInputs> =>
