@@ -616,11 +616,22 @@ function sendCommands(win: BrowserWindow, commands: OutputWindowCommand[]): void
   }
 }
 
+/**
+ * The renderer a development build was told to draw its outputs with, or null. The suite sets
+ * `CUERUNNER_TEST_OUTPUT_RENDERER=canvas` to hold the 2D fallback on any machine, whatever its
+ * GPU; a packaged build never reads it, so an operator's output always takes the GPU it is given.
+ */
+export function outputRendererOverride(packaged: boolean, env: NodeJS.ProcessEnv): 'canvas' | null {
+  return !packaged && env['CUERUNNER_TEST_OUTPUT_RENDERER'] === 'canvas' ? 'canvas' : null
+}
+
 function loadOutputPage(win: BrowserWindow, role: 'output' | 'timer'): void {
+  const renderer = outputRendererOverride(app.isPackaged, process.env)
+  const query: Record<string, string> = renderer === null ? { role } : { role, renderer }
   if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
-    void win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/output.html?role=${role}`)
+    void win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/output.html?${new URLSearchParams(query).toString()}`)
   } else {
-    void win.loadFile(join(__dirname, '../renderer/output.html'), { query: { role } })
+    void win.loadFile(join(__dirname, '../renderer/output.html'), { query })
   }
 }
 

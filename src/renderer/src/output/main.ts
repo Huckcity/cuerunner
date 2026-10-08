@@ -17,6 +17,7 @@ import { EngineClock } from './engineClock'
 import { Stage, timerText } from './stage'
 import { GlRenderer } from './renderGl'
 import { CanvasRenderer } from './render2d'
+import { chooseRenderer } from './renderChoice'
 import type { Renderer } from './render'
 
 declare global {
@@ -64,8 +65,10 @@ async function runOutput(): Promise<void> {
     release: key => renderer?.release(key)
   })
 
-  const gl = GlRenderer.create(canvas)
-  renderer = gl ?? new CanvasRenderer(canvas)
+  renderer = chooseRenderer(canvas, new URLSearchParams(location.search).get('renderer'), {
+    gl: target => GlRenderer.create(target),
+    canvas: target => new CanvasRenderer(target)
+  })
   void bridge.report({ events: [], renderer: renderer.kind }).catch(() => {})
 
   let missing: { label: string } | null = null

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { MAX_COMMANDS_PER_LAYER, OutputRegistry } from './registry'
+import { outputRendererOverride } from './OutputManager'
 import { createOutput, defaultGeometry } from '../../shared/visual'
 import type { LayerSpec } from '../../shared/ipc/output'
 
@@ -98,5 +99,16 @@ describe('the output registry', () => {
     expect(registry.outputOf('i2')).toBeNull()
     expect(registry.route({ op: 'clear', fadeMs: 0, at: 0 })).toEqual({ kind: 'all', command: { op: 'clear', fadeMs: 0, at: 0 } })
     expect(registry.cuesOn('b')).toEqual([])
+  })
+})
+
+describe('the test-only renderer switch', () => {
+  it('holds a development build\'s outputs on the 2D fallback when the suite asks', () => {
+    expect(outputRendererOverride(false, { CUERUNNER_TEST_OUTPUT_RENDERER: 'canvas' })).toBe('canvas')
+    expect(outputRendererOverride(false, {})).toBeNull()
+  })
+
+  it('is never read by a packaged build', () => {
+    expect(outputRendererOverride(true, { CUERUNNER_TEST_OUTPUT_RENDERER: 'canvas' })).toBeNull()
   })
 })
