@@ -21,10 +21,10 @@
     "peer:eos": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON integration/peers/eos.ts",
     "peer:desk": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON integration/peers/desk.ts",
     "relay:desk": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON integration/deskRelay.ts",
-    "dist": "electron-vite build && electron-builder",
-    "dist:win": "electron-vite build && electron-builder --win",
-    "dist:mac": "electron-vite build && electron-builder --mac",
-    "dist:linux": "electron-vite build && electron-builder --linux",
+    "dist": "electron-vite build && electron-builder --publish never",
+    "dist:win": "electron-vite build && electron-builder --win --publish never",
+    "dist:mac": "electron-vite build && electron-builder --mac --publish never",
+    "dist:linux": "electron-vite build && electron-builder --linux --publish never",
     "screenshots": "electron-vite build && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/capture-screenshots.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/capture-redundancy.mjs",
     "screenshots:redundancy": "electron-vite build && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/capture-redundancy.mjs",
     "site": "node scripts/serve-website.mjs",
@@ -52,10 +52,10 @@
     "pretest:integration": "node scripts/ensure-native.mjs",
     "pretest:native": "node scripts/ensure-native.mjs --with-decoders",
     "prescreenshots": "node scripts/ensure-native.mjs",
-    "predist": "node scripts/ensure-native.mjs --with-decoders",
-    "predist:win": "node scripts/ensure-native.mjs",
-    "predist:mac": "node scripts/ensure-native.mjs",
-    "predist:linux": "node scripts/ensure-native.mjs --with-decoders",
+    "predist": "node scripts/ensure-native.mjs --with-decoders && node scripts/release-notes.mjs",
+    "predist:win": "node scripts/ensure-native.mjs && node scripts/release-notes.mjs",
+    "predist:mac": "node scripts/ensure-native.mjs && node scripts/release-notes.mjs",
+    "predist:linux": "node scripts/ensure-native.mjs --with-decoders && node scripts/release-notes.mjs",
     "ensure:native": "node scripts/ensure-native.mjs --with-decoders",
     "pretest:native:device": "node scripts/ensure-native.mjs",
     "pretest:native:asio": "node scripts/ensure-native.mjs"
@@ -76,6 +76,10 @@
       {
         "from": "resources/demo",
         "to": "demo"
+      },
+      {
+        "from": "CHANGELOG.md",
+        "to": "CHANGELOG.md"
       },
       {
         "from": "native/audio/build",
@@ -102,6 +106,12 @@
       "target": [
         {
           "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "universal"
           ]
@@ -160,7 +170,12 @@
       ],
       "priority": "optional"
     },
-    "publish": null
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://pub.cuerunner.app/latest/"
+      }
+    ]
   },
   "allowScripts": {
     "electron": true,
@@ -172,6 +187,7 @@
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/ibm-plex-sans": "^5.3.0",
     "@fontsource/ibm-plex-sans-condensed": "^5.3.0",
+    "electron-updater": "^6.8.9",
     "node-osc": "^11.4.0",
     "zustand": "^5.0.0"
   },

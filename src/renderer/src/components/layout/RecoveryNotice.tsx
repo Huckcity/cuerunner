@@ -106,6 +106,7 @@ export function RecoveryNotice() {
             lighting: store.lighting,
             timecode: store.timecode,
             videoOutputs: store.videoOutputs,
+            cueLists: store.cueLists,
             pictures: store.pictures,
             cues: store.cues
           })
@@ -160,6 +161,8 @@ export function RecoveryNotice() {
       snapshot.workspace.timecode,
       // And its outputs: a recovered show still has its projectors.
       snapshot.workspace.videoOutputs,
+      // And its lists: without them every list's cues would come back in the main one.
+      snapshot.workspace.cueLists,
       // And what it says about its pictures: whether the next GO takes them down.
       snapshot.workspace.pictures
     )

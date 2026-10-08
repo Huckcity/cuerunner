@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
 import type { ViewMenuAction } from '../../../shared/fileMenu'
 
@@ -23,9 +23,20 @@ function writeStored(key: string, on: boolean): void {
  * opens in the editing view, and an operator who left it in show mode last night is not
  * surprised by a list they cannot edit this morning.
  */
-function useViewToggle(key: string, action: ViewMenuAction, remember?: string): [boolean, () => void] {
+function useViewToggle(
+  key: string,
+  action: ViewMenuAction,
+  remember?: string,
+  intercept?: () => boolean
+): [boolean, () => void] {
   const [on, setOn] = useState(() => remember === undefined ? false : readStored(remember))
-  const toggle = useCallback(() => setOn(current => !current), [])
+  // A press somebody else answered — a cart list flipping its own face — leaves the view alone.
+  const interceptRef = useRef(intercept)
+  interceptRef.current = intercept
+  const toggle = useCallback(() => {
+    if (interceptRef.current?.() === true) return
+    setOn(current => !current)
+  }, [])
 
   useEffect(() => {
     if (remember !== undefined) writeStored(remember, on)
@@ -55,7 +66,11 @@ export function useShowMode(): [boolean, () => void] {
   return useViewToggle(SHOW_MODE_KEY, 'show-mode')
 }
 
-/** The cart (F6): the list as a wall of buttons, each firing its cue. Remembered on this machine. */
-export function useCartMode(): [boolean, () => void] {
-  return useViewToggle(CART_KEY, 'cart', 'cuerunner.cart')
+/**
+ * The cart (F6): the list as a wall of buttons, each firing its cue. Remembered on this machine.
+ * `intercept` answers the press first where the list on screen is a cart already, whose F6 shows
+ * it as rows for editing and back, rather than turning every other list into a cart.
+ */
+export function useCartMode(intercept?: () => boolean): [boolean, () => void] {
+  return useViewToggle(CART_KEY, 'cart', 'cuerunner.cart', intercept)
 }

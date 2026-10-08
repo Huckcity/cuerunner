@@ -51,7 +51,7 @@ function audioCue(
   }
 }
 
-function writeShow(file: string, cues: unknown[]): void {
+function writeShow(file: string, cues: unknown[], sections: Record<string, unknown> = {}): void {
   fs.writeFileSync(
     file,
     `${JSON.stringify(
@@ -62,6 +62,7 @@ function writeShow(file: string, cues: unknown[]): void {
         createdAt: '2026-01-01T00:00:00.000Z',
         audioSettings: { outputDeviceId: 'default' },
         midiSettings: { outputPortName: '' },
+        ...sections,
         cues
       },
       null,
@@ -240,4 +241,35 @@ test('cancelling the save dialog merges nothing and leaves the show where it was
   // And the window still takes input afterwards.
   await page.locator('.cue-row', { hasText: 'Walk-in' }).click()
   await expect(page.locator('.cue-row[data-selected="true"]', { hasText: 'Walk-in' })).toBeVisible()
+})
+
+test('a rig one side took out is left out of the merged show, which opens', async () => {
+  test.setTimeout(120_000)
+  // The version both started from had a rig, and the associate left it as it was; this show
+  // took it out. The rig's removal is this show's change, so the merged show has none — and it
+  // has to be a show that opens, not one carrying a section that says nothing.
+  const rig = {
+    fixtures: [], groups: [], types: [], outputs: [], inputs: [], sync: false, syncUniverse: 63999, panic: 'blackout'
+  }
+  const base = JSON.parse(fs.readFileSync(ancestor, 'utf-8')).cues
+  writeShow(ancestor, base, { lighting: rig })
+  writeShow(theirs, JSON.parse(fs.readFileSync(theirs, 'utf-8')).cues, { lighting: rig })
+
+  const page = await start({ license: mintLicense() })
+  await openShow(page)
+  await stubMergeDialogs(merged)
+  await page.locator('.toolbar-brand').click()
+  await page.locator('.file-menu button[data-action="merge"]').click()
+
+  const report = page.getByRole('dialog', { name: 'Merge' })
+  await expect(report).toBeVisible()
+  const onDisk = JSON.parse(fs.readFileSync(merged, 'utf-8')) as Record<string, unknown>
+  expect(Object.keys(onDisk)).not.toContain('lighting')
+  expect((onDisk.cues as Array<{ name: string }>).map(cue => cue.name)).toEqual([
+    'Walk-in', 'Interval (20 min)', 'Bows', 'Curtain call'
+  ])
+
+  await report.locator('.changes-actions button', { hasText: 'Open the merged show' }).click()
+  await expect(page.locator('.cue-row', { hasText: 'Curtain call' })).toBeVisible()
+  expect(await page.locator('.app-notice').allTextContents(), 'the merged show was refused').toEqual([])
 })

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Toolbar } from './components/layout/Toolbar'
 import { TransportBar } from './components/layout/TransportBar'
 import { ContextBar } from './components/layout/ContextBar'
@@ -39,6 +39,11 @@ import type { GroupCue } from '../../shared/cue'
 import { ProLock } from './components/license/ProLock'
 import { LightingView } from './components/lighting/LightingView'
 import { useLightingBridge } from './hooks/useLightingBridge'
+import { CueListTabs } from './components/cue-lists/CueListTabs'
+import { useTileKeys } from './hooks/useTileKeys'
+import { useUpdates } from './hooks/useUpdates'
+import { UpdateNotice } from './components/update/UpdateNotice'
+import { WhatsNewDialog } from './components/update/WhatsNewDialog'
 import './App.css'
 
 // Store-backed notice bar: save and open failures land here, where a packaged build
@@ -78,6 +83,8 @@ export function App() {
   useTimecodeFollow()
   // The video outputs: which the show declares, what they report, and the timers on them.
   useOutputs()
+  // A cart's tiles that have keys of their own answer them wherever the show is standing.
+  useTileKeys()
   const settingsTab = useStore(s => s.settingsTab)
   const openSettings = useStore(s => s.openSettings)
   const closeSettings = useStore(s => s.closeSettings)
@@ -99,9 +106,20 @@ export function App() {
   const selected = useSelectedCue()
   // The large-type operator view (F5): it takes the place of the list and the inspector.
   const [showMode, toggleShowMode] = useShowMode()
+  // A list that is a cart is shown as one; F6 on it shows its rows for editing, and back.
+  const activeIsCart = useStore(s => s.cueLists.find(list => list.id === s.activeListId)?.cart === true)
+  const [cartAsRows, setCartAsRows] = useState(false)
+  const activeIsCartRef = useRef(activeIsCart)
+  activeIsCartRef.current = activeIsCart
   // The cart (F6): the list as a wall of buttons. Show mode, when it is on, is in front of it.
-  const [cartMode, toggleCartMode] = useCartMode()
-  const cartShown = cartMode && !showMode && view === 'cues'
+  const [cartMode, toggleCartMode] = useCartMode(() => {
+    if (!activeIsCartRef.current) return false
+    setCartAsRows(rows => !rows)
+    return true
+  })
+  const cartShown = (activeIsCart ? !cartAsRows : cartMode) && !showMode && view === 'cues'
+  // Updates follow the show: main is told whether it is running, in Show Mode, a file.
+  useUpdates(showMode)
 
   const timelineGroupCue = selected?.type === 'group' && (selected as GroupCue).mode === 'timeline'
     ? selected as GroupCue
@@ -168,6 +186,8 @@ export function App() {
       <CrashNotice />
       <RecoveryNotice />
       <NoticeHost />
+      <UpdateNotice showMode={showMode} />
+      <WhatsNewDialog />
       <MissingMediaBar />
       <GroupingNoteBar />
       <Toolbar
@@ -176,11 +196,12 @@ export function App() {
         onSwitchView={setView}
       />
       <ContextBar />
+      {view === 'cues' && <CueListTabs readOnly={showMode} />}
       <div className="app-main" data-view={showMode ? 'show' : cartShown ? 'cart' : view}>
         {showMode ? (
           <ShowModeView onExit={toggleShowMode} />
         ) : cartShown ? (
-          <CartView onExit={toggleCartMode} />
+          <CartView onExit={activeIsCart ? () => setCartAsRows(true) : toggleCartMode} />
         ) : view === 'scenes' ? (
           pro ? (
             <ScenesView />

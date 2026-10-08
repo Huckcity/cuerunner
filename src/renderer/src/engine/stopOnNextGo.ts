@@ -9,9 +9,15 @@
 // Two are left where they are: the cue the GO fires (a picture re-fired is replaced, not
 // stopped), and a picture the GO's own crossfade is about to dissolve away — stopping it would
 // cut the dissolve to black, which is the one thing a crossfade is there to avoid.
+//
+// "The next GO" is the next GO in the picture's own cue list (spine AD-28): a list is a running
+// order of its own, and a sound effect fired from a cart list mid-scene must not wipe the
+// surtitles the main list put up. A GO in another list leaves the picture alone; the picture's
+// own list moving on is what takes it down.
 
 import type { Cue } from '../../../shared/cue'
 import { isVisualCue, outputFor, stopsOnNextGo, type PictureSettings, type VideoOutput } from '../../../shared/visual'
+import { listMembership, MAIN_CUE_LIST_ID } from '../../../shared/cueLists'
 
 export interface GoStop {
   cueId: string
@@ -30,6 +36,9 @@ export function picturesTakenByGo(input: {
 }): GoStop[] {
   const { cues, showing, incoming, settings, outputs } = input
   const byId = new Map(cues.map(cue => [cue.id, cue]))
+  const membership = listMembership(cues)
+  const list = (cueId: string): string => membership.get(cueId) ?? MAIN_CUE_LIST_ID
+  const incomingList = list(incoming.id)
   const dissolving = isVisualCue(incoming) && incoming.crossfade
     ? { outputId: outputFor(outputs, incoming.outputId)?.id ?? null, layer: incoming.layer }
     : null
@@ -38,6 +47,7 @@ export function picturesTakenByGo(input: {
     if (cueId === incoming.id) continue
     const cue = byId.get(cueId)
     if (cue === undefined || !isVisualCue(cue) || !stopsOnNextGo(cue, settings)) continue
+    if (list(cueId) !== incomingList) continue
     if (dissolving !== null && dissolving.outputId !== null &&
       outputFor(outputs, cue.outputId)?.id === dissolving.outputId && cue.layer <= dissolving.layer) continue
     stops.push({ cueId, fadeMs: Math.max(0, cue.fadeOutDuration) })

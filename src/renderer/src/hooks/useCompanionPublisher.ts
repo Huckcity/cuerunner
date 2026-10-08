@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useStore, usePro, subscribeToParts } from '../store'
 import type { CompanionCue, CompanionState } from '../../../shared/show'
 import type { Cue } from '../../../shared/cue'
+import { cuesOfList } from '../../../shared/cueLists'
 
 /** The shape the tablet is served, minus the timestamp that makes each publish unique. */
 type CompanionBody = Omit<CompanionState, 'at'>
@@ -87,7 +88,8 @@ export function useCompanionPublisher(): void {
             state: entry.state
           }
         }),
-        cues: state.cues.map(toCompanionCue),
+        // The running order the tablet draws is the list in front's, the one GO runs.
+        cues: cuesOfList(state.cues, state.activeListId).map(toCompanionCue),
         script: scriptPath && lines ? { path: scriptPath, lines } : null,
         alerts: state.showAlerts.map(alert => ({
           id: alert.id,
@@ -113,7 +115,7 @@ export function useCompanionPublisher(): void {
     // change to the tablet's page, and serialising the cue list to find that out is the
     // work a duplicate check exists to avoid, done on every write to the store.
     const unsubscribe = subscribeToParts(
-      s => [s.workspaceName, s.cues, s.selectedId, s.running, s.showAlerts],
+      s => [s.workspaceName, s.cues, s.selectedId, s.running, s.showAlerts, s.activeListId],
       publish
     )
     void loadScript()

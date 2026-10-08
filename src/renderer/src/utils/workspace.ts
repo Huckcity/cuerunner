@@ -2,6 +2,7 @@ import { savedShape, type WorkspaceValues } from '../../../shared/workspaceSecti
 import type { Workspace } from '../../../shared/workspace'
 import { isEmptyLighting, type LightingSettings } from '../../../shared/dmx'
 import { isDefaultTimecodeShow, type TimecodeShowSettings } from '../../../shared/timecode'
+import { canonicalCueList, isDefaultCueLists, type CueListInfo } from '../../../shared/cueLists'
 import { isDefaultPictureSettings, type PictureSettings } from '../../../shared/visual'
 
 // The saved form of the current session. A real save and an autosave snapshot are built
@@ -35,13 +36,21 @@ import { isDefaultPictureSettings, type PictureSettings } from '../../../shared/
 // show saved before timecode existed, or that never touched it, stays byte-identical.
 //
 // The video outputs the same: named at every call, even where there are none, and a show with
-// none writes no section. And the show's picture settings: named at every call, and a show that
-// leaves them at the defaults writes no section.
+// none writes no section.
+//
+// The cue lists are named by every caller the same way: a call site that forgot them would
+// compile and save every list's cues into a show that has only its main list — which the load
+// funnel would then repair into one list. A show with only its main list under its own name
+// writes no section, so a show saved before lists existed stays byte-identical.
+//
+// And the show's picture settings: named at every call, and a show that leaves them at the
+// defaults writes no section.
 export function buildWorkspace(
-  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode' | 'videoOutputs' | 'pictures'> & {
+  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode' | 'videoOutputs' | 'cueLists' | 'pictures'> & {
     lighting: LightingSettings | undefined
     timecode: TimecodeShowSettings | undefined
     videoOutputs: WorkspaceValues['videoOutputs']
+    cueLists: CueListInfo[] | undefined
     pictures: PictureSettings | undefined
   }
 ): Workspace {
@@ -56,6 +65,9 @@ export function buildWorkspace(
     // The same for a show with no video output: its bytes are what they were before
     // outputs existed.
     videoOutputs: values.videoOutputs && values.videoOutputs.length > 0 ? values.videoOutputs : undefined,
+    cueLists: values.cueLists === undefined || isDefaultCueLists(values.cueLists)
+      ? undefined
+      : values.cueLists.map(canonicalCueList),
     // And for a show whose pictures stay up until they are stopped, as they always did.
     pictures: values.pictures === undefined || isDefaultPictureSettings(values.pictures) ? undefined : values.pictures
   })

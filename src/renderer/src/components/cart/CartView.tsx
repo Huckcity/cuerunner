@@ -8,6 +8,8 @@ import { CUE_COLOR_VAR } from '../../utils/cueColors'
 import { groupDurationMs } from '../../utils/cueDuration'
 import { formatRunTime, runTiming } from '../../utils/runTiming'
 import { formatDuration } from '../../utils/cueDefaults'
+import { ownListId } from '../../../../shared/cueLists'
+import { tileKeyOf, tileKeyRefusal } from '../../hooks/useTileKeys'
 import './CartView.css'
 
 // Enough to read a countdown by.
@@ -44,8 +46,16 @@ interface Props {
 export function CartView({ onExit }: Props) {
   const cues = useStore(s => s.cues)
   const running = useStore(s => s.running)
+  // The tiles are the list on screen's: a cart list's own, or the list F6 turned into one.
+  const list = useStore(s => s.cueLists.find(entry => entry.id === s.activeListId))
+  const activeListId = useStore(s => s.activeListId)
+  const updateCueList = useStore(s => s.updateCueList)
   const [now, setNow] = useState(() => Date.now())
-  const tiles = cues.filter(cue => cue.parentId === null)
+  /** The tile waiting for a key of its own, while one is being chosen. */
+  const [keying, setKeying] = useState<string | null>(null)
+  const [keyRefused, setKeyRefused] = useState<string | null>(null)
+  const tiles = cues.filter(cue => cue.parentId === null && ownListId(cue) === activeListId)
+  const ownKey = (cueId: string): string | null => list?.tileKeys?.find(entry => entry.cueId === cueId)?.key ?? null
 
   const active = running.size > 0
   useEffect(() => {
@@ -63,7 +73,8 @@ export function CartView({ onExit }: Props) {
       if ((tag === 'INPUT' && (el as HTMLInputElement).type !== 'range') || tag === 'TEXTAREA' || tag === 'SELECT') return
       const index = tileForKey(e.key)
       if (index === null) return
-      const tile = useStore.getState().cues.filter(cue => cue.parentId === null)[index]
+      const state = useStore.getState()
+      const tile = state.cues.filter(cue => cue.parentId === null && ownListId(cue) === state.activeListId)[index]
       if (!tile) return
       e.preventDefault()
       cueEngine.goById(tile.id)
@@ -72,11 +83,43 @@ export function CartView({ onExit }: Props) {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
+  // A tile being given a key takes the next press: Backspace takes its key away, Escape leaves
+  // it as it was, and a key the window already answers is refused with the reason.
+  useEffect(() => {
+    if (keying === null) return
+    const handler = (e: KeyboardEvent): void => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.key === 'Escape') { setKeying(null); setKeyRefused(null); return }
+      const kept = (list?.tileKeys ?? []).filter(entry => entry.cueId !== keying)
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        updateCueList(activeListId, { tileKeys: kept })
+        setKeying(null)
+        setKeyRefused(null)
+        return
+      }
+      if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return
+      const refusal = tileKeyRefusal(e.key)
+      if (refusal !== null) { setKeyRefused(refusal); return }
+      const key = tileKeyOf(e.key)
+      // One key, one tile: a key moved here is taken off the tile that had it.
+      updateCueList(activeListId, { tileKeys: [...kept.filter(entry => entry.key !== key), { cueId: keying, key }] })
+      setKeying(null)
+      setKeyRefused(null)
+    }
+    window.addEventListener('keydown', handler, true)
+    return () => window.removeEventListener('keydown', handler, true)
+  }, [keying, list, activeListId, updateCueList])
+
   return (
     <div className="cart" role="region" aria-label="Cart">
       <div className="cart-bar">
-        <span className="cart-title">Cart</span>
-        <span className="cart-hint">Press a tile to play it — 1 to 9 and 0 fire the first ten</span>
+        <span className="cart-title">{list?.cart === true ? list.name : 'Cart'}</span>
+        <span className="cart-hint">
+          {keying !== null
+            ? keyRefused ?? 'Press the key for this tile — Backspace takes its key away, Escape leaves it'
+            : 'Press a tile to play it — 1 to 9 and 0 fire the first ten; right-click one to give it a key'}
+        </span>
         <button className="cart-exit" onClick={onExit} title="Back to the list (F6)">
           List <kbd>F6</kbd>
         </button>
@@ -86,7 +129,9 @@ export function CartView({ onExit }: Props) {
       ) : (
         <div className="cart-grid">
           {tiles.map((cue, index) => (
-            <CartTile key={cue.id} cue={cue} cues={cues} index={index} run={running.get(cue.id)} now={now} />
+            <CartTile key={cue.id} cue={cue} cues={cues} index={index} run={running.get(cue.id)} now={now}
+              ownKey={ownKey(cue.id)} keying={keying === cue.id}
+              onKey={() => { setKeying(cue.id); setKeyRefused(null) }} />
           ))}
         </div>
       )}
@@ -94,20 +139,27 @@ export function CartView({ onExit }: Props) {
   )
 }
 
-function CartTile({ cue, cues, index, run, now }: {
+function CartTile({ cue, cues, index, run, now, ownKey, keying, onKey }: {
   cue: Cue
   cues: Cue[]
   index: number
   run: RunningCue | undefined
   now: number
+  /** The key this tile answers wherever the show is standing, or null. */
+  ownKey: string | null
+  /** The tile is waiting for its key to be pressed. */
+  keying: boolean
+  onKey: () => void
 }) {
   const totalMs = cue.type === 'group' ? groupDurationMs(cues, cue.id) : cue.duration
   const timing = run === undefined
     ? null
     : runTiming(cue, run, totalMs, now, cue.type === 'audio' ? audioEngine.getProgress(cue.id) : null)
-  const key = tileKey(index)
+  const key = ownKey ?? tileKey(index)
   return (
-    <div className="cart-tile" data-state={run?.state ?? 'idle'} data-armed={cue.isArmed} data-cue-id={cue.id}>
+    <div className="cart-tile" data-state={run?.state ?? 'idle'} data-armed={cue.isArmed} data-cue-id={cue.id}
+      data-keying={keying || undefined} data-own-key={ownKey ?? undefined}
+      onContextMenu={e => { e.preventDefault(); onKey() }}>
       <button
         className="cart-tile-fire"
         onClick={() => cueEngine.goById(cue.id)}

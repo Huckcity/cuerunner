@@ -165,6 +165,22 @@ describe('CueEngine — round two\'s pictures', () => {
     expect(sent().filter(command => command.op === 'stop').map(command => command.op === 'stop' && command.cueId)).toEqual(['t1'])
   })
 
+  it('leaves a picture up on a GO in another cue list, and takes it down on its own list\'s next', async () => {
+    const { runner } = setup([
+      makeText({ stopOnNextGo: true }),
+      { ...makeWait('fx'), listId: 'carts' },
+      makeWait('w1')
+    ])
+    runner.go()
+    await vi.advanceTimersByTimeAsync(50)
+    runner.goById('fx')
+    await vi.advanceTimersByTimeAsync(50)
+    expect(sent().some(command => command.op === 'stop')).toBe(false)
+    runner.goById('w1')
+    await vi.advanceTimersByTimeAsync(50)
+    expect(sent().filter(command => command.op === 'stop')).toEqual([expect.objectContaining({ cueId: 't1' })])
+  })
+
   it('follows the show\'s default where the picture leaves it, from a trigger as from the button', async () => {
     const { runner } = setup([makeText(), makeWait('w1')], { stopOnNextGo: true })
     runner.go()

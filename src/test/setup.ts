@@ -27,6 +27,8 @@ import type { QLabFindMediaResult, QLabImportResult, QLabWorkspacesResult } from
 import type { RedundancySettings } from '../shared/redundancy'
 import { defaultTimecodeSettings, idleReceiverStatus, type TimecodeSettings, type TimecodeShowSettings, type TimecodeStatus } from '../shared/timecode'
 import type { TimecodeGenerateResult } from '../shared/ipc/timecode'
+import { defaultUpdateSettings, type UpdateStatus } from '../shared/update'
+import type { UpdateActionResult, UpdateCheckResult, WhatsNew } from '../shared/ipc/update'
 import type { ScriptDocument } from '../shared/show'
 import type { Workspace } from '../shared/workspace'
 
@@ -106,6 +108,21 @@ const redundancySettings = {
 // Global window.cuerunner mock — the preload's own bridge, checked against the composed
 // type the preload implements (src/shared/ipc). A member added, renamed or removed there
 // fails to compile here until this mock follows, which is the point of the annotation.
+/** What a machine reports before anything has been checked: the update tab's starting state. */
+export function idleUpdateStatus(): UpdateStatus {
+  return {
+    current: '0.0.0',
+    install: 'development',
+    phase: 'idle',
+    available: null,
+    progress: null,
+    message: null,
+    lastCheckedAt: null,
+    lockout: null,
+    settings: defaultUpdateSettings()
+  }
+}
+
 Object.defineProperty(window, 'cuerunner', {
   value: {
     platform: 'win32',
@@ -285,6 +302,18 @@ Object.defineProperty(window, 'cuerunner', {
       inputs: vi.fn(() => Promise.resolve({ midi: [], audio: [] })),
       generate: vi.fn((): Promise<TimecodeGenerateResult> => Promise.resolve({ ok: true, startFrames: 0 })),
       control: vi.fn(() => Promise.resolve(true)),
+      onEvents: vi.fn(() => () => {})
+    },
+    // A development build: nothing offered, nothing new, checks on as a new machine has them.
+    update: {
+      status: vi.fn((): Promise<UpdateStatus> => Promise.resolve(idleUpdateStatus())),
+      check: vi.fn((): Promise<UpdateCheckResult> => Promise.resolve({ ok: true, status: idleUpdateStatus() })),
+      download: vi.fn((): Promise<UpdateActionResult> => Promise.resolve({ ok: true })),
+      install: vi.fn((): Promise<UpdateActionResult> => Promise.resolve({ ok: true })),
+      configure: vi.fn((): Promise<UpdateStatus> => Promise.resolve(idleUpdateStatus())),
+      report: vi.fn(),
+      whatsNew: vi.fn((): Promise<WhatsNew | null> => Promise.resolve(null)),
+      openDownloads: vi.fn(() => Promise.resolve()),
       onEvents: vi.fn(() => () => {})
     },
     output: {

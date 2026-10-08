@@ -23,6 +23,7 @@ function saved() {
     lighting: s.lighting,
     timecode: s.timecode,
     videoOutputs: s.videoOutputs,
+    cueLists: s.cueLists,
     pictures: s.pictures,
     cues: s.cues
   })

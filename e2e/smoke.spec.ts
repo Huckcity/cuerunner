@@ -67,15 +67,18 @@ test('the audio engine is running', async () => {
   }
 })
 
-test('nothing sits between the toolbar, the context bar and the cue list', async () => {
+test('nothing sits between the toolbar, the context bar, the list tabs and the cue list', async () => {
   // An empty status row used to hold 26px here for a badge that only appears on a
-  // broken build. Toolbar, context bar, list: each starts where the last one ends.
+  // broken build. Toolbar, context bar, the show's list tabs, list: each starts where the
+  // last one ends.
   const toolbar = await page.locator('.toolbar').boundingBox()
   const standby = await page.locator('.context-bar').boundingBox()
+  const tabs = await page.locator('.cue-list-tabs').boundingBox()
   const list = await page.locator('.cue-list-container').boundingBox()
-  expect(toolbar && standby && list).toBeTruthy()
+  expect(toolbar && standby && tabs && list).toBeTruthy()
   expect(Math.abs(standby!.y - (toolbar!.y + toolbar!.height))).toBeLessThanOrEqual(1)
-  expect(Math.abs(list!.y - (standby!.y + standby!.height))).toBeLessThanOrEqual(1)
+  expect(Math.abs(tabs!.y - (standby!.y + standby!.height))).toBeLessThanOrEqual(1)
+  expect(Math.abs(list!.y - (tabs!.y + tabs!.height))).toBeLessThanOrEqual(1)
 })
 
 // On Linux the suite runs on virtual displays, and each worker's apps open on a server of

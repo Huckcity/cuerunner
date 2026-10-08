@@ -88,6 +88,7 @@ export const WORKSPACE_SECTIONS = [
   { key: 'lighting', route: 'lighting', merge: 'section' },
   { key: 'timecode', route: 'timecode', merge: 'section' },
   { key: 'videoOutputs', route: 'outputs', merge: 'section' },
+  { key: 'cueLists', route: 'lists', merge: 'section' },
   { key: 'pictures', route: 'pictures', merge: 'section' },
   { key: 'cues', route: null, merge: 'cue' }
 ] as const satisfies readonly WorkspaceSection[]
@@ -477,7 +478,8 @@ const CUE_BASE_SHAPE = {
   // being an object and the clauses' own fields are not declared.
   triggers: { absent: true, of: { items: 'object' } },
   refire: { absent: true, of: 'string' },
-  scriptLine: { absent: true, of: { nothing: true, of: 'number' } }
+  scriptLine: { absent: true, of: { nothing: true, of: 'number' } },
+  listId: { absent: true, of: 'string' }
 } as const satisfies ShapeFields<CueBase>
 
 /**

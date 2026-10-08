@@ -30,6 +30,7 @@ import type { Cue } from './cue'
 import { heldShowSettings } from './show'
 import type { Workspace } from './workspace'
 import { WORKSPACE_SECTIONS } from './workspaceSections'
+import { heldCueLists, listMembership, MAIN_CUE_LIST_ID, type CueListInfo } from './cueLists'
 import {
   cueLabel,
   cuePlaces,
@@ -309,7 +310,19 @@ function mergeSettings(
       const myValue = mine[section.key] ?? null
       const theirValue = yours[section.key] ?? null
       if (sameValue(base, theirValue) && sameValue(base, myValue)) continue
-      merged = { ...merged, [section.key]: decide(section.route, base, myValue, theirValue) } as Workspace
+      const decided = decide(section.route, base, myValue, theirValue)
+      // A side that carries no section is read as `null` so the three can be compared, and
+      // the blend can answer `null` back — the side that dropped the section won. On disk that
+      // is a section the show does not carry, not a section that is `null`: the funnel refuses
+      // `null` where a section's type has none, so the merged show would not open. Absent, it
+      // is the show a file without the section always was, whichever optional section it is.
+      if (decided === null || decided === undefined) {
+        const without = { ...merged } as Record<string, unknown>
+        delete without[section.key]
+        merged = without as unknown as Workspace
+      } else {
+        merged = { ...merged, [section.key]: decided } as Workspace
+      }
     } else if (section.merge === 'keys') {
       // The show's own settings, one key at a time: the services, the plot, the cast, the
       // scenes. A section this show never had and the other one did is a section this show
@@ -438,7 +451,7 @@ export function mergeWorkspaces(
   const cues = order.map(id => merged.get(id)).filter((cue): cue is Cue => cue !== undefined)
   const settings = mergeSettings(ancestor, ours, theirs, options, notes, tally)
   return {
-    workspace: { ...settings, cues },
+    workspace: { ...settings, cues: repairLists(cues, settings.cueLists, ours, theirs, notes) },
     notes,
     tally
   }
@@ -504,6 +517,53 @@ function repairParents(merged: Map<string, Cue>, notes: MergeNote[]): void {
       conflict: false
     })
   }
+}
+
+/**
+ * Every merged cue in a list the merged show has. The lists are a section and blend as one, so
+ * one side may have moved a cue into a list the section the merge kept does not carry: that cue
+ * comes back to the main list, and says so. A cue `repairParents` lifted out of a group that is
+ * gone is put in the list its group ran in, where the merged show still has it, rather than
+ * landing in the main list for want of a name. A child carries no list name.
+ */
+function repairLists(
+  cues: Cue[],
+  lists: CueListInfo[] | undefined,
+  ours: Workspace,
+  theirs: Workspace,
+  notes: MergeNote[]
+): Cue[] {
+  const known = new Set(heldCueLists(lists).map(list => list.id))
+  const wasIn = [listMembership(ours.cues), listMembership(theirs.cues)]
+  // Lifted by the repair: a child on every side that has it, at the top level only here.
+  const topLevelSomewhere = new Set([...ours.cues, ...theirs.cues].filter(cue => cue.parentId === null).map(cue => cue.id))
+  const wasChild = new Set(
+    [...ours.cues, ...theirs.cues].filter(cue => !topLevelSomewhere.has(cue.id)).map(cue => cue.id)
+  )
+  return cues.map(cue => {
+    if (cue.parentId !== null) {
+      if (cue.listId === undefined) return cue
+      const bare = { ...cue }
+      delete bare.listId
+      return bare
+    }
+    if (cue.listId === undefined) {
+      if (!wasChild.has(cue.id)) return cue
+      const former = wasIn.map(membership => membership.get(cue.id)).find(id => id !== undefined && known.has(id))
+      return former === undefined || former === MAIN_CUE_LIST_ID ? cue : { ...cue, listId: former }
+    }
+    if (known.has(cue.listId) && cue.listId !== MAIN_CUE_LIST_ID) return cue
+    if (cue.listId !== MAIN_CUE_LIST_ID) {
+      notes.push({
+        subject: cueLabel(cue),
+        detail: 'its cue list is not in the merged show: placed in the main list',
+        conflict: false
+      })
+    }
+    const bare = { ...cue }
+    delete bare.listId
+    return bare
+  })
 }
 
 /** Whether the chain of groups above this cue comes back to it — or to itself. */

@@ -76,11 +76,18 @@ describe('the Press Night workspace, mapped', () => {
       .toEqual(['10', '12', '13', '14', '15', '17', '18'])
   })
 
-  it('keeps a second list as a disarmed group, so GO never runs into it', () => {
-    const cart = cues.find(cue => cue.name === 'Sound FX') as GroupCue
-    expect(cart).toMatchObject({ type: 'group', isArmed: false, parentId: null, mode: 'sequence' })
-    expect(cues.filter(cue => cue.parentId === cart.id).map(cue => cue.name)).toEqual(['Door slam'])
+  it('makes the cart a cart list of its own, so GO on the main list never runs into it', () => {
+    expect(mapped.cueLists.map(list => [list.name, list.cart === true])).toEqual([
+      ['Main Cue List', false],
+      ['Sound FX', true]
+    ])
+    const cart = mapped.cueLists[1]
+    const slam = cues.find(cue => cue.name === 'Door slam')!
+    expect(slam).toMatchObject({ parentId: null, listId: cart.id, isArmed: true })
+    // The main list's cues name no list: a cue with none runs in the main list.
+    expect(cues.filter(cue => cue.parentId === null && cue.listId === undefined)).toHaveLength(cues.filter(cue => cue.parentId === null).length - 1)
     expect(mapped.notes).toContainEqual(expect.objectContaining({ qlabType: 'Cart', kind: 'approximated' }))
+    expect(cues.some(cue => cue.name === 'Sound FX')).toBe(false)
   })
 })
 
@@ -365,5 +372,28 @@ describe('ids and names', () => {
     const colours = ['berry', 'crimson', 'forest', 'grape', 'cyan', 'mystery'].map(colorName =>
       mapQLabShow(show([rec('wait', { colorName })]), ids).cues[0].colorLabel)
     expect(colours).toEqual(['pink', 'red', 'green', 'purple', 'blue', 'none'])
+  })
+})
+
+describe('cue lists', () => {
+  it('keeps every QLab list as a list, the first that is not a cart as the main one, with QLab’s own ids', () => {
+    const mapped = mapQLabShow({
+      name: 'Tour', baseDir: BASE, lists: [
+        { name: 'FX', uniqueID: 'CART-1', cart: true, cues: [rec('wait', { number: 'x', uniqueID: 'X' })] },
+        { name: 'Act One', uniqueID: 'L-1', cart: false, cues: [rec('wait', { number: '1', uniqueID: 'A' })] },
+        { name: 'Act Two', uniqueID: 'L-2', cart: false, cues: [rec('group', { number: '2', uniqueID: 'G', children: [rec('wait', { number: '2.1', uniqueID: 'C' })] })] }
+      ]
+    }, ids)
+    expect(mapped.cueLists).toEqual([
+      { id: 'main', name: 'Act One' },
+      { id: 'CART-1', name: 'FX', cart: true },
+      { id: 'L-2', name: 'Act Two' }
+    ])
+    const byId = new Map(mapped.cues.map(cue => [cue.id, cue]))
+    expect(byId.get('A')).not.toHaveProperty('listId')
+    expect(byId.get('X')?.listId).toBe('CART-1')
+    expect(byId.get('G')?.listId).toBe('L-2')
+    // A child is in its group's list, and says nothing of its own.
+    expect(byId.get('C')).not.toHaveProperty('listId')
   })
 })

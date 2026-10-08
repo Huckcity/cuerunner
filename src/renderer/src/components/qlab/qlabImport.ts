@@ -183,6 +183,7 @@ export async function findQLabMediaInFolder(): Promise<void> {
     lighting: store.lighting,
     timecode: store.timecode,
     videoOutputs: store.videoOutputs,
+    cueLists: store.cueLists,
     pictures: store.pictures,
     cues: store.cues
   })

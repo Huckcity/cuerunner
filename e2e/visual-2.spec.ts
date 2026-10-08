@@ -154,7 +154,7 @@ async function launchShow(
   name: string,
   outputs: VideoOutput[],
   cues: (dir: string) => Array<Record<string, unknown>>,
-  options: { env?: Record<string, string>; extra?: Record<string, unknown> } = {}
+  options: { env?: Record<string, string>; extra?: Record<string, unknown>; rows?: number } = {}
 ): Promise<{ app: ElectronApplication; page: Page; dir: string; userDataDir: string }> {
   mkdirSync(ROOT, { recursive: true })
   const dir = mkdtempSync(path.join(ROOT, `${name}-`))
@@ -163,7 +163,8 @@ async function launchShow(
   const userDataDir = mkdtempSync(path.join(ROOT, 'userdata-'))
   const { app, page } = await launchApp({ userDataDir, args: ['--enable-unsafe-swiftshader'], env: options.env })
   await openFromRecent(page, userDataDir, show)
-  await expect(page.locator('.cue-row')).toHaveCount(list.length)
+  // The rows on screen are the first list's: a show of several lists shows one at a time.
+  await expect(page.locator('.cue-row')).toHaveCount(options.rows ?? list.length)
   return { app, page, dir, userDataDir }
 }
 
@@ -380,6 +381,31 @@ test('takes down on the next GO the pictures set to go, by the cue or by the sho
     await fire(page, 4)
     await page.waitForTimeout(400)
     expect(await showing(stage)).toEqual(['credit'])
+  } finally {
+    await closeApp(app)
+  }
+})
+
+test('leaves a caption up through a GO in another cue list, and takes it down on its own list\'s next', async () => {
+  test.setTimeout(40_000)
+  const { app, page } = await launchShow('next-go-lists', [output('stage', 'Stage', 400, 200)], () => [
+    textCue('caption', { stopOnNextGo: true }),
+    waitCue('w1'),
+    { ...waitCue('bang'), listId: 'fx' }
+  ], { rows: 2, extra: { cueLists: [{ id: 'main', name: 'Main Cue List' }, { id: 'fx', name: 'Effects' }] } })
+  try {
+    const stage = (await outputWindows(app, 1)).get('Stage')!
+    await fire(page, 0)
+    await expect.poll(() => showing(stage)).toEqual(['caption'])
+    // The effects list's GO: a cart fired mid-scene.
+    await page.locator('.cue-list-tab').nth(1).click()
+    await fire(page, 0)
+    await page.waitForTimeout(400)
+    expect(await showing(stage)).toEqual(['caption'])
+    // The main list moving on is what takes it down.
+    await page.locator('.cue-list-tab').nth(0).click()
+    await fire(page, 1)
+    await expect.poll(() => showing(stage), { timeout: 5_000 }).toEqual([])
   } finally {
     await closeApp(app)
   }

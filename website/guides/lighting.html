@@ -55,8 +55,19 @@
         mode, a universe, and how many: <strong>Patch</strong> puts them one after another in
         the first gaps that fit, or from the address you type. The built-in types are a
         dimmer, RGB, dimmer + RGB, RGBW, RGBA, RGBAW + UV and a basic moving head in 8- or
-        16-bit; anything else is a type you make from a channel list, or an
-        <strong>Open Fixture Library</strong> definition file read in.
+        16-bit; anything else is a type you make from a channel list, an
+        <strong>Open Fixture Library</strong> definition file read in, or a
+        <strong>GDTF</strong> file — the format fixture makers publish their own fixtures in,
+        on the GDTF Share and on their own sites — with <strong>Import GDTF file…</strong>.
+      </p>
+      <p>
+        A GDTF import brings every DMX mode the fixture has, each channel at its own width,
+        where each one rests, and the functions across a channel's travel: a shutter that is
+        closed, open and then strobing says which on its fader as you move it. A 24-bit
+        channel is driven on its top two bytes, and the import says so. A fixture whose mode
+        is split over several DMX breaks — separately addressed parts — is refused with a
+        sentence saying so: patch each part as a fixture of its own type. The
+        <a href="../reference/formats.html#gdtf">formats reference</a> has the whole mapping.
       </p>
       <p>
         Two fixtures sharing a slot, and one that runs off the end of its universe, are

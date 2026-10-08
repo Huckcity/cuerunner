@@ -43,6 +43,25 @@ describe('a GO\'s pictures', () => {
     expect(picturesTakenByGo({ cues, showing: ['caption'], incoming: cues[0], settings: { stopOnNextGo: false }, outputs })).toEqual([])
   })
 
+  it('takes down only on a GO in the picture\'s own list: a cart fired mid-scene leaves the surtitles up', () => {
+    const effect = { ...wait, id: 'bang', listId: 'carts' } as Cue
+    const group = { ...base, id: 'g', name: 'g', type: 'group', mode: 'playlist', listId: 'carts' } as unknown as Cue
+    const cues: Cue[] = [
+      text('surtitle', { stopOnNextGo: true }),
+      { ...text('flash', { stopOnNextGo: true }), listId: 'carts' } as Cue,
+      group,
+      { ...text('inside', { stopOnNextGo: true }), parentId: 'g' } as Cue,
+      effect,
+      wait
+    ]
+    // A GO in the carts list takes down the carts' pictures, a child of a carts group included.
+    expect(picturesTakenByGo({ cues, showing: ['surtitle', 'flash', 'inside'], incoming: effect, settings: { stopOnNextGo: false }, outputs })
+      .map(stop => stop.cueId)).toEqual(['flash', 'inside'])
+    // A GO in the main list takes down the main list's.
+    expect(picturesTakenByGo({ cues, showing: ['surtitle', 'flash', 'inside'], incoming: wait, settings: { stopOnNextGo: false }, outputs })
+      .map(stop => stop.cueId)).toEqual(['surtitle'])
+  })
+
   it('leaves a picture the incoming crossfade dissolves away to the dissolve, and takes one it does not', () => {
     const cues: Cue[] = [
       image('under', { stopOnNextGo: true, outputId: 'o1', layer: 1 }),

@@ -5,6 +5,8 @@ import { setTimecodeSettings, setTimecodeStatus, timecodeStatus } from '../engin
 import { useStore } from '../store'
 import { isPro } from '../../../shared/license'
 import { formatFrames } from '../../../shared/timecode'
+import { listMembership, MAIN_CUE_LIST_ID } from '../../../shared/cueLists'
+import type { Cue } from '../../../shared/cue'
 
 /** How often the cue list looks at the clock between pushes, ms: well inside a frame. */
 const LOOK_MS = 10
@@ -26,8 +28,24 @@ export function useTimecodeFollow(): void {
       .then(settings => { if (live) setTimecodeSettings(settings) })
       .catch(() => {})
 
+    // Which list each cue is in, read once per edit of the cues rather than once per look.
+    let membershipOf: { cues: Cue[]; of: Map<string, string> } | null = null
+    const listOf = (cue: Cue): string => {
+      const cues = useStore.getState().cues
+      if (membershipOf?.cues !== cues) membershipOf = { cues, of: listMembership(cues) }
+      return membershipOf.of.get(cue.id) ?? MAIN_CUE_LIST_ID
+    }
+
     const chase = new TimecodeChase({
       getCues: () => useStore.getState().cues,
+      // Each list follows the clock on its own terms: off, or this many frames later than the
+      // show. A list taken out of the show is not on the clock at all.
+      listShift: cue => {
+        const list = useStore.getState().cueLists.find(entry => entry.id === listOf(cue))
+        if (list === undefined) return 0
+        if (list.disarmed === true || list.timecode?.enabled === false) return null
+        return list.timecode?.offsetFrames ?? 0
+      },
       settings: () => useStore.getState().timecode,
       isPro: () => isPro(useStore.getState().license),
       fire: (cue, frames, rate) => {

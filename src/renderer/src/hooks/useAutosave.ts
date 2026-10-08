@@ -21,6 +21,7 @@ export function useAutosave(): void {
         triggerGuard,
         lighting,
         timecode,
+        cueLists,
         workspaceId,
         workspaceCreatedAt,
         showHistory,
@@ -41,6 +42,7 @@ export function useAutosave(): void {
         lighting,
         timecode,
         videoOutputs: useStore.getState().videoOutputs,
+        cueLists,
         pictures: useStore.getState().pictures,
         cues
       })

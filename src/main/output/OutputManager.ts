@@ -184,6 +184,15 @@ export class OutputManager {
     return this.sizeFor(source, this.deps.placements.placement(source.id))
   }
 
+  /**
+   * Whether any output is showing a cue's picture — a video, an image or a text on a stage
+   * screen. A picture held on a screen is a show in progress whether or not its cue is still
+   * counting, so the updater treats it as one.
+   */
+  showing(): boolean {
+    return this.registry.list().some(output => this.registry.cuesOn(output.id).length > 0)
+  }
+
   snapshot(): OutputSnapshot {
     return {
       outputs: this.registry.list().map(output => this.statusOf(output.id)),
@@ -227,18 +236,18 @@ export class OutputManager {
         return { ok: true }
       case 'output': {
         if (routed.takeDownFrom !== undefined && command.op === 'play') {
-          for (const entry of this.showing(routed.takeDownFrom)) {
+          for (const entry of this.windowsShowing(routed.takeDownFrom)) {
             this.send(entry, { kind: 'layer', command: { op: 'stop', cueId: command.layer.cueId, fadeMs: 0, at: command.layer.at } })
           }
         }
-        for (const entry of this.showing(routed.outputId)) this.send(entry, { kind: 'layer', command: routed.command })
+        for (const entry of this.windowsShowing(routed.outputId)) this.send(entry, { kind: 'layer', command: routed.command })
         return { ok: true }
       }
     }
   }
 
   /** The windows that draw an output's pictures: its own, and every mirror of it. */
-  private showing(outputId: string): OutputWindow[] {
+  private windowsShowing(outputId: string): OutputWindow[] {
     const windows: OutputWindow[] = []
     const own = this.windows.get(outputId)
     if (own !== undefined) windows.push(own)

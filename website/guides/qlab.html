@@ -134,7 +134,7 @@
             <tr><td>Wait, Memo</td><td>Wait. A memo is a wait of no length, its notes kept.</td></tr>
             <tr><td>MIDI</td><td>MIDI for note on, note off, control change, program change and SysEx, on the port the workspace's patch names; Show Control for MIDI Show Control's Go, Stop, Resume, Load and Reset.</td></tr>
             <tr><td>Network (QLab 4: OSC)</td><td>OSC, to the host and port of the workspace's network patch, its arguments typed as QLab types them.</td></tr>
-            <tr><td>Second cue list, cart</td><td>Cuerunner runs one cue list. The first QLab list is the show; every other list and cart comes after it as a disarmed group, so GO never runs into it. Arm it, or move its cues, to use them.</td></tr>
+            <tr><td>Second cue list, cart</td><td>Every QLab list is a cue list here, a tab of its own with its own GO, and keeps QLab's id, so a remote that sent <code>/cue_id/{list}/go</code> to QLab sends it here. The first list that is not a cart is the main list. A cart is a cart list, its tiles in the order the cart held them rather than at their grid places.</td></tr>
           </tbody>
         </table>
       </div>

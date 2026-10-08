@@ -121,6 +121,13 @@ import {
   type QLabWorkspacesResult
 } from '../shared/ipc/qlab'
 import {
+  UPDATE_CHANNELS,
+  type UpdateActionResult,
+  type UpdateCheckResult,
+  type WhatsNew
+} from '../shared/ipc/update'
+import type { UpdateSettings, UpdateShowState, UpdateStatus } from '../shared/update'
+import {
   OUTPUT_CHANNELS,
   type LayerCommand,
   type OutputCommandResult,
@@ -489,6 +496,32 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invoke(QLAB_CHANNELS.importLive, payload),
     findMedia: (workspace: Workspace, workspacePath: string | null): Promise<QLabFindMediaResult> =>
       invoke(QLAB_CHANNELS.findMedia, { workspace, workspacePath } satisfies QLabFindMediaPayload)
+  },
+  /**
+   * Updates: each step the operator's, and each refused while the show runs. The show's state
+   * is reported as it changes, fire and forget — a report that fails is one main does without,
+   * and it treats a show it has not heard about as the window last described it.
+   */
+  update: {
+    status: (): Promise<UpdateStatus> =>
+      invoke(UPDATE_CHANNELS.status),
+    check: (): Promise<UpdateCheckResult> =>
+      invoke(UPDATE_CHANNELS.check),
+    download: (): Promise<UpdateActionResult> =>
+      invoke(UPDATE_CHANNELS.download),
+    install: (): Promise<UpdateActionResult> =>
+      invoke(UPDATE_CHANNELS.install),
+    configure: (patch: Partial<UpdateSettings>): Promise<UpdateStatus> =>
+      invoke(UPDATE_CHANNELS.configure, patch),
+    report: (state: UpdateShowState): void => {
+      void ipcRenderer.invoke(UPDATE_CHANNELS.report, state).catch(() => {})
+    },
+    whatsNew: (): Promise<WhatsNew | null> =>
+      invoke(UPDATE_CHANNELS.whatsNew),
+    openDownloads: (): Promise<void> =>
+      invoke(UPDATE_CHANNELS.openDownloads),
+    onEvents: (callback: (status: UpdateStatus) => void): (() => void) =>
+      subscribe(UPDATE_CHANNELS.events, callback)
   },
   /**
    * The video outputs: windows main keeps for the show's pictures. Every time a command

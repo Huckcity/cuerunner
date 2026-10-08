@@ -71,6 +71,20 @@ import {
   normalizeTimecodeShowSettings,
   type TimecodeShowSettings
 } from '../../../shared/timecode'
+import {
+  canonicalCueList,
+  CUE_LIST_NAME_MAX,
+  cuesOfList,
+  defaultCueLists,
+  firstCueOfList,
+  heldCueLists,
+  MAIN_CUE_LIST_ID,
+  moveToList,
+  newListName,
+  withoutList,
+  type CueListInfo
+} from '../../../shared/cueLists'
+import { cursorFor, cursorOf, withCueLists, type ListCursor } from './cueLists'
 
 export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait' | 'paused'
 
@@ -78,7 +92,7 @@ export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait' | 'paused'
  * The tabs the settings dialog has. `license` is the machine's own settings rather
  * than the workspace's, which is why the dialog can be opened straight onto it.
  */
-export type SettingsTab = 'general' | 'audio' | 'midi' | 'network' | 'wireless' | 'redundancy' | 'license' | 'timecode'
+export type SettingsTab = 'general' | 'audio' | 'midi' | 'network' | 'wireless' | 'redundancy' | 'license' | 'timecode' | 'updates'
 
 /** The tabs Show Settings has, in the order they are drawn. */
 export type ShowSettingsTab = 'channels' | 'cast' | 'mic-plot'
@@ -230,6 +244,35 @@ interface CueListState {
    * a drop put it with the parent it gave the block's first cue.
    */
   insertCues: (block: Cue[], at: string | null | { beforeIndex: number }) => void
+
+  /**
+   * The show's cue lists, in tab order. Workspace content: an edit to one dirties the show
+   * and enters undo with the cues it is read beside.
+   */
+  cueLists: CueListInfo[]
+  /**
+   * The list on screen, which is the one the selection below is in: GO, STOP, the toolbar and
+   * a paste act on it. Session state — which tab is in front is where the operator is looking.
+   */
+  activeListId: string
+  /** Every other list's place, by list id, kept for when it comes back to the front. Session state. */
+  listCursors: Record<string, ListCursor>
+  /** Brings a list to the front, where its hand was left (its first cue, the first time). */
+  setActiveList: (listId: string) => void
+  /** A new, empty list after the others, brought to the front. One edit. */
+  addCueList: (name?: string, cart?: boolean) => void
+  /** A list's own settings: its name, colour, face, arm, clock or tile keys. One edit. */
+  updateCueList: (listId: string, patch: Partial<Omit<CueListInfo, 'id'>>) => void
+  /** A list moved to another place among the tabs. One edit. */
+  moveCueList: (listId: string, toIndex: number) => void
+  /** A list and every cue in it, as one edit. The main list stays: it is where unlisted cues are. */
+  removeCueList: (listId: string) => void
+  /** Cues moved to the end of another list, groups whole, as one edit; the hand stays in this one. */
+  moveCuesToList: (ids: string[], listId: string) => void
+  /** The cue a list's GO fires next: the selection on screen, or the place another list was left. */
+  listPlayhead: (listId: string) => string | null
+  /** Moves a list's playhead, on screen or off it, without bringing the list to the front. */
+  setListPlayhead: (listId: string, cueId: string | null) => void
 
   // Selection. The set is what a bulk edit acts on; `selectedId` is the cue the operator
   // last put their hand on — the one GO fires and advances from, and always a member of
@@ -595,6 +638,7 @@ interface CueListState {
     lighting?: LightingSettings,
     timecode?: TimecodeShowSettings,
     videoOutputs?: VideoOutput[],
+    cueLists?: CueListInfo[],
     pictures?: PictureSettings
   ) => void
   /** A save that reached the disk: its path, and the history it wrote into the file. */
@@ -618,6 +662,7 @@ interface EditSnapshot {
   lighting: LightingSettings
   timecode: TimecodeShowSettings
   videoOutputs: VideoOutput[]
+  cueLists: CueListInfo[]
   pictures: PictureSettings
 }
 
@@ -631,6 +676,7 @@ function snapshotOf(state: CueListState): EditSnapshot {
     lighting: state.lighting,
     timecode: state.timecode,
     videoOutputs: state.videoOutputs,
+    cueLists: state.cueLists,
     pictures: state.pictures
   }
 }
@@ -854,7 +900,7 @@ function neighbourOfRemoved(
   return null
 }
 
-export const useStore = create<CueListState>((set) => ({
+export const useStore = create<CueListState>()(withCueLists<CueListState>((set, get) => ({
   workspaceName: UNTITLED_SHOW,
   workspacePath: null,
   // A session that has not opened a file is a new show, so it starts with an identity of
@@ -882,6 +928,9 @@ export const useStore = create<CueListState>((set) => ({
   lighting: defaultLightingSettings(),
   timecode: defaultTimecodeShowSettings(),
   videoOutputs: [],
+  cueLists: defaultCueLists(),
+  activeListId: MAIN_CUE_LIST_ID,
+  listCursors: {},
   pictures: defaultPictureSettings(),
   showServices: [],
   showDevices: [],
@@ -1219,6 +1268,7 @@ export const useStore = create<CueListState>((set) => ({
       lighting: snapshot.lighting,
       timecode: snapshot.timecode,
       videoOutputs: snapshot.videoOutputs,
+      cueLists: snapshot.cueLists,
       pictures: snapshot.pictures,
       past,
       future: [snapshotOf(s), ...s.future.slice(0, HISTORY_LIMIT - 1)],
@@ -1238,12 +1288,134 @@ export const useStore = create<CueListState>((set) => ({
       lighting: snapshot.lighting,
       timecode: snapshot.timecode,
       videoOutputs: snapshot.videoOutputs,
+      cueLists: snapshot.cueLists,
       pictures: snapshot.pictures,
       future,
       past: pushPast(s.past, snapshotOf(s)),
       // A redo after a save is an edit like any other: it leaves the file behind.
       isDirty: true
     }
+  }),
+
+  setActiveList: (listId) => set(s => {
+    if (listId === s.activeListId || !s.cueLists.some(list => list.id === listId)) return s
+    return {
+      activeListId: listId,
+      ...cursorFor(s.cues, listId, s.listCursors[listId]),
+      listCursors: { ...s.listCursors, [s.activeListId]: cursorOf(s) }
+    }
+  }),
+
+  addCueList: (name, cart) => set(s => {
+    const id = crypto.randomUUID()
+    const list = canonicalCueList({
+      id,
+      name: (name?.trim() || newListName(s.cueLists, cart ? 'Cart' : 'Cue List')).slice(0, CUE_LIST_NAME_MAX),
+      cart
+    })
+    return {
+      cueLists: [...s.cueLists, list],
+      // A new list is brought to the front, empty: the next cue added is its first.
+      activeListId: id,
+      ...NO_SELECTION,
+      listCursors: { ...s.listCursors, [s.activeListId]: cursorOf(s) },
+      isDirty: true,
+      past: pushPast(s.past, snapshotOf(s)),
+      future: []
+    }
+  }),
+
+  updateCueList: (listId, patch) => set(s => {
+    const at = s.cueLists.findIndex(list => list.id === listId)
+    if (at < 0) return s
+    const next = { ...s.cueLists[at], ...patch, id: listId }
+    if (patch.name !== undefined) {
+      // A tab with no name is a tab nobody can tell apart from the next one: an empty name
+      // keeps the one it had.
+      const name = patch.name.trim().slice(0, CUE_LIST_NAME_MAX)
+      next.name = name === '' ? s.cueLists[at].name : name
+    }
+    const list = canonicalCueList(next)
+    if (JSON.stringify(list) === JSON.stringify(s.cueLists[at])) return s
+    const cueLists = s.cueLists.slice()
+    cueLists[at] = list
+    return { cueLists, isDirty: true, past: pushPast(s.past, snapshotOf(s)), future: [] }
+  }),
+
+  moveCueList: (listId, toIndex) => set(s => {
+    const from = s.cueLists.findIndex(list => list.id === listId)
+    if (from < 0) return s
+    const to = Math.min(Math.max(Math.round(toIndex), 0), s.cueLists.length - 1)
+    if (to === from) return s
+    const cueLists = s.cueLists.slice()
+    const [moved] = cueLists.splice(from, 1)
+    cueLists.splice(to, 0, moved)
+    return { cueLists, isDirty: true, past: pushPast(s.past, snapshotOf(s)), future: [] }
+  }),
+
+  removeCueList: (listId) => set(s => {
+    // The main list is where a cue that names no list runs, so it is never taken away; and a
+    // show is never left without a list to add a cue to.
+    if (listId === MAIN_CUE_LIST_ID || !s.cueLists.some(list => list.id === listId)) return s
+    const cueLists = s.cueLists.filter(list => list.id !== listId)
+    const cues = withoutList(s.cues, listId)
+    const removed = new Set(s.cues.filter(cue => !cues.includes(cue)).map(cue => cue.id))
+    const listCursors = { ...s.listCursors }
+    delete listCursors[listId]
+    const leaving = s.activeListId === listId
+    const index = s.cueLists.findIndex(list => list.id === listId)
+    // The tab that takes the deleted one's place is the one before it, as a closed tab's is.
+    const nextActive = leaving ? cueLists[Math.max(0, index - 1)].id : s.activeListId
+    return {
+      cueLists,
+      cues,
+      activeListId: nextActive,
+      listCursors,
+      ...(leaving ? cursorFor(cues, nextActive, s.listCursors[nextActive]) : pruneSelection(cues, s)),
+      lastRuns: Object.fromEntries(Object.entries(s.lastRuns).filter(([cueId]) => !removed.has(cueId))),
+      isDirty: true,
+      past: pushPast(s.past, snapshotOf(s)),
+      future: []
+    }
+  }),
+
+  moveCuesToList: (ids, listId) => set(s => {
+    if (!s.cueLists.some(list => list.id === listId)) return s
+    const cues = moveToList(s.cues, ids, listId)
+    if (cues === s.cues) return s
+    // The hand stays in the list on screen: what it held has gone to the other list, so it
+    // comes to rest on the cue that took its place, as a removal's does.
+    const before = cuesOfList(s.cues, s.activeListId)
+    const after = new Set(cuesOfList(cues, s.activeListId).map(cue => cue.id))
+    const gone = new Set(before.filter(cue => !after.has(cue.id)).map(cue => cue.id))
+    const stillHere = s.selectedIds.filter(id => after.has(id))
+    const lead = s.selectedId !== null && gone.has(s.selectedId) ? s.selectedId : [...gone][0]
+    const neighbour = stillHere.length > 0 || lead === undefined
+      ? null
+      : neighbourOfRemoved(before, gone, lead, s.collapsedGroupIds)
+    return {
+      cues,
+      // Named, so the write is taken as a write about lists: the cues say where they went.
+      cueLists: s.cueLists,
+      ...(stillHere.length > 0
+        ? { selectedIds: stillHere, selectedId: stillHere[stillHere.length - 1], selectionAnchorId: stillHere[0] }
+        : neighbour !== null ? selectionFor(neighbour) : NO_SELECTION),
+      isDirty: true,
+      past: pushPast(s.past, snapshotOf(s)),
+      future: []
+    }
+  }),
+
+  listPlayhead: (listId) => {
+    const s = get()
+    if (listId === s.activeListId) return s.selectedId
+    return cursorFor(s.cues, listId, s.listCursors[listId]).selectedId
+  },
+
+  setListPlayhead: (listId, cueId) => set(s => {
+    if (listId === s.activeListId) return cueId === null ? { ...NO_SELECTION } : selectionFor(cueId)
+    const cursor = cueId === null ? { ...NO_SELECTION } : selectionFor(cueId)
+    return { listCursors: { ...s.listCursors, [listId]: cursor } }
   }),
 
   select: (id) => set(() => id === null ? { ...NO_SELECTION } : selectionFor(id)),
@@ -1595,12 +1767,18 @@ export const useStore = create<CueListState>((set) => ({
 
   markDirty: () => set({ isDirty: true }),
 
-  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history, lighting, timecode, videoOutputs, pictures) => set(() => {
-    // Where the operator was standing when the file was saved is not in the file; a load
-    // starts on the show's first cue.
-    const first = cues.find(c => c.parentId === null)?.id ?? cues[0]?.id ?? null
+  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history, lighting, timecode, videoOutputs, cueLists, pictures) => set(() => {
+    // A show opens on its first list — the first tab — and on that list's first cue: where the
+    // operator was standing when the file was saved is not in the file.
+    const lists = heldCueLists(cueLists)
+    const activeListId = lists[0].id
+    const first = firstCueOfList(cues, activeListId)
     return {
       cues,
+      cueLists: lists,
+      activeListId,
+      // Where the last show's lists were left says nothing about this one's.
+      listCursors: {},
       workspaceName: name,
       workspacePath: path,
       // Loading a file adopts the show's identity; a load without one is a new show.
@@ -1973,7 +2151,7 @@ export const useStore = create<CueListState>((set) => ({
   pushModal: () => set(s => ({ modals: s.modals + 1 })),
 
   popModal: () => set(s => ({ modals: Math.max(0, s.modals - 1) }))
-}))
+})))
 
 /**
  * Hears about a change to the parts of the store it names, and to nothing else.
