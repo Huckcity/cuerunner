@@ -143,3 +143,6 @@
 
 .active-row[data-state='pre-wait'] .active-fill,
 .active-row[data-state='post-wait'] .active-fill { background: var(--fg-subtle); }
+
+/* The list a row is running in, in a show of several: quieter than the cue’s own name. */
+.active-list { color: var(--fg-subtle); font-weight: var(--fw-normal); }

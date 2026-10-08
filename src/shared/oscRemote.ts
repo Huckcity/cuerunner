@@ -35,13 +35,26 @@ export type RemoteCommand =
   | { kind: 'cue-pause'; cue: RemoteCueRef }
   | { kind: 'cue-resume'; cue: RemoteCueRef }
   | { kind: 'cue-toggle-pause'; cue: RemoteCueRef }
+  /**
+   * One cue list, named by its id, its name or its place among the tabs: GO on its own
+   * playhead, STOP what runs in it, bring it to the front, take it out of the show or put it
+   * back, or move its playhead.
+   */
+  | { kind: 'list'; list: string; verb: RemoteListVerb }
+
+/** What a remote may ask of one cue list. */
+export type RemoteListVerb = 'go' | 'stop' | 'select' | 'arm' | 'disarm' | 'next' | 'previous'
 
 /**
  * Which cue a `/cue/…` address names: a number as the list shows it, or the cue the
  * selection is standing on — QLab's `selected` and `playhead`, which in this app are the
  * same cue, the one GO fires next.
  */
-export type RemoteCueRef = { by: 'number'; number: string } | { by: 'selected' }
+export type RemoteCueRef =
+  | { by: 'number'; number: string }
+  | { by: 'selected' }
+  /** QLab's `/cue_id/{id}/…`: a cue — or a cue list, which QLab counts as a cue — by its id. */
+  | { by: 'id'; id: string }
 
 /** The prefix Cuerunner's own namespace lives under. */
 export const REMOTE_PREFIX = '/cuerunner'
@@ -123,10 +136,20 @@ export function parseRemote(
     return null
   }
 
-  if (words[0] === 'cue' && words.length >= 3) {
+  // A list by name, id or place: `/list/Effects/go`, `/cueLists/2/stop`. QLab's own word for a
+  // list is `cueList`, and the plural is the one its workspace query uses.
+  const listWord = verb(words[0])
+  if ((listWord === 'list' || listWord === 'cuelist' || listWord === 'cuelists') && words.length >= 3) {
+    const list = words.slice(1, -1).join('/')
+    const listVerb = remoteListVerb(verb(words[words.length - 1]))
+    return list === '' || listVerb === null ? null : { kind: 'list', list, verb: listVerb }
+  }
+
+  if ((words[0] === 'cue' || verb(words[0]) === 'cueid') && words.length >= 3) {
     // The number is everything between `/cue/` and the verb: a number with a slash in it
-    // is unusual, but it is still the number the operator typed.
-    const cue = cueRef(words.slice(1, -1).join('/'))
+    // is unusual, but it is still the number the operator typed. `/cue_id/` names an id.
+    const named = words.slice(1, -1).join('/')
+    const cue: RemoteCueRef | null = words[0] === 'cue' ? cueRef(named) : named === '' ? null : { by: 'id', id: named }
     if (cue === null) return null
     switch (verb(words[words.length - 1])) {
       case 'go': return { kind: 'cue-go', cue }
@@ -149,6 +172,26 @@ export function parseRemote(
   }
 
   return null
+}
+
+/** A list verb, in the letters-only form `verb` gives it, or null for one a list does not take. */
+function remoteListVerb(word: string): RemoteListVerb | null {
+  switch (word) {
+    case 'go':
+    case 'start':
+      return 'go'
+    case 'stop':
+    case 'hardstop':
+      return 'stop'
+    case 'select': return 'select'
+    case 'arm': return 'arm'
+    case 'disarm': return 'disarm'
+    case 'next': return 'next'
+    case 'previous':
+    case 'prev':
+      return 'previous'
+    default: return null
+  }
 }
 
 /** Whether a show's OSC input answers the transport namespace: on unless it was turned off. */

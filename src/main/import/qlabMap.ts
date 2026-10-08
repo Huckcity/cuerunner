@@ -20,10 +20,13 @@ import type {
 } from '../../shared/cue'
 import type { QLabImportNote, QLabTypeCount } from '../../shared/ipc/qlab'
 import { QLAB_TYPE_LABELS, type QLabCue, type QLabKind, type QLabShow } from './qlabShow'
+import { canonicalCueList, MAIN_CUE_LIST_ID, MAIN_CUE_LIST_NAME, type CueListInfo } from '../../shared/cueLists'
 
 /** What the mapping produced: the cue list, and everything the report says about it. */
 export interface MappedShow {
   cues: Cue[]
+  /** The show's lists, in QLab's order: the main one first, then every other list and cart. */
+  cueLists: CueListInfo[]
   types: QLabTypeCount[]
   notes: QLabImportNote[]
   totalCues: number
@@ -212,43 +215,43 @@ export function mapQLabShow(show: QLabShow, newId: IdSource): MappedShow {
   }
   show.lists.forEach(list => list.cues.forEach(assign))
 
-  // One list is the running order; Cuerunner runs one. The first list that is not a cart
-  // is the cue list, at the top level, and every other list becomes a disarmed group after
-  // it — kept, numbered and visible, and never fired by a GO meant for the show.
+  // Every QLab list is a list here, each its own tab and its own GO. The first list that is not
+  // a cart is the main list, so a cue that names no list runs where the show's own running
+  // order did; it comes first among the tabs, and the rest follow in QLab's order. A cart is a
+  // cart list: its tiles fire on their own, in the order the cart held them.
   const mainIndex = Math.max(0, show.lists.findIndex(list => !list.cart))
-  const main = show.lists[mainIndex]
-  if (main) {
-    if (main.cart) {
+  const cueLists: CueListInfo[] = []
+  const order = show.lists.length === 0 ? [] : [mainIndex, ...show.lists.map((_, index) => index).filter(index => index !== mainIndex)]
+  for (const index of order) {
+    const list = show.lists[index]
+    const isMain = index === mainIndex
+    // QLab's own id for the list where it can be kept: it is what `/cue_id/{id}/go` from a
+    // remote set up for that show names, and a remote that worked there should work here.
+    const own = list.uniqueID
+    const id = isMain
+      ? MAIN_CUE_LIST_ID
+      : /^[A-Za-z0-9-]{1,64}$/.test(own) && !taken.has(own) && own !== MAIN_CUE_LIST_ID ? own : uniqueFrom(newId, taken)
+    taken.add(id)
+    const name = list.name.trim() || (isMain ? MAIN_CUE_LIST_NAME : list.cart ? 'Cart' : 'Cue List')
+    cueLists.push(canonicalCueList({ id, name, cart: list.cart }))
+    if (list.cart) {
       context.notes.push({
-        cueId: '', number: '', name: main.name, qlabType: 'Cart', kind: 'approximated',
-        detail: 'a cart is a grid of buttons in QLab; here its cues are a list, in the order the cart held them'
+        cueId: '', number: '', name, qlabType: 'Cart', kind: 'approximated',
+        detail: 'a cart is a grid of buttons in QLab; here it is a cart list, its tiles in the order the cart held them'
       })
     }
-    mapSiblings(main.cues, null, ids, context)
-  }
-  show.lists.forEach((list, index) => {
-    if (index === mainIndex) return
-    const id = uniqueFrom(newId, taken)
-    taken.add(id)
-    const kind = list.cart ? 'cart' : 'cue list'
-    const group: GroupCue = {
-      ...baseFields(id, '', list.name || (list.cart ? 'Cart' : 'Cue List'), null),
-      isArmed: false,
-      notes: `[From QLab: the ${kind} “${list.name}”. Cuerunner runs one cue list, so this one is kept as a ` +
-        `disarmed group: GO passes it by. Arm it, or move its cues, to run them.]`,
-      type: 'group',
-      mode: 'sequence'
+    const from = context.out.length
+    mapSiblings(list.cues, null, ids, context)
+    if (isMain) continue
+    // The list's own cues at its top level name it; their children are in it through them.
+    for (let at = from; at < context.out.length; at++) {
+      if (context.out[at].parentId === null) context.out[at] = { ...context.out[at], listId: id }
     }
-    context.out.push(group)
-    context.notes.push({
-      cueId: id, number: '', name: group.name, qlabType: list.cart ? 'Cart' : 'Cue List', kind: 'approximated',
-      detail: `QLab’s ${kind} is a disarmed group here: Cuerunner runs one cue list`
-    })
-    mapSiblings(list.cues, id, ids, context)
-  })
+  }
 
   return {
     cues: context.out,
+    cueLists,
     types: [...context.types.values()],
     notes: context.notes,
     totalCues: ids.size

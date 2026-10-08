@@ -188,10 +188,14 @@ export interface RedundancyDigest {
  * on a two-hundred cue show and it is only ever used to say "these are not the same
  * list", never to prove that they are.
  */
-export function cueListHash(cues: Array<Pick<Cue, 'id' | 'number' | 'name'>>): string {
+export function cueListHash(cues: Array<Pick<Cue, 'id' | 'number' | 'name' | 'listId'>>): string {
   let hash = 0x811c9dc5
   for (const cue of cues) {
-    const text = `${cue.id}\u0000${cue.number}\u0000${cue.name}\u0001`
+    // The list a cue runs in is part of where GO goes after a takeover, so a cue moved to
+    // another list on one machine and not the other is a different show. A cue in the main
+    // list names none, so a show of one list hashes exactly as it always did.
+    const list = cue.listId === undefined ? '' : `\u0002${cue.listId}`
+    const text = `${cue.id}\u0000${cue.number}\u0000${cue.name}${list}\u0001`
     for (let i = 0; i < text.length; i++) {
       hash ^= text.charCodeAt(i)
       hash = Math.imul(hash, 0x01000193) >>> 0

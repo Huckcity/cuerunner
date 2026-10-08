@@ -49,6 +49,11 @@ export function CueContextMenu({ x, y, cue, onClose, onRename, onBatchEdit }: Pr
   const splitAudioCueAt = useStore(s => s.splitAudioCueAt)
   const insertCues = useStore(s => s.insertCues)
   const cursor = useStore(s => s.waveformCursor)
+  // The other lists, for "Move to": the one on screen is where the cues already are.
+  const lists = useStore(s => s.cueLists)
+  const activeListId = useStore(s => s.activeListId)
+  const otherLists = lists.filter(list => list.id !== activeListId)
+  const moveCuesToList = useStore(s => s.moveCuesToList)
   const menuRef = useRef<HTMLDivElement>(null)
   /** Where the keyboard is in the menu: the item per index, in the order drawn. */
   const [activeIndex, setActiveIndex] = useState(0)
@@ -174,6 +179,13 @@ export function CueContextMenu({ x, y, cue, onClose, onRename, onBatchEdit }: Pr
         {allArmed ? 'Disarm' : 'Arm'}{count}
         <kbd>{formatShortcut('Mod+Shift+A')}</kbd>
       </button>
+      {otherLists.map(list => (
+        <button key={list.id} className="cue-context-menu-item" data-action="move-to-list" data-list-id={list.id}
+          onClick={() => { moveCuesToList(targets, list.id); onClose() }} onMouseEnter={e => e.currentTarget.focus()}>
+          <span className="cue-context-menu-icon">⇥</span>
+          Move{count} to “{list.name}”
+        </button>
+      ))}
       <div className="cue-context-menu-separator" />
       <button className="cue-context-menu-item" data-action="copy" onClick={() => { copyCues(targets); onClose() }} onMouseEnter={e => e.currentTarget.focus()}>
         <span className="cue-context-menu-icon">⎘</span>
