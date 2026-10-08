@@ -5,6 +5,7 @@ import type { ShowHistoryEntry } from '../../../shared/showfile'
 import type { MergeNote, MergeTally } from '../../../shared/showfileMerge'
 import type { AudioSettings, LoadNote, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../../../shared/workspace'
 import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard, UNTITLED_SHOW } from '../../../shared/workspace'
+import { MAX_OUTPUTS, carriesMediaFile, createOutput, normalizeVideoOutputs, type VideoOutput } from '../../../shared/visual'
 import { defaultShowSettings } from '../../../shared/show'
 import type { RedundancySettings, RedundancyStatus } from '../../../shared/redundancy'
 import type {
@@ -283,6 +284,16 @@ interface CueListState {
   triggerGuard: TriggerGuardSettings
   updateTriggerGuard: (patch: Partial<TriggerGuardSettings>) => void
 
+  /**
+   * The show's video outputs (src/shared/visual.ts). Workspace content: what each output is
+   * travels with the show; where it is on this machine does not (main keeps that).
+   */
+  videoOutputs: VideoOutput[]
+  /** Adds an output named for its place in the list, and answers its id. */
+  addVideoOutput: () => string
+  updateVideoOutput: (id: string, patch: Partial<Omit<VideoOutput, 'id'>>) => void
+  removeVideoOutput: (id: string) => void
+
   // Show services. Everything here is reported by the main process and rendered by the
   // monitor panel: what is listening, what is on stage, and what has gone wrong. None
   // of it is workspace content, so none of it dirties the show or enters undo.
@@ -528,7 +539,8 @@ interface CueListState {
     showSettings?: ShowSettings,
     identity?: WorkspaceIdentity,
     triggerGuard?: TriggerGuardSettings,
-    history?: ShowHistoryEntry[]
+    history?: ShowHistoryEntry[],
+    videoOutputs?: VideoOutput[]
   ) => void
   /** A save that reached the disk: its path, and the history it wrote into the file. */
   saveSucceeded: (path: string, name: string, history: ShowHistoryEntry[]) => void
@@ -804,6 +816,7 @@ export const useStore = create<CueListState>((set) => ({
   log: [],
   showSettings: defaultShowSettings(),
   triggerGuard: { ...DEFAULT_TRIGGER_GUARD },
+  videoOutputs: [],
   showServices: [],
   showDevices: [],
   showAlerts: [],
@@ -1410,7 +1423,7 @@ export const useStore = create<CueListState>((set) => ({
     if (resolved.size === 0) return s
     let failures = s.silenceFailures
     const cues = s.cues.map(cue => {
-      if (cue.type !== 'audio' || !resolved.has(cue.id)) return cue
+      if (!carriesMediaFile(cue) || !resolved.has(cue.id)) return cue
       failures = forgetSilenceFailures(failures, [cue.id])
       // A relinked cue is pointed at another file, and another file has not been
       // measured: the measurement pass asks it as soon as the new path is in the cue.
@@ -1473,7 +1486,7 @@ export const useStore = create<CueListState>((set) => ({
 
   markDirty: () => set({ isDirty: true }),
 
-  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history) => set(() => {
+  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history, videoOutputs) => set(() => {
     // Where the operator was standing when the file was saved is not in the file; a load
     // starts on the show's first cue.
     const first = cues.find(c => c.parentId === null)?.id ?? cues[0]?.id ?? null
@@ -1506,6 +1519,8 @@ export const useStore = create<CueListState>((set) => ({
       // A file written before the guard existed has none: the normalizer both fills it in
       // and holds a value typed outside its range to the range.
       triggerGuard: normalizeTriggerGuard(triggerGuard),
+      // A show with no outputs has none; one that has them has them held to their ranges.
+      videoOutputs: normalizeVideoOutputs(videoOutputs),
       // The file's own record of its saves. A file that has never been saved has none.
       showHistory: history ?? [],
       // Where the last show's cursor sat says nothing about this one.
@@ -1546,6 +1561,29 @@ export const useStore = create<CueListState>((set) => ({
 
   updateTriggerGuard: (patch) => set(s => ({
     triggerGuard: normalizeTriggerGuard({ ...s.triggerGuard, ...patch }),
+    isDirty: true
+  })),
+
+  addVideoOutput: () => {
+    const id = crypto.randomUUID()
+    set(s => ({
+      videoOutputs: s.videoOutputs.length >= MAX_OUTPUTS
+        ? s.videoOutputs
+        : [...s.videoOutputs, createOutput(id, `Output ${s.videoOutputs.length + 1}`)],
+      isDirty: true
+    }))
+    return id
+  },
+
+  updateVideoOutput: (id, patch) => set(s => ({
+    // Held to the ranges a file is: an edit in the panel can no more set a corner off the
+    // output than a hand-edited file can.
+    videoOutputs: normalizeVideoOutputs(s.videoOutputs.map(output => output.id === id ? { ...output, ...patch, id } : output)),
+    isDirty: true
+  })),
+
+  removeVideoOutput: (id) => set(s => ({
+    videoOutputs: s.videoOutputs.filter(output => output.id !== id),
     isDirty: true
   })),
 

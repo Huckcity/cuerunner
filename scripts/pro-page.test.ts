@@ -141,7 +141,15 @@ const COUNT_WORDS: Record<string, number> = {
   nine: 9,
   ten: 10,
   eleven: 11,
-  twelve: 12
+  twelve: 12,
+  thirteen: 13,
+  fourteen: 14,
+  fifteen: 15,
+  sixteen: 16,
+  seventeen: 17,
+  eighteen: 18,
+  nineteen: 19,
+  twenty: 20
 }
 
 /**
@@ -747,8 +755,9 @@ describe('the page the checks exist to refuse', () => {
   })
 
   it('names a count the README changes', () => {
-    expect(countProblems({ ...LIVE, word: 'twelve', count: 12 })).toEqual([
-      expect.stringContaining('README.md states the free cue stack as "twelve cue types" and the code declares 11 free cue types')
+    const declared = CUE_TYPES.filter(type => !LIVE.proCueTypes.has(type)).length
+    expect(countProblems({ ...LIVE, word: 'two', count: 2 })).toEqual([
+      expect.stringContaining(`README.md states the free cue stack as "two cue types" and the code declares ${declared} free cue types`)
     ])
   })
 

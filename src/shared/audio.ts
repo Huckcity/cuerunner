@@ -678,6 +678,8 @@ export type AudioErrorCode =
   | 'device'
   | 'decode'
   | 'format-unavailable'
+  /** A video file with no sound track: its picture plays, and there is no voice. */
+  | 'no-audio'
   | 'not-prepared'
   | 'invalid'
   | 'limit'

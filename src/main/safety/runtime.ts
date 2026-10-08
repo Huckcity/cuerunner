@@ -5,6 +5,7 @@ import { audioEngine } from '../audio/AudioEngine'
 import { PlaybackSafety } from './PlaybackSafety'
 import type { PlaybackPanic } from '../../shared/playback'
 import type { AudioEngineEvent } from '../../shared/audio'
+import { panicOutputs } from '../output/panic'
 
 // The one place the safety net is wired to the two things it protects: the native audio
 // service in this process, and every window that may still be there to be told. Nothing
@@ -17,6 +18,9 @@ import type { AudioEngineEvent } from '../../shared/audio'
 // panic. `sendToWindow` skips those and survives the race either way.
 function broadcastPanic(panic: PlaybackPanic): void {
   for (const win of BrowserWindow.getAllWindows()) sendToWindow(win, PLAYBACK_CHANNELS.panic, panic)
+  // The pictures go with the sound: a panic takes every output down over the same fade,
+  // whether or not the control window is alive to ask for it.
+  panicOutputs(panic.fadeMs)
 }
 
 /** How many engine events are kept for the dev harness, newest last. */

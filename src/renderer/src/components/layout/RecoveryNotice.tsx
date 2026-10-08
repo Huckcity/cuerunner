@@ -103,6 +103,7 @@ export function RecoveryNotice() {
             midiSettings: store.midiSettings,
             showSettings: store.showSettings,
             triggerGuard: store.triggerGuard,
+            videoOutputs: store.videoOutputs,
             cues: store.cues
           })
           const answer = await window.cuerunner.workspace.save(ws, store.workspacePath)
@@ -148,7 +149,9 @@ export function RecoveryNotice() {
       snapshot.workspace.triggerGuard,
       // The file's own record of its saves travels with the snapshot, for the same
       // reason: a recovered session is the same show, not a new one.
-      snapshot.workspace.history ?? []
+      snapshot.workspace.history ?? [],
+      // And its outputs: a recovered show still has its projectors.
+      snapshot.workspace.videoOutputs
     )
     // The place, not just the cues: standing where the session stood means the next GO
     // fires what it would have fired.

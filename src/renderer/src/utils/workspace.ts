@@ -20,12 +20,19 @@ import type { Workspace } from '../../../shared/workspace'
 // direction: the main process compares the file about to be replaced with what is about
 // to replace it and writes the entry itself. The store carries the result back, so a save
 // appends to the file's history rather than replacing it with this session's.
-export function buildWorkspace(values: Omit<WorkspaceValues, 'version'>): Workspace {
+export function buildWorkspace(
+  // The outputs are named at every call, even where there are none: a builder that left the
+  // key out would write a show that had lost its outputs, and nothing would fail.
+  values: Omit<WorkspaceValues, 'version'> & { videoOutputs: WorkspaceValues['videoOutputs'] }
+): Workspace {
   return savedShape({
     version: 1,
     ...values,
     // A file with nothing to say about its past says nothing: an empty array here would
     // be the key every save of every show carries for no reason.
-    history: values.history && values.history.length > 0 ? values.history : undefined
+    history: values.history && values.history.length > 0 ? values.history : undefined,
+    // The same for a show with no video output: its bytes are what they were before
+    // outputs existed.
+    videoOutputs: values.videoOutputs && values.videoOutputs.length > 0 ? values.videoOutputs : undefined
   })
 }

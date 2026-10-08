@@ -36,7 +36,13 @@ const PATHS: Record<CueType, string[]> = {
   // A command leaving this desk for another one.
   msc: ['M2.4 4.2h6.4v7.6H2.4z', 'M4.6 7.4v1.2', 'M6.6 7.4v1.2', 'M10.4 8h3.2', 'M12.2 6.4 13.8 8l-1.6 1.6'],
   // A microphone: the capsule, the cradle it sits in, and the stand.
-  mic: ['M8 2a2 2 0 0 0-2 2v3.6a2 2 0 0 0 4 0V4a2 2 0 0 0-2-2z', 'M4.4 7.4a3.6 3.6 0 0 0 7.2 0', 'M8 11v2.6', 'M5.8 13.6h4.4']
+  mic: ['M8 2a2 2 0 0 0-2 2v3.6a2 2 0 0 0 4 0V4a2 2 0 0 0-2-2z', 'M4.4 7.4a3.6 3.6 0 0 0 7.2 0', 'M8 11v2.6', 'M5.8 13.6h4.4'],
+  // A frame of film: the picture, and the sprocket holes down its edge.
+  video: ['M2.5 3.5h11v9h-11z', 'M5 3.5v9', 'M11 3.5v9', 'M2.5 6.5H5', 'M2.5 9.5H5', 'M11 6.5h2.5', 'M11 9.5h2.5'],
+  // A picture: its frame, a sun and a hill.
+  image: ['M2.5 3.5h11v9h-11z', 'M5.6 6.4v.01', 'M2.5 11l3.4-3.2 2.6 2.4 1.8-1.6 3.2 3'],
+  // A capital T, set on a baseline.
+  text: ['M3.5 3.5h9', 'M8 3.5v9', 'M6 12.5h4']
 }
 
 interface Props {

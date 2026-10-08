@@ -44,6 +44,7 @@ export function witnessSave(sent: Workspace): boolean {
     midiSettings,
     showSettings,
     triggerGuard,
+    videoOutputs: useStore.getState().videoOutputs,
     cues
   })
   const diff = diffWorkspaces(sent, now)

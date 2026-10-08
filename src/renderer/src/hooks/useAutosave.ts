@@ -36,6 +36,7 @@ export function useAutosave(): void {
         midiSettings,
         showSettings,
         triggerGuard,
+        videoOutputs: useStore.getState().videoOutputs,
         cues
       })
       // The cue GO would fire next goes with the work: a crash mid-show is exactly when

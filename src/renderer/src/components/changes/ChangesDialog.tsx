@@ -220,6 +220,7 @@ function CompareTab() {
       midiSettings,
       showSettings,
       triggerGuard,
+      videoOutputs: useStore.getState().videoOutputs,
       cues
     })
     setBusy(true)

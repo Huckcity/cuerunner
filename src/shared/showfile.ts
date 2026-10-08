@@ -134,7 +134,9 @@ function isEdit(type: CueType, field: string): boolean {
     // through the same store writer. Every other type's duration is the operator's own —
     // a wait holds for it, a fade runs for it — and the app has no writer for it.
     case 'duration':
-      return type !== 'audio'
+      // A video's length is measured the same way, from its file; an image's or a text's is
+      // how long the operator shows it.
+      return type !== 'audio' && type !== 'video'
     default:
       return true
   }

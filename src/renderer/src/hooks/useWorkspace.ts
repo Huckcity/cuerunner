@@ -6,6 +6,7 @@ import type { LoadNote, Workspace, WorkspaceIdentity } from '../../../shared/wor
 import { buildWorkspace } from '../utils/workspace'
 import { witnessSave } from '../utils/saveWitness'
 import { cueEngine } from '../engine/CueEngine'
+import { carriesMediaFile } from '../../../shared/visual'
 
 /** Reports a failure the operator has to know about, in the notice bar and the log. */
 function reportFailure(message: string): void {
@@ -62,6 +63,7 @@ async function guardDirty(): Promise<boolean> {
       midiSettings,
       showSettings,
       triggerGuard,
+      videoOutputs: useStore.getState().videoOutputs,
       cues
     })
     let saved: { path: string; history: ShowHistoryEntry[]; name?: string } | null
@@ -126,7 +128,8 @@ function loadIntoStore(
     workspace.showSettings,
     identity ?? { id: workspace.id, createdAt: workspace.createdAt },
     workspace.triggerGuard,
-    workspace.history ?? []
+    workspace.history ?? [],
+    workspace.videoOutputs
   )
   // The guard remembers what pressed what; a show that has just opened has no presses
   // behind it, and the first GO of the night must not be mistaken for a repeat of the
@@ -180,6 +183,7 @@ export async function relinkMissingMedia(cueId: string): Promise<void> {
     midiSettings,
     showSettings,
     triggerGuard,
+    videoOutputs: useStore.getState().videoOutputs,
     cues
   })
   try {
@@ -188,9 +192,9 @@ export async function relinkMissingMedia(cueId: string): Promise<void> {
     // path it was last seen at instead of losing it.
     const resolved: Record<string, string> = {}
     for (const cue of result.workspace.cues) {
-      if (cue.type !== 'audio') continue
+      if (!carriesMediaFile(cue)) continue
       const current = cues.find(c => c.id === cue.id)
-      if (current?.type === 'audio' && current.filePath !== cue.filePath) {
+      if (current !== undefined && carriesMediaFile(current) && current.filePath !== cue.filePath) {
         resolved[cue.id] = cue.filePath
       }
     }
@@ -224,6 +228,7 @@ export async function exportShowBundle(): Promise<void> {
     midiSettings,
     showSettings,
     triggerGuard,
+    videoOutputs: useStore.getState().videoOutputs,
     cues
   })
   try {
@@ -272,6 +277,7 @@ export async function mergeAnotherShow(policy: 'ours' | 'theirs' = 'ours', again
     midiSettings,
     showSettings,
     triggerGuard,
+    videoOutputs: useStore.getState().videoOutputs,
     cues
   })
   try {
@@ -437,6 +443,7 @@ export function useWorkspace() {
       midiSettings,
       showSettings,
       triggerGuard,
+      videoOutputs: useStore.getState().videoOutputs,
       cues
     })
     try {
@@ -485,6 +492,7 @@ export function useWorkspace() {
       midiSettings,
       showSettings,
       triggerGuard,
+      videoOutputs: useStore.getState().videoOutputs,
       cues
     })
     try {

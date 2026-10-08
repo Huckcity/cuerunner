@@ -17,6 +17,9 @@ const startTicker = (): void => {
 
 export const audioEngine = {
   nowMs: () => Date.now(),
+  // The fake engine's clock is the show's: one epoch, no restart.
+  engineTime: (showMs: number) => showMs,
+  showTime: (engineMs: number) => engineMs,
   syncClock: vi.fn(async () => Date.now()),
   onTick: (cb: () => void) => {
     subscribers.add(cb)

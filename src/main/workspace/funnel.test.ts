@@ -103,8 +103,8 @@ const REFUSED: readonly Refused[] = [
   },
   {
     what: 'a cue type this build does not know',
-    show: show({ cues: [{ id: 'v1', type: 'video', name: 'Clip' }] }),
-    fact: 'does not know (video)'
+    show: show({ cues: [{ id: 'v1', type: 'hologram', name: 'Clip' }] }),
+    fact: 'does not know (hologram)'
   },
   {
     what: 'a top-level section this build does not declare',

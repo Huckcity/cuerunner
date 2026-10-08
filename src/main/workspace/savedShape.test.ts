@@ -25,6 +25,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { serialiseWorkspace } from './serialise'
 import { defaultRfSettings, defaultShowSettings } from '../../shared/show'
+import { createOutput } from '../../shared/visual'
 import { diffWorkspaces } from '../../shared/showfile'
 import { mergeWorkspaces } from '../../shared/showfileMerge'
 import {
@@ -93,6 +94,7 @@ const fixture: Required<Workspace> = {
   midiSettings: { outputPortName: 'Desk' },
   showSettings: defaultShowSettings(),
   triggerGuard: { windowMs: 300 },
+  videoOutputs: [createOutput('out-1', 'Stage left')],
   cues: [cue('a1', 'Walk-in'), cue('a2', 'Interval')]
 }
 
@@ -144,6 +146,7 @@ const declared: readonly WorkspaceKey[] = [
   'midiSettings',
   'showSettings',
   'triggerGuard',
+  'videoOutputs',
   'cues'
 ]
 
@@ -162,12 +165,12 @@ describe('the saved shape', () => {
 
   it('leaves an unset section out of the file rather than writing an empty one', () => {
     const bare = serialiseWorkspace(
-      { ...fixture, history: undefined, showSettings: undefined, triggerGuard: undefined },
+      { ...fixture, history: undefined, showSettings: undefined, triggerGuard: undefined, videoOutputs: undefined },
       SHOWS
     )
 
     expect(Object.keys(JSON.parse(bare))).toEqual(
-      declared.filter(key => key !== 'history' && key !== 'showSettings' && key !== 'triggerGuard')
+      declared.filter(key => key !== 'history' && key !== 'showSettings' && key !== 'triggerGuard' && key !== 'videoOutputs')
     )
   })
 
@@ -536,6 +539,57 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     channelId: 'ew-dx:5364000906:0',
     label: 'Aldonza (37)',
     action: 'mute'
+  },
+  // The picture cues carry their geometry — an object with an object inside it, the crop — and
+  // the video its sound's crosspoints, so both nestings are walked.
+  video: {
+    ...cueBase('v1'),
+    type: 'video',
+    filePath: '',
+    outputId: 'out-1',
+    layer: 2,
+    opacity: 1,
+    fadeInDuration: 500,
+    fadeOutDuration: 500,
+    crossfade: true,
+    geometry: { fit: 'fill', x: 0.1, y: -0.1, scale: 0.5, rotation: 12, crop: { top: 0.1, right: 0, bottom: 0, left: 0.2 } },
+    startTime: 0,
+    endTime: null,
+    loopCount: -1,
+    holdLastFrame: true,
+    volume: 0.8,
+    pan: 0,
+    outputs: [{ inputChannel: 0, outputChannel: 0, gain: 1 }]
+  },
+  image: {
+    ...cueBase('i1'),
+    type: 'image',
+    filePath: '',
+    outputId: '',
+    layer: 1,
+    opacity: 0.5,
+    fadeInDuration: 0,
+    fadeOutDuration: 0,
+    crossfade: false,
+    geometry: { fit: 'fit', x: 0, y: 0, scale: 1, rotation: 0, crop: { top: 0, right: 0, bottom: 0, left: 0 } }
+  },
+  text: {
+    ...cueBase('t1'),
+    type: 'text',
+    outputId: '',
+    layer: 3,
+    opacity: 1,
+    fadeInDuration: 0,
+    fadeOutDuration: 0,
+    crossfade: false,
+    geometry: { fit: 'native', x: 0, y: 0, scale: 1, rotation: 0, crop: { top: 0, right: 0, bottom: 0, left: 0 } },
+    text: 'Act One',
+    fontFamily: 'IBM Plex Sans',
+    fontSize: 96,
+    color: '#ffffff',
+    bold: true,
+    italic: false,
+    position: 'bottom'
   }
 }
 

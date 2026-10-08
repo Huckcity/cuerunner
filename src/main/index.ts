@@ -1,4 +1,4 @@
-import { app, BrowserWindow, crashReporter, screen, shell, Menu } from 'electron'
+import { app, BrowserWindow, crashReporter, protocol, screen, shell, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc/handlers'
@@ -13,6 +13,13 @@ import { refuseNavigation } from './safety/navigation'
 import { placeWindow, readWindowState, saveWindowState } from './windowState'
 import { FILE_MENU, fileMenuItemId, type MenuAction } from '../shared/fileMenu'
 import { APP_CHANNELS, type RendererCrash } from '../shared/ipc/app'
+import { MEDIA_SCHEME_PRIVILEGES, installMediaProtocol } from './output/mediaProtocol'
+import { existingOutputManager, registerOutputWindowHandlers } from './output/ipc'
+import { isOutputWindow } from './output/OutputManager'
+
+// The scheme pictures are read through has to be privileged before the app is ready —
+// Electron's rule — so it is declared here, at load, and answered once the app is up.
+protocol.registerSchemesAsPrivileged([MEDIA_SCHEME_PRIVILEGES])
 
 // The last renderer crash, handed to the reloaded renderer so it can say what happened.
 // One shot: the renderer reads it on startup, and it is cleared.
@@ -57,7 +64,11 @@ crashReporter.start({ uploadToServer: false, compress: true })
 // cue history. A programmatic click from a test has no focused window, hence the
 // fallback to the first open window.
 function sendMenuAction(action: MenuAction): void {
-  const target = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  // Never an output: a projector focused by a stray click is not where the show is.
+  const focused = BrowserWindow.getFocusedWindow()
+  const target = focused !== null && !isOutputWindow(focused)
+    ? focused
+    : BrowserWindow.getAllWindows().find(win => !isOutputWindow(win))
   sendToWindow(target, APP_CHANNELS.menuAction, action)
 }
 
@@ -274,6 +285,9 @@ function createWindow(): void {
   })
 
   win.on('ready-to-show', () => win.show())
+  // The outputs belong to the window the show is run from: when it has gone, so have they,
+  // or the app would stay up with nothing on screen that can close it.
+  win.on('closed', () => existingOutputManager()?.closeAll())
 
   // The event object, not the deprecated positional arguments: Electron logs a deprecation
   // warning for the old form on every message, which on a full E2E run is a hundred and
@@ -321,7 +335,9 @@ app.whenReady().then(() => {
   })
   
   createMenu()
+  installMediaProtocol(protocol)
   registerIpcHandlers()
+  registerOutputWindowHandlers()
   // The engine comes up with the app rather than with the first cue, so a device that
   // cannot be opened is a visible error at launch instead of a cue that does nothing.
   void audioEngine.ensureStarted().catch((error: unknown) => {
@@ -354,7 +370,7 @@ app.whenReady().then(() => {
   })
   createWindow()
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().every(win => isOutputWindow(win))) createWindow()
   })
 })
 

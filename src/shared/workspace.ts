@@ -1,6 +1,7 @@
 import type { Cue } from './cue'
 import type { ShowSettings } from './show'
 import type { ShowHistoryEntry } from './showfile'
+import type { VideoOutput } from './visual'
 
 export interface AudioSettings {
   /**
@@ -136,6 +137,12 @@ export interface Workspace {
    * bounced key truncates a cue.
    */
   triggerGuard?: TriggerGuardSettings
+  /**
+   * The windows the show's pictures go to (src/shared/visual.ts). Optional: a show with no
+   * video output carries none, which is every show written before outputs existed — so
+   * their bytes are what they were. Where each output is on a machine is that machine's.
+   */
+  videoOutputs?: VideoOutput[]
   cues: Cue[]
 }
 

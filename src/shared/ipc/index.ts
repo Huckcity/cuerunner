@@ -26,6 +26,7 @@ import { REDUNDANCY_CHANNELS, type RedundancyBridge } from './redundancy'
 import { LICENSE_CHANNELS, type LicenseBridge } from './license'
 import { SCRIPT_CHANNELS, type ScriptBridge } from './script'
 import { WORKSPACE_CHANNELS, type WorkspaceBridge } from './workspace'
+import { OUTPUT_CHANNELS, type OutputBridge } from './output'
 
 /** Everything `window.cuerunner` carries, as the renderer reads it. */
 export interface CuerunnerBridge {
@@ -44,6 +45,7 @@ export interface CuerunnerBridge {
   license: LicenseBridge
   script: ScriptBridge
   workspace: WorkspaceBridge
+  output: OutputBridge
 }
 
 /**
@@ -64,7 +66,8 @@ export const CHANNEL_TABLES = [
   LICENSE_CHANNELS,
   SCRIPT_CHANNELS,
   WORKSPACE_CHANNELS,
-  AUDIO_CHANNELS
+  AUDIO_CHANNELS,
+  OUTPUT_CHANNELS
 ] as const
 
 /**
@@ -79,7 +82,8 @@ export const EVENT_CHANNELS = [
   PLAYBACK_CHANNELS.panic,
   AUDIO_CHANNELS.events,
   SHOW_CHANNELS.events,
-  LICENSE_CHANNELS.changed
+  LICENSE_CHANNELS.changed,
+  OUTPUT_CHANNELS.events
 ] as const
 
 export type EventChannel = (typeof EVENT_CHANNELS)[number]

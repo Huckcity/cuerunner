@@ -4,6 +4,9 @@ import type {
   MicCue
 } from '../../../shared/cue'
 import { isProCueType } from '../../../shared/cue'
+import type { VideoCue, VisualCue } from '../../../shared/visual'
+import { isVisualCue } from '../../../shared/visual'
+import { visualCues, type VisualHost } from './visualCues'
 import { audioEngine } from './audioEngineClient'
 import type {
   AudioEngineEvent,
@@ -88,6 +91,35 @@ function startOptions(cue: AudioCue, seekMs = 0, trim = false): AudioStartOption
   }
 }
 
+/**
+ * The sound of a video cue, as the audio voice it plays as: the same region, loops, level,
+ * pan and routing, under the video cue's own id — so a fade, a stop, the routing matrix and
+ * the meters treat it exactly as they treat an audio cue's.
+ */
+export function videoSound(cue: VideoCue): AudioCue {
+  return {
+    ...cue,
+    type: 'audio',
+    startTime: cue.startTime,
+    endTime: cue.endTime,
+    fadeInDuration: cue.fadeInDuration,
+    volume: cue.volume,
+    pan: cue.pan,
+    outputs: cue.outputs,
+    loopCount: cue.loopCount,
+    playbackRate: 1,
+    trim: 1,
+    trimSilence: false,
+    soundRegion: null
+  } as unknown as AudioCue
+}
+
+/** How far ahead a resumed video is put back on the clock, so its sound and picture start together. */
+const RESUME_LEAD_MS = 80
+
+/** The short fade a pause takes a video's sound down with, so the stop does not click. */
+const PAUSE_FADE_MS = 15
+
 /** What a cue's execute() may add to its run result. */
 type Finish = (endMs: number, detail?: Partial<CueRunResult>) => void
 
@@ -136,6 +168,10 @@ interface CueRun {
   releasedRun: CueRun | null
   /** Wall-clock moment execution began, for the log line and the run report. */
   beganAt: number
+  /** A video run stood still by Pause: its sound is stopped and its picture frozen. */
+  paused?: boolean
+  /** A video whose file has no sound: its run ends with its picture, not with a voice. */
+  silentPicture?: boolean
 }
 
 /**
@@ -210,6 +246,7 @@ export class CueEngine {
     this.scheduler = new SampleScheduler(() => audioEngine.nowMs(), cb => audioEngine.onTick(cb))
     this.unsubscribeEvents = audioEngine.onEvent(event => this.handleEngineEvent(event))
     this.unsubscribeSession = audioEngine.onSessionChange(change => this.handleSessionChange(change))
+    visualCues.init(this.visualHost())
     void audioEngine.syncClock().catch(() => {
       // No clock reading yet: the first tick anchors it. Commands carry absolute times
       // either way.
@@ -525,6 +562,8 @@ export class CueEngine {
     // Native commands carry this cue's absolute time and go out as soon as the moment
     // is within the lookahead — the pre-wait tick must not become the start latency.
     if (cue.type === 'audio') this.planAudio(cue as AudioCue, run, executeAt, finish)
+    // A video's sound and picture are both scheduled at fire time, for the same instant.
+    if (cue.type === 'video') this.planVideo(cue as VideoCue, run, executeAt, finish)
 
     const begin = (): void => {
       if (run.phase !== 'pending' || run.cancelled || this.isStale(generation)) return
@@ -700,6 +739,13 @@ export class CueEngine {
       case 'script':
         this.executeScript(cue as ScriptCue, finish)
         break
+      case 'video':
+        // Planned when the cue was fired, like an audio cue.
+        break
+      case 'image':
+      case 'text':
+        this.executePicture(cue as VisualCue, run, at, finish)
+        break
     }
   }
 
@@ -742,18 +788,25 @@ export class CueEngine {
     run: CueRun,
     at: number,
     options: AudioStartOptions,
-    finish: Finish
+    finish: Finish,
+    /**
+     * A video's sound: whether its end is planned (a held last frame plans none), what to do
+     * with a file that has no sound (true when the picture carries on alone), and where the
+     * voice really began, for the picture to follow.
+     */
+    video?: { planEnd: boolean; soundless: (error: unknown) => boolean; started: (startAtMs: number) => void }
   ): Promise<void> {
     try {
       const metadata = await audioEngine.prepare(cue.id, cue.filePath)
       if (metadata.durationMs > 0) this.deps!.syncCueDuration(cue.id, metadata.durationMs)
       // The cue did not carry a length when its end had to be planned; now the engine
       // has said what it is, so the run still ends at a known time.
-      if (metadata.durationMs > 0) {
+      if (metadata.durationMs > 0 && (video === undefined || video.planEnd)) {
         this.scheduleAudioEnd(run, at, options, metadata.durationMs, finish)
       }
     } catch (error) {
       if (run.cancelled) return
+      if (video !== undefined && video.soundless(error)) return
       console.error('Audio playback failed:', error)
       finish(Math.max(at, this.now()), { outcome: 'error', error: errorMessage(error) })
       return
@@ -772,6 +825,7 @@ export class CueEngine {
         // The engine's identity for this run, so a replaced run's stale events are
         // not mistaken for the new one's.
         run.engineRunId = result.runId
+        video?.started(result.startAtMs)
       })
       .catch(error => {
         if (run.cancelled) return
@@ -870,12 +924,17 @@ export class CueEngine {
   }
 
   private executeFade(cue: FadeCue, run: CueRun, at: number, finish: Finish): void {
-    const param: AudioFadeParam = cue.fadeProperty === 'volume' ? 'volume' : 'pan'
-    // The ramp starts at the cue's own time on the clock, whether that is now or later.
-    void audioEngine.fade(cue.targetCueId, param, cue.targetValue, cue.duration, cue.curve, at)
-      .catch(() => {
-        // A fade with nothing playing is not an error: the cue still takes its time.
-      })
+    if (cue.fadeProperty === 'opacity') {
+      // A picture's level, on its output: the same ramp, drawn rather than heard.
+      visualCues.fade(cue.targetCueId, cue.targetValue, cue.duration, cue.curve, at)
+    } else {
+      const param: AudioFadeParam = cue.fadeProperty === 'volume' ? 'volume' : 'pan'
+      // The ramp starts at the cue's own time on the clock, whether that is now or later.
+      void audioEngine.fade(cue.targetCueId, param, cue.targetValue, cue.duration, cue.curve, at)
+        .catch(() => {
+          // A fade with nothing playing is not an error: the cue still takes its time.
+        })
+    }
     const endAt = at + cue.duration
     this.planRelease(run, endAt)
     this.track(run, this.scheduler!.schedule({
@@ -958,9 +1017,11 @@ export class CueEngine {
     const released = releaseEndMs === undefined
       ? audioEngine.release(cue.targetCueId)
       : audioEngine.release(cue.targetCueId, undefined, releaseEndMs)
+    // A video's picture is let go of with its sound, from the same moment.
+    const pictureReleased = target?.type === 'video' ? visualCues.release(cue.targetCueId, this.now()) : false
     void released.then(result => {
       const detail: Partial<CueRunResult> = {}
-      if (!result.applied) {
+      if (!result.applied && !pictureReleased) {
         detail.outcome = 'error'
         detail.error = target === undefined
           ? 'the cue it releases is not in the show'
@@ -1209,6 +1270,8 @@ export class CueEngine {
     void audioEngine.stop(cueId, fadeMs).catch(() => {
       // A cue the engine never knew about has nothing to stop.
     })
+    // Its picture goes with it, over the same fade.
+    visualCues.stop(cueId, fadeMs)
     this.deps!.setRunning(cueId, null)
     // A cue taken away mid-group settles its parent's counting the way its own end
     // would have: a sequence steps on to the next child, a timeline counts this one
@@ -1298,6 +1361,7 @@ export class CueEngine {
       // "everything" has to take the scripts the way STOP does.
       scriptHost.cancelAll()
       void audioEngine.stopAll(fadeMs).catch(() => {})
+      visualCues.stopAll(fadeMs)
       this.deps!.clearAllRunning()
     } else {
       const target = this.deps!.getCues().find(c => c.id === cue.targetCueId)
@@ -1503,6 +1567,7 @@ export class CueEngine {
       this.cancelAllWork()
       scriptHost.cancelAll()
       void audioEngine.stopAll(0).catch(() => {})
+      visualCues.stopAll(0)
       clearAllRunning()
     }
   }
@@ -1530,6 +1595,7 @@ export class CueEngine {
     this.cancelAllWork()
     scriptHost.cancelAll()
     void audioEngine.panic(PANIC_FADE_MS).catch(() => {})
+    visualCues.stopAll(PANIC_FADE_MS)
     this.deps!.clearAllRunning()
     // The stuck control is what an operator reaches for PANIC to fix: a pad whose
     // note-off never came is not a note anybody is holding, and leaving it held would
@@ -1550,6 +1616,7 @@ export class CueEngine {
     this.cancelAllWork()
     scriptHost.cancelAll()
     void audioEngine.stopAll(PANIC_FADE_MS).catch(() => {})
+    visualCues.stopAll(PANIC_FADE_MS)
     this.deps.clearAllRunning()
   }
 
@@ -1561,6 +1628,8 @@ export class CueEngine {
   handleExternalPanic(): void {
     this.cancelAllWork()
     scriptHost.cancelAll()
+    // Main took the outputs down with the sound; only the record of them is left to drop.
+    visualCues.forgetAll()
     this.deps!.clearAllRunning()
   }
 
@@ -1602,8 +1671,8 @@ export class CueEngine {
     const run = this.runs.get(cueId)
     if (!run || run.cancelled || run.phase !== 'running') return
     const cue = this.deps!.getCues().find(c => c.id === cueId)
-    if (!cue || cue.type !== 'audio') return
-    void audioEngine.routing(cueId, (cue as AudioCue).outputs).catch(() => {
+    if (!cue || (cue.type !== 'audio' && cue.type !== 'video')) return
+    void audioEngine.routing(cueId, cue.outputs).catch(() => {
       // A cue with no voice has no matrix to replace.
     })
   }
@@ -1619,6 +1688,10 @@ export class CueEngine {
     const run = this.runs.get(cueId)
     if (!run || run.cancelled || run.phase !== 'running' || !run.finish) return
     const cue = this.deps!.getCues().find(c => c.id === cueId)
+    if (cue?.type === 'video') {
+      this.seekVideo(cue as VideoCue, run, positionMs)
+      return
+    }
     if (!cue || cue.type !== 'audio') return
 
     const audioCue = cue as AudioCue
@@ -1736,6 +1809,8 @@ export class CueEngine {
       // stopping settles the group the way its own end would have. finishRun would refuse
       // a cancelled run — and must, so a stopped cue records no completion.
       this.cancelRun(cueId, run)
+      // A video's picture goes with its sound, however the sound was taken.
+      visualCues.stop(cueId, 0)
       this.deps!.setRunning(cueId, null)
       if (this.isGroupChild(cueId)) this.settleParent(run)
       return
@@ -1748,7 +1823,241 @@ export class CueEngine {
     }
     const now = this.now()
     if (run.endAt !== null && now >= run.endAt - PLANNED_END_TOLERANCE_MS) return
+    // A video that holds its last frame runs on after its sound has ended: it is stopped,
+    // not finished.
+    if (this.holdsLastFrame(cueId)) return
     run.finish(now)
+  }
+
+  // ── Pictures ──────────────────────────────────────────────────────────────────
+
+  /**
+   * A video cue: its picture to its output and its sound to the engine, both for the same
+   * instant on the engine's clock. The run ends the way an audio cue's does — when its sound
+   * does — unless it holds its last frame (then it runs until it is stopped) or its file has
+   * no sound (then it ends with its picture).
+   */
+  private planVideo(cue: VideoCue, run: CueRun, at: number, finish: Finish): void {
+    if (!cue.filePath) {
+      this.track(run, this.scheduler!.schedule({
+        at,
+        due: () => finish(at, { outcome: 'error', error: NO_FILE_SELECTED })
+      }))
+      return
+    }
+    // The output opens the file now, so its first frame is waiting when the moment comes —
+    // through a pre-wait, or the lookahead at least.
+    visualCues.prepare(cue)
+    const sound = videoSound(cue)
+    const options = startOptions(sound, run.seekMs, false)
+    const planEnd = !cue.holdLastFrame
+    this.track(run, this.scheduler!.schedule({
+      at,
+      early: () => {
+        void visualCues.play(cue, at, run.seekMs).then(result => {
+          if (result.ok || run.cancelled) return
+          this.log({ level: 'error', message: result.error, label: this.cueLabel(cue) })
+          void audioEngine.stop(cue.id, 0).catch(() => {})
+          finish(Math.max(at, this.now()), { outcome: 'error', error: result.error })
+        })
+        if (planEnd && cue.duration > 0) this.scheduleAudioEnd(run, at, options, cue.duration, finish)
+        void this.prepareAndPlay(sound, run, at, options, finish, {
+          planEnd,
+          soundless: error => {
+            if ((error as { code?: string } | null)?.code !== 'no-audio') return false
+            // A picture with no sound: the run is the picture's from here.
+            run.silentPicture = true
+            return true
+          },
+          started: startAtMs => {
+            // A prepare that outlasted the lookahead moved the sound's start; the picture
+            // follows it rather than running ahead of it.
+            if (Math.abs(startAtMs - at) > 5) visualCues.anchor(cue.id, startAtMs)
+          }
+        })
+      }
+    }))
+  }
+
+  /** An image or text cue: up at `at`, for its display time, or until it is stopped. */
+  private executePicture(cue: VisualCue, run: CueRun, at: number, finish: Finish): void {
+    if (cue.type === 'image' && !cue.filePath) {
+      finish(at, { outcome: 'error', error: NO_FILE_SELECTED })
+      return
+    }
+    void visualCues.play(cue, at, run.seekMs).then(result => {
+      if (result.ok || run.cancelled) return
+      this.log({ level: 'error', message: result.error, label: this.cueLabel(cue) })
+      finish(Math.max(at, this.now()), { outcome: 'error', error: result.error })
+    })
+    if (cue.duration > 0) this.scheduleRunEnd(run, at + Math.max(0, cue.duration - run.seekMs), finish)
+  }
+
+  private holdsLastFrame(cueId: string): boolean {
+    const cue = this.deps?.getCues().find(c => c.id === cueId)
+    return cue?.type === 'video' && (cue as VideoCue).holdLastFrame
+  }
+
+  /** Moves a running video to `positionMs` in its file: sound and picture from the same instant. */
+  private seekVideo(cue: VideoCue, run: CueRun, positionMs: number): void {
+    const now = this.now()
+    const start = Math.max(0, cue.startTime)
+    const elapsed = Math.max(0, positionMs - start)
+    visualCues.seek(cue.id, elapsed, now)
+    run.seekMs = elapsed
+    if (!run.paused && !run.silentPicture) {
+      void audioEngine.seek(cue.id, positionMs).catch(() => {
+        // A voice that has already ended has nowhere to move; the picture still has.
+      })
+    }
+    this.replanVideoEnd(cue, run, now, elapsed)
+  }
+
+  /** The run's end, from `now` with `elapsed` of the play behind it. */
+  private replanVideoEnd(cue: VideoCue, run: CueRun, now: number, elapsed: number): void {
+    if (run.endTask !== null) { this.scheduler!.cancel(run.endTask); run.endTask = null }
+    if (!run.released && run.releaseTask !== null) { this.scheduler!.cancel(run.releaseTask); run.releaseTask = null }
+    run.endAt = null
+    run.plannedMs = null
+    if (cue.holdLastFrame || run.paused || !run.finish) return
+    const total = visualCues.playLength(cue.id) ?? (cue.duration > 0
+      ? plannedPlaybackMs(startOptions(videoSound(cue), 0, false), cue.duration)
+      : null)
+    if (total === null) return
+    run.endAt = now + Math.max(0, total - elapsed)
+    run.plannedMs = run.endAt - run.startAt
+    this.armAudioEndTask(run, run.finish)
+    this.planRelease(run, run.endAt)
+  }
+
+  /** Whether a video's run is paused. */
+  isPaused(cueId: string): boolean {
+    return this.runs.get(cueId)?.paused === true
+  }
+
+  /**
+   * Stands a running video still: its picture freezes on the frame it is on and its sound is
+   * taken away (the engine has no pause; the voice is started again where it stood on Resume).
+   * The run stays: nothing is finished, nothing hands on. Answers whether it paused.
+   */
+  pauseCue(cueId: string): boolean {
+    const run = this.runs.get(cueId)
+    const cue = this.deps?.getCues().find(c => c.id === cueId)
+    if (!run || run.cancelled || run.phase !== 'running' || run.paused || cue?.type !== 'video') return false
+    const now = this.now()
+    visualCues.pause(cueId, now)
+    run.paused = true
+    if (!run.silentPicture) {
+      // The voice's lines from here are about a run that is over: its stop is not this cue's.
+      if (run.engineRunId !== null) run.supersededEngineRunId = run.engineRunId
+      run.engineRunId = null
+      void audioEngine.stop(cueId, PAUSE_FADE_MS).catch(() => {})
+    }
+    this.replanVideoEnd(cue as VideoCue, run, now, 0)
+    this.log({ level: 'info', message: 'paused', label: this.cueLabel(cue) })
+    return true
+  }
+
+  /** Starts a paused video again from where it stood. Answers whether it resumed. */
+  resumeCue(cueId: string): boolean {
+    const run = this.runs.get(cueId)
+    const cue = this.deps?.getCues().find(c => c.id === cueId) as VideoCue | undefined
+    if (!run || run.cancelled || !run.paused || cue?.type !== 'video') return false
+    const now = this.now()
+    const at = now + RESUME_LEAD_MS
+    const where = visualCues.position(cueId, now)
+    const elapsed = visualCues.elapsed(cueId, now) ?? 0
+    visualCues.resume(cueId, at)
+    run.paused = false
+    if (!run.silentPicture && where !== null) {
+      const sound = videoSound(cue)
+      const options: AudioStartOptions = {
+        ...startOptions(sound, 0, false),
+        fadeInDuration: 0,
+        // The passes still to play: the one it stood in, and those after it.
+        loopCount: cue.loopCount < 0 ? -1 : Math.max(0, cue.loopCount - where.loop)
+      }
+      void audioEngine.start(cueId, at, options)
+        .then(result => {
+          if (run.cancelled || run.paused) return
+          run.engineRunId = result.runId
+          // The voice starts at its region's top; it is moved to where the picture stands
+          // before its moment comes, so both start there together.
+          return audioEngine.seek(cueId, where.positionMs).then(() => undefined)
+        })
+        .catch(() => {
+          // A voice that could not be started again leaves the picture playing on its own.
+        })
+    }
+    this.replanVideoEnd(cue, run, at, elapsed)
+    this.log({ level: 'info', message: 'resumed', label: this.cueLabel(cue) })
+    return true
+  }
+
+  /**
+   * The runs whose end the clock can say, the most recently started first: what an output's
+   * timer counts down. Show-clock ms.
+   */
+  runningEnds(): Array<{ cueId: string; label: string; startAt: number; endAt: number }> {
+    const cues = this.deps?.getCues() ?? []
+    return [...this.runs.values()]
+      .filter(run => run.phase === 'running' && !run.cancelled && run.endAt !== null)
+      .map(run => {
+        const cue = cues.find(c => c.id === run.cueId)
+        return { cueId: run.cueId, label: cue ? this.cueLabel(cue) : run.cueId, startAt: run.startAt, endAt: run.endAt as number }
+      })
+      .sort((a, b) => b.startAt - a.startAt)
+  }
+
+  /** What the picture runner tells this one: the outputs' half of a visual cue's run. */
+  private visualHost(): VisualHost {
+    return {
+      pictureGone: cueId => {
+        // Taken down without being asked — a dissolve into another cue, an output removed
+        // from the show: the cue is stopped, the way a stop cue would have stopped it.
+        if (this.runs.has(cueId)) this.stopCue(cueId, 0)
+      },
+      pictureEnded: (cueId, held, atShowMs) => {
+        const run = this.runs.get(cueId)
+        if (held || !run || run.cancelled || run.phase !== 'running' || !run.finish) return
+        // A planned end closes the run on its own; one nobody could plan — a picture whose
+        // length was not known — closes where the picture says.
+        if (run.endAt !== null) return
+        const cue = this.deps?.getCues().find(c => c.id === cueId)
+        if (cue?.type === 'video' && !run.silentPicture && run.engineRunId !== null) return
+        run.finish(Math.max(run.startAt, Math.min(atShowMs, this.now())))
+      },
+      measured: (cueId, durationMs) => {
+        const cue = this.deps?.getCues().find(c => c.id === cueId)
+        if (cue?.type !== 'video') return
+        this.deps!.syncCueDuration(cueId, durationMs)
+        const run = this.runs.get(cueId)
+        if (!run || run.cancelled || run.phase !== 'running' || run.endAt !== null || run.paused || !run.finish) return
+        if ((cue as VideoCue).holdLastFrame) return
+        this.scheduleAudioEnd(run, run.startAt, startOptions(videoSound(cue as VideoCue), run.seekMs, false), durationMs, run.finish)
+      },
+      pictureFailed: (cueId, message) => {
+        const cue = this.deps?.getCues().find(c => c.id === cueId)
+        const run = this.runs.get(cueId)
+        if (cue) this.log({ level: 'error', message, label: this.cueLabel(cue) })
+        if (!run || run.cancelled || !run.finish) return
+        // A video whose sound is playing carries on as sound; a picture with nothing else
+        // to it has failed.
+        if (cue?.type === 'video' && !run.silentPicture) return
+        run.finish(this.now(), { outcome: 'error', error: message })
+      },
+      dissolving: (incoming, outgoing, fromShowMs) => {
+        const cue = this.deps?.getCues().find(c => c.id === incoming)
+        const durationMs = cue !== undefined && isVisualCue(cue) ? cue.fadeInDuration : 0
+        for (const cueId of outgoing) {
+          const other = this.deps?.getCues().find(c => c.id === cueId)
+          if (other?.type !== 'video') continue
+          // The sound goes with its picture, on the same clock: the incoming one's first frame.
+          void audioEngine.fade(cueId, 'volume', 0, durationMs, 'linear', fromShowMs).catch(() => {})
+        }
+      },
+      firstFrame: () => {}
+    }
   }
 
   /**

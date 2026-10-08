@@ -331,6 +331,20 @@ export class AudioEngineClient {
     }
   }
 
+  /**
+   * A show-clock time as the engine's own clock reads it. Public for the one other process
+   * that has to place things on the engine's clock — a video output, which keeps its
+   * pictures on the clock the sound of them is scheduled on (src/renderer/src/output).
+   */
+  engineTime(showMs: number): number {
+    return this.toEngineMs(showMs)
+  }
+
+  /** An engine-clock time, as show time: the inverse of `engineTime`, for what an output reports. */
+  showTime(engineMs: number): number {
+    return this.toShowMs(engineMs)
+  }
+
   /** Show-clock ms as the engine's own clock measures it. Every outbound time. */
   private toEngineMs(showMs: number): number {
     return showMs - this.currentEpoch()
