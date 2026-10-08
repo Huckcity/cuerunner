@@ -55,7 +55,7 @@ import type { RfIncident } from '../utils/rfIncidents'
 import { liveCue } from '../utils/liveCue'
 import type { LicenseStatus } from '../../../shared/license'
 
-export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait'
+export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait' | 'paused'
 
 /**
  * The tabs the settings dialog has. `license` is the machine's own settings rather

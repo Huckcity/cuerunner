@@ -17,6 +17,12 @@ export interface RemoteDeps {
   stop: (cueId?: string) => void
   goById: (cueId: string) => void
   seekCue: (cueId: string, positionMs: number) => void
+  pauseAll: () => void
+  resumeAll: () => void
+  togglePause: () => void
+  pauseCue: (cueId: string) => boolean
+  resumeCue: (cueId: string) => boolean
+  togglePauseCue: (cueId: string) => boolean
   log: (entry: LogEntryInput) => void
 }
 
@@ -78,6 +84,18 @@ export function runRemote(command: RemoteCommand, deps: RemoteDeps, source: stri
       log(`STOP from ${source}`)
       deps.stop()
       return
+    case 'pause':
+      log(`PAUSE from ${source}`)
+      deps.pauseAll()
+      return
+    case 'resume':
+      log(`RESUME from ${source}`)
+      deps.resumeAll()
+      return
+    case 'toggle-pause':
+      log(`PAUSE/RESUME from ${source}`)
+      deps.togglePause()
+      return
     case 'select-next':
     case 'select-previous': {
       const order = visibleOrder(deps.getCues(), deps.getCollapsed())
@@ -123,6 +141,15 @@ export function runRemote(command: RemoteCommand, deps: RemoteDeps, source: stri
     case 'cue-stop':
       log(`Stopped by ${source}`, 'info', label)
       deps.stop(cue.id)
+      return
+    case 'cue-pause':
+      if (deps.pauseCue(cue.id)) log(`Paused by ${source}`, 'info', label)
+      return
+    case 'cue-resume':
+      if (deps.resumeCue(cue.id)) log(`Resumed by ${source}`, 'info', label)
+      return
+    case 'cue-toggle-pause':
+      if (deps.togglePauseCue(cue.id)) log(`Pause toggled by ${source}`, 'info', label)
       return
     case 'cue-seek':
       if (cue.type !== 'audio') {

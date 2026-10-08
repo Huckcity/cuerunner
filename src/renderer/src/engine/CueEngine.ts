@@ -173,6 +173,10 @@ interface RunnerDeps {
   // How long each firing surface stays deaf after it fires. Read per press, because the
   // operator can change it while the show is loaded.
   getTriggerGuard: () => TriggerGuardSettings
+  // What the rows are showing for each running cue, so a pause can say "paused" there and
+  // a resume can put back what it said. Optional: a runner without it still holds the show,
+  // and only the rows do not change.
+  getRunning?: () => ReadonlyMap<string, RunningCue>
 }
 
 export class CueEngine {
@@ -206,6 +210,14 @@ export class CueEngine {
   // for the life of the window; past the cap a new name is still logged, naming it, but
   // earns no count of its own.
   private unrecognisedEngineEvents = new Map<string, number>()
+  /**
+   * The show held whole — every running sound held where it stands, and the show clock with
+   * it — or null while it runs. `wallAt` is the window's clock at the hold, for the rows'
+   * own counters, which read the window's clock rather than the show's.
+   */
+  private held: { wallAt: number; cueIds: string[]; rows: Map<string, RunningCue> } | null = null
+  /** Audio cues held on their own, while the rest of the show goes on, by cue id. */
+  private pausedCues = new Map<string, { at: number; wallAt: number; row: RunningCue | null }>()
 
   init(deps: RunnerDeps): void {
     this.deps = deps
@@ -243,6 +255,7 @@ export class CueEngine {
     // walk-in again over the bows. A show that has just been opened is standing on its
     // first cue, so the top of the show is still one press away where it should be.
     if (!selectedId) return
+    if (this.refuseWhileHeld()) return
     const standingIdx = cues.findIndex(c => c.id === selectedId)
     if (standingIdx < 0) return
 
@@ -338,6 +351,9 @@ export class CueEngine {
     const cues = getCues()
     const cue = cues.find(c => c.id === id)
     if (!cue || !cue.isArmed) return
+    // A press — a trigger, a desk button, a remote — waits for the show to be let go; the
+    // show's own handovers are on the held clock and come due when it runs again.
+    if (atMs === undefined && this.refuseWhileHeld()) return
     if (atMs === undefined && this.hasActiveRun(cue.id) && refirePolicy(cue) === 'ignore') return
     const idx = cues.findIndex(c => c.id === id)
     // The cue after a group is the one past its children — handing a group's completion
@@ -1539,6 +1555,9 @@ export class CueEngine {
 
   /** No task started before this call may fire afterwards, and no handover survives it. */
   private cancelAllWork(): void {
+    // Whatever was held goes with the work: the voices are being stopped, so there is
+    // nothing to let go of, and a show clock left standing would hold the next show still.
+    this.dropHolds()
     this.generation++
     for (const [cueId, run] of [...this.runs]) this.cancelRun(cueId, run)
     this.runs.clear()
@@ -1550,6 +1569,8 @@ export class CueEngine {
   stop(cueId?: string, settles = true): void {
     const { clearAllRunning } = this.deps!
     if (cueId) {
+      // A held voice is stopped at once by the engine; its hold goes with it.
+      this.pausedCues.delete(cueId)
       // A group is stopped with its children: leaving them running would be a name that
       // does nothing, and a sequence would keep firing them. The group's own run goes
       // first, so its children settling cannot carry it on. `settles` is the caller's
@@ -1627,6 +1648,162 @@ export class CueEngine {
     this.deps!.clearAllRunning()
   }
 
+  // ── Pause ────────────────────────────────────────────────────────────────
+
+  /** Whether the whole show is held. */
+  isHeld(): boolean {
+    return this.held !== null
+  }
+
+  /** Whether one cue is paused, on its own or with the show. */
+  isPaused(cueId: string): boolean {
+    return this.pausedCues.has(cueId) || (this.held?.cueIds.includes(cueId) ?? false)
+  }
+
+  /** The cues that would be held if the show were paused now: what is making sound. */
+  private holdableRuns(): string[] {
+    const cues = this.deps!.getCues()
+    return [...this.runs].filter(([cueId, run]) => {
+      if (run.cancelled || this.pausedCues.has(cueId)) return false
+      const cue = cues.find(c => c.id === cueId)
+      return cue?.type === 'audio' && (run.phase === 'pending' || run.phase === 'running')
+    }).map(([cueId]) => cueId)
+  }
+
+  /**
+   * Holds the whole show where it stands: every sound held in the engine, and the show clock
+   * stopped, so no wait, pre-wait, handover or planned end comes due until it is let go. GO
+   * and every other press wait for the resume, and say so; STOP and PANIC end the hold with
+   * everything else.
+   */
+  pauseAll(): void {
+    if (!this.deps || this.held !== null) return
+    const holding = this.holdableRuns()
+    audioEngine.holdClock()
+    for (const cueId of holding) {
+      void audioEngine.pause(cueId).catch(() => {
+        // A voice that has already gone has nothing to hold.
+      })
+    }
+    const rows = new Map(this.deps.getRunning?.() ?? [])
+    // Held before the rows are told, so whatever redraws on them reads the show as held.
+    this.held = { wallAt: Date.now(), cueIds: holding, rows }
+    for (const [cueId, row] of rows) {
+      if (row.state !== 'paused') this.deps.setRunning(cueId, { ...row, state: 'paused' })
+    }
+    this.log({ level: 'info', message: `paused the show (${this.runs.size} running)` })
+  }
+
+  /** Lets a held show go on from where it was held: the clock, the sounds, the rows. */
+  resumeAll(): void {
+    if (!this.deps || this.held === null) return
+    const { wallAt, cueIds, rows } = this.held
+    this.held = null
+    audioEngine.releaseClock()
+    for (const cueId of cueIds) {
+      if (!this.runs.has(cueId)) continue
+      void audioEngine.resume(cueId).catch(() => {})
+    }
+    const heldFor = Date.now() - wallAt
+    for (const [cueId, row] of rows) {
+      if (!this.runs.has(cueId) || this.pausedCues.has(cueId)) continue
+      // The rows count on the window's clock, which went on: they go on from where they stood.
+      this.deps.setRunning(cueId, { ...row, startedAt: row.startedAt + heldFor })
+    }
+    this.log({ level: 'info', message: 'resumed the show' })
+  }
+
+  /** PAUSE as one key: hold the show, or let it go. */
+  togglePause(): void {
+    if (this.held !== null) this.resumeAll()
+    else this.pauseAll()
+  }
+
+  /**
+   * Holds one audio cue where it stands while the rest of the show goes on: its sound in the
+   * engine, and its own planned end — the handover to the cue after it and its fade-out with
+   * it. Only a cue that is playing has a place to be held at, and only an audio cue has a
+   * sound to hold; anything else is said in the log rather than half-done.
+   */
+  pauseCue(cueId: string): boolean {
+    if (!this.deps) return false
+    if (this.held !== null || this.pausedCues.has(cueId)) return false
+    const run = this.runs.get(cueId)
+    const cue = this.deps.getCues().find(c => c.id === cueId)
+    if (!run || !cue || run.cancelled) return false
+    if (cue.type !== 'audio' || run.phase !== 'running') {
+      this.log({ level: 'error', message: 'only an audio cue that is playing can be paused on its own', label: this.cueLabel(cue) })
+      return false
+    }
+    if (run.released) {
+      // Its handover has already gone to the cue after it: holding the sound now would leave
+      // the next cue running on time under a cue that is not.
+      this.log({ level: 'error', message: 'too close to its end to pause', label: this.cueLabel(cue) })
+      return false
+    }
+    for (const task of [run.endTask, run.releaseTask, run.fadeOutTask ?? null]) {
+      if (task !== null) this.scheduler!.cancel(task)
+    }
+    run.endTask = null
+    run.releaseTask = null
+    run.fadeOutTask = null
+    void audioEngine.pause(cueId).catch(() => {})
+    const row = this.deps.getRunning?.().get(cueId) ?? null
+    this.pausedCues.set(cueId, { at: this.now(), wallAt: Date.now(), row })
+    if (row !== null) this.deps.setRunning(cueId, { ...row, state: 'paused' })
+    this.log({ level: 'info', message: 'paused', label: this.cueLabel(cue) })
+    return true
+  }
+
+  /** Lets one held audio cue go on, its planned end moved on by however long it was held. */
+  resumeCue(cueId: string): boolean {
+    if (!this.deps) return false
+    const pause = this.pausedCues.get(cueId)
+    if (pause === undefined) return false
+    this.pausedCues.delete(cueId)
+    const run = this.runs.get(cueId)
+    if (!run || run.cancelled || !run.finish) return false
+    const heldFor = this.now() - pause.at
+    void audioEngine.resume(cueId).catch(() => {})
+    run.startAt += heldFor
+    if (run.endAt !== null) {
+      run.endAt += heldFor
+      // A fade-out that had begun was held in the engine with the voice and goes on from
+      // where it was; planning it again would put the level back first.
+      const fadeOut = run.fadeOut
+      if (run.fadeOutSent) run.fadeOut = null
+      this.armAudioEndTask(run, run.finish)
+      run.fadeOut = fadeOut
+      this.planRelease(run, run.endAt)
+    }
+    if (pause.row !== null) {
+      this.deps.setRunning(cueId, { ...pause.row, startedAt: pause.row.startedAt + (Date.now() - pause.wallAt) })
+    }
+    const cue = this.deps.getCues().find(c => c.id === cueId)
+    if (cue) this.log({ level: 'info', message: 'resumed', label: this.cueLabel(cue) })
+    return true
+  }
+
+  /** One cue's PAUSE as one press: hold it, or let it go. */
+  togglePauseCue(cueId: string): boolean {
+    return this.pausedCues.has(cueId) ? this.resumeCue(cueId) : this.pauseCue(cueId)
+  }
+
+  /** A press while the show is held is refused, with the reason in the log. */
+  private refuseWhileHeld(): boolean {
+    if (this.held === null) return false
+    this.log({ level: 'error', message: 'the show is paused — resume it (P) before firing a cue' })
+    return true
+  }
+
+  /** Forgets every hold without letting anything go: what was held is being stopped. */
+  private dropHolds(): void {
+    this.pausedCues.clear()
+    if (this.held === null) return
+    this.held = null
+    audioEngine.releaseClock()
+  }
+
   /**
    * A live change from the inspector: the engine hears it at once, and a rate change
    * re-times the run's planned end so the cue after it still starts on the beat.
@@ -1681,6 +1858,8 @@ export class CueEngine {
   seekCue(cueId: string, positionMs: number): void {
     const run = this.runs.get(cueId)
     if (!run || run.cancelled || run.phase !== 'running' || !run.finish) return
+    // A held cue has no end to re-plan until it is let go; the seek waits for the resume.
+    if (this.isPaused(cueId)) return
     const cue = this.deps!.getCues().find(c => c.id === cueId)
     if (!cue || cue.type !== 'audio') return
 

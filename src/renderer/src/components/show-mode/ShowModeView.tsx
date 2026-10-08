@@ -13,7 +13,7 @@ import './ShowMode.css'
 const TICK_MS = 100
 
 /** Where a cue stands in the show, as the card says it. */
-export type CardState = 'done' | 'next' | 'ready' | 'running' | 'pre-wait' | 'post-wait'
+export type CardState = 'done' | 'next' | 'ready' | 'running' | 'pre-wait' | 'post-wait' | 'paused'
 
 /**
  * A cue's place relative to the cue GO fires: before it is done, it is next, after it is
@@ -33,7 +33,8 @@ const LABEL: Record<CardState, string> = {
   ready: 'Ready',
   running: 'Running',
   'pre-wait': 'Pre-wait',
-  'post-wait': 'Post-wait'
+  'post-wait': 'Post-wait',
+  paused: 'Paused'
 }
 
 function firstLine(text: string): string {

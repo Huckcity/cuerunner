@@ -1,5 +1,6 @@
 import { useStore } from '../../store'
 import { useCueEngine, useKeyboard } from '../../hooks/useCueEngine'
+import { cueEngine } from '../../engine/CueEngine'
 import MidiStatusBadge from '../midi/MidiStatusBadge'
 import { AudioStatusBadge } from './AudioStatusBadge'
 import { AlertChip } from './AlertChip'
@@ -26,17 +27,20 @@ export type ShowStrip = 'log' | 'monitor' | 'rf' | 'script'
  * meant rather than reached for. That leaves GO as the only saturated colour on screen.
  */
 export function TransportBar({ onShowStrip }: Props) {
-  const { go, stop, panic } = useCueEngine()
-  useKeyboard(go, stop, panic)
+  const { go, stop, panic, togglePause } = useCueEngine()
+  useKeyboard(go, stop, panic, togglePause)
 
   const running = useStore(s => s.running)
   const runningCount = running.size
+  // Read off the runner on every redraw: a hold and its release both rewrite the rows, which
+  // is what redraws this.
+  const held = cueEngine.isHeld()
 
   return (
     <div className="transport-bar">
       <div className="transport-left">
-        <span className="running-badge" data-active={runningCount > 0}>
-          {runningCount > 0 ? `${runningCount} running` : 'idle'}
+        <span className="running-badge" data-active={runningCount > 0} data-held={held}>
+          {runningCount > 0 ? `${runningCount} ${held ? 'paused' : 'running'}` : 'idle'}
         </span>
         {/* Whatever the operator has open, what needs them is here. Warnings are among
             them: the panel that carries the long form is a tab in a dock that can be
@@ -54,6 +58,15 @@ export function TransportBar({ onShowStrip }: Props) {
         <button className="btn-stop" onClick={stop} title="Stop everything that is running (Esc)">
           STOP
         </button>
+        <button
+          className="btn-pause"
+          onClick={togglePause}
+          disabled={runningCount === 0}
+          data-held={held}
+          title={held ? 'Let the show go on from where it was held (P)' : 'Hold the show where it stands (P)'}
+        >
+          {held ? 'RESUME' : 'PAUSE'}
+        </button>
         <button className="btn-go" onClick={go} title="Fire the next cue (Space)">
           <svg className="btn-go-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
             <path d="M5 3.4v9.2L12.2 8z" />
@@ -65,7 +78,7 @@ export function TransportBar({ onShowStrip }: Props) {
           because it has no button: this line is where an operator finds it. */}
       <div className="transport-right">
         <span className="transport-keys">
-          <kbd>Space</kbd> go · <kbd>Esc</kbd> stop · <kbd>{formatShortcut('Shift+Esc')}</kbd> panic
+          <kbd>Space</kbd> go · <kbd>P</kbd> pause · <kbd>Esc</kbd> stop · <kbd>{formatShortcut('Shift+Esc')}</kbd> panic
         </span>
       </div>
     </div>

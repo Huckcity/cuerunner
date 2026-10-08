@@ -28,7 +28,7 @@
  * events have been interpreted. The greeting is a new message kind, which is why the
  * meaning changed with it: an engine that does not greet speaks a build from before it.
  */
-export const AUDIO_PROTOCOL_VERSION = 3
+export const AUDIO_PROTOCOL_VERSION = 4
 
 /** The type a request field carries on the wire. */
 export type AudioWireFieldType = 'string' | 'number' | 'boolean' | 'object' | 'array'
@@ -258,6 +258,16 @@ export const AUDIO_WIRE = {
       cueId: { type: 'string', required: true },
       whenMs: { type: 'number', required: false, default: 0 }
     },
+    /** Hold a cue's voice where it stands; every timed thing about it waits with it. */
+    pause: {
+      cueId: { type: 'string', required: true },
+      whenMs: { type: 'number', required: false, default: 0 }
+    },
+    /** Let a held voice go on, moved on by however long it was held. */
+    resume: {
+      cueId: { type: 'string', required: true },
+      whenMs: { type: 'number', required: false, default: 0 }
+    },
     fade: {
       cueId: { type: 'string', required: true },
       param: { type: 'string', required: false, default: 'volume' },
@@ -440,6 +450,9 @@ export const AUDIO_CHANNELS = {
   /** Ends a voice's loop and plays it out to the end of the file. */
   release: 'audio:release',
   cancel: 'audio:cancel',
+  /** Holds a voice where it stands, and lets it go on. */
+  pause: 'audio:pause',
+  resume: 'audio:resume',
   fade: 'audio:fade',
   routing: 'audio:routing',
   progress: 'audio:progress',
@@ -985,6 +998,14 @@ export interface AudioEngineBridge {
   /** Drop the cue's future-dated verbs (a scheduled start, a scheduled stop/fade). */
   cancel(cueId: string, whenMs?: number): Promise<AudioCancelResult>
   /**
+   * Hold a cue's voice where it stands: silent, not moving through its file, and every
+   * frame-stamped thing about it — a fade, a scheduled stop, a start not reached — waiting
+   * with it. `applied` is false for a voice already held or a cue with nothing playing.
+   */
+  pause(cueId: string, whenMs?: number): Promise<AudioCommandResult>
+  /** Let a held voice go on, its timed things moved on by the hold. */
+  resume(cueId: string, whenMs?: number): Promise<AudioCommandResult>
+  /**
    * Replace a running cue's routing matrix live, without restarting it: `null` is
    * automatic routing, `[]` is silent, a list is the new matrix. Applies from the
    * next sample the engine renders.
@@ -1068,6 +1089,10 @@ export interface AudioReleasePayload {
   whenMs?: number
   /** Where to play out to, in file ms; absent is the end of the file. */
   endMs?: number
+}
+export interface AudioHoldPayload {
+  cueId: string
+  whenMs?: number
 }
 export interface AudioCancelPayload {
   cueId: string

@@ -13,6 +13,16 @@ describe('parseRemote', () => {
     expect(parseRemote('/hardStop')).toEqual({ kind: 'stop' })
   })
 
+  it('reads pause, resume and the toggle in either dictionary’s spelling', () => {
+    expect(parseRemote('/pause')).toEqual({ kind: 'pause' })
+    expect(parseRemote('/resume')).toEqual({ kind: 'resume' })
+    expect(parseRemote('/togglePause')).toEqual({ kind: 'toggle-pause' })
+    expect(parseRemote('/cuerunner/pause_toggle')).toEqual({ kind: 'toggle-pause' })
+    expect(parseRemote('/cue/7/pause')).toEqual({ kind: 'cue-pause', cue: { by: 'number', number: '7' } })
+    expect(parseRemote('/cue/7/resume')).toEqual({ kind: 'cue-resume', cue: { by: 'number', number: '7' } })
+    expect(parseRemote('/cue/selected/togglePause')).toEqual({ kind: 'cue-toggle-pause', cue: { by: 'selected' } })
+  })
+
   it('reads the same verbs under Cuerunner’s own prefix', () => {
     expect(parseRemote('/cuerunner/go')).toEqual({ kind: 'go' })
     expect(parseRemote('/cuerunner/hardstop')).toEqual({ kind: 'stop' })

@@ -54,7 +54,7 @@
 .active-row {
   position: relative;
   display: grid;
-  grid-template-columns: 4px 16px 56px minmax(0, 1fr) auto 72px 28px;
+  grid-template-columns: 4px 16px 56px minmax(0, 1fr) auto 72px 28px 28px;
   align-items: center;
   column-gap: var(--space-2);
   padding: 6px var(--space-3) 12px 0;
@@ -94,7 +94,8 @@
   text-align: right;
 }
 
-.active-stop {
+.active-stop,
+.active-pause {
   width: 24px;
   height: 22px;
   background: var(--bg-input);
@@ -105,7 +106,9 @@
   cursor: pointer;
 }
 
-.active-stop:hover { background: var(--bg-hover); color: var(--fg-primary); }
+.active-stop:hover,
+.active-pause:hover { background: var(--bg-hover); color: var(--fg-primary); }
+.active-pause[data-paused='true'] { color: var(--accent-amber); border-color: var(--accent-amber); }
 
 /* The bar runs the width of the row under the name, and is a thicker target where it can be
    held. The fill is scaled, not resized, so a frame's update is one compositor move. */

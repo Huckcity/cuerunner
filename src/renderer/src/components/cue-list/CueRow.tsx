@@ -177,6 +177,9 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaStat
         {isRunning && runState?.state === 'post-wait' && (
           <span className="state-pill">post-wait</span>
         )}
+        {isRunning && runState?.state === 'paused' && (
+          <span className="state-pill" data-paused="true">paused</span>
+        )}
         {vamping && <span className="state-pill" data-vamping="true">vamping</span>}
         {/* The last run, not this one: a cue fired again is doing what its other pills
             say, and what it did last time comes back only if it does it again. */}

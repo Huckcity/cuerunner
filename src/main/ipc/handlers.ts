@@ -16,6 +16,7 @@ import {
   AUDIO_CHANNELS,
   type AudioCancelPayload,
   type AudioReleasePayload,
+  type AudioHoldPayload,
   type AudioOnsetsPayload,
   type AudioSilencePayload,
   type AudioConfigurePayload,
@@ -379,6 +380,10 @@ export function registerIpcHandlers(): void {
     audioVerb(() => audioEngine.release(payload.cueId, payload.whenMs, payload.endMs)))
   ipcMain.handle(AUDIO_CHANNELS.cancel, (_, payload: AudioCancelPayload) =>
     audioVerb(() => audioEngine.cancel(payload.cueId, payload.whenMs)))
+  ipcMain.handle(AUDIO_CHANNELS.pause, (_, payload: AudioHoldPayload) =>
+    audioVerb(() => audioEngine.pause(payload.cueId, payload.whenMs)))
+  ipcMain.handle(AUDIO_CHANNELS.resume, (_, payload: AudioHoldPayload) =>
+    audioVerb(() => audioEngine.resume(payload.cueId, payload.whenMs)))
   ipcMain.handle(AUDIO_CHANNELS.routing, (_, payload: AudioRoutingPayload) =>
     audioVerb(() => audioEngine.routing(payload.cueId, payload.outputs)))
   ipcMain.handle(AUDIO_CHANNELS.fade, (_, payload: AudioFadePayload) =>

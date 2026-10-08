@@ -1167,6 +1167,38 @@ bool Engine::releaseCue(const std::string& cueId, double whenMs, bool hasEnd, do
   return true;
 }
 
+bool Engine::pauseCue(const std::string& cueId, double whenMs, CommandResultDTO& out, EngineError& error) {
+  if (!finiteNumber(whenMs)) {
+    error = {"invalid", "pause needs a finite time"};
+    return false;
+  }
+  Command command;
+  command.kind = Command::Pause;
+  copyStr(command.cueId, sizeof(command.cueId), cueId);
+  command.whenMs = whenMs;
+  AckResult ack;
+  if (!submitCommand(command, ack, error)) return false;
+  out.atMs = clockMs();
+  out.applied = ack.applied;
+  return true;
+}
+
+bool Engine::resumeCue(const std::string& cueId, double whenMs, CommandResultDTO& out, EngineError& error) {
+  if (!finiteNumber(whenMs)) {
+    error = {"invalid", "resume needs a finite time"};
+    return false;
+  }
+  Command command;
+  command.kind = Command::Resume;
+  copyStr(command.cueId, sizeof(command.cueId), cueId);
+  command.whenMs = whenMs;
+  AckResult ack;
+  if (!submitCommand(command, ack, error)) return false;
+  out.atMs = clockMs();
+  out.applied = ack.applied;
+  return true;
+}
+
 bool Engine::cancelCue(const std::string& cueId, double whenMs, CancelResultDTO& out, EngineError& error) {
   if (!finiteNumber(whenMs)) {
     error = {"invalid", "cancel needs a finite time"};

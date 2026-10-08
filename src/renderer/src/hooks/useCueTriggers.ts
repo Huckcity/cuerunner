@@ -82,6 +82,12 @@ function remoteDeps() {
     stop: (cueId?: string) => cueEngine.stop(cueId),
     goById: (cueId: string) => cueEngine.goById(cueId),
     seekCue: (cueId: string, positionMs: number) => cueEngine.seekCue(cueId, positionMs),
+    pauseAll: () => cueEngine.pauseAll(),
+    resumeAll: () => cueEngine.resumeAll(),
+    togglePause: () => cueEngine.togglePause(),
+    pauseCue: (cueId: string) => cueEngine.pauseCue(cueId),
+    resumeCue: (cueId: string) => cueEngine.resumeCue(cueId),
+    togglePauseCue: (cueId: string) => cueEngine.togglePauseCue(cueId),
     log: (entry: Parameters<typeof store.appendLog>[0][number]) => useStore.getState().appendLog([entry])
   }
 }

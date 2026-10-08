@@ -140,6 +140,8 @@ Object.defineProperty(window, 'cuerunner', {
         ok: true, at: 0, positionMs: 0, state: 'playing'
       })),
       release: vi.fn((): Promise<AudioCommandResult> => Promise.resolve({ ok: true, at: 0, applied: true })),
+      pause: vi.fn((): Promise<AudioCommandResult> => Promise.resolve({ ok: true, at: 0, applied: true })),
+      resume: vi.fn((): Promise<AudioCommandResult> => Promise.resolve({ ok: true, at: 0, applied: true })),
       onsets: vi.fn(() => Promise.resolve({
         filePath: '', onsetsMs: [], durationMs: 0, sampleRate: 48000, channels: 2,
         truncated: false, startMs: 0, endMs: 0

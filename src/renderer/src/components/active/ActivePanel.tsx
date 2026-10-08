@@ -124,6 +124,17 @@ function ActiveRow({ cue, run, cues }: { cue: Cue; run: RunningCue; cues: Cue[] 
       <span className="active-name">{cue.name || 'untitled'}</span>
       {run.state !== 'playing' && <span className="state-pill active-state">{run.state}</span>}
       <span className="active-time" ref={timeRef} />
+      {audio !== null && (run.state === 'playing' || run.state === 'paused') ? (
+        <button
+          className="active-pause"
+          onClick={() => cueEngine.togglePauseCue(cue.id)}
+          data-paused={run.state === 'paused'}
+          title={run.state === 'paused' ? `Let ${cue.number} go on` : `Hold ${cue.number} where it is`}
+          aria-label={run.state === 'paused' ? `Resume ${cue.number}` : `Pause ${cue.number}`}
+        >
+          {run.state === 'paused' ? '▶' : '❚❚'}
+        </button>
+      ) : <span />}
       <button
         className="active-stop"
         onClick={() => cueEngine.stop(cue.id)}

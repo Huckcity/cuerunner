@@ -246,6 +246,11 @@ class Engine {
   bool stopAll(double fadeMs, CommandResultDTO& out, EngineError& error);
   bool seekCue(const std::string& cueId, double positionMs, double whenMs, SeekResultDTO& out, EngineError& error);
   bool cancelCue(const std::string& cueId, double whenMs, CancelResultDTO& out, EngineError& error);
+  /** Holds a cue's voice where it stands, at `whenMs` (0 is now); `applied` is false for a
+   *  voice already held or a cue with nothing playing. */
+  bool pauseCue(const std::string& cueId, double whenMs, CommandResultDTO& out, EngineError& error);
+  /** Lets a held voice go on, every timed thing about it moved on by the hold. */
+  bool resumeCue(const std::string& cueId, double whenMs, CommandResultDTO& out, EngineError& error);
   /**
    * Ends a voice's loop and plays it out to the end of the file, from wherever the loop
    * is — or to `endMs` when `hasEnd` names one, which is where a cue trimmed of its

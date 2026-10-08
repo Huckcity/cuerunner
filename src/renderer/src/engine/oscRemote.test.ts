@@ -20,6 +20,12 @@ function harness(cues: Cue[], selected: string | null = null, collapsed: string[
     stop: vi.fn(),
     goById: vi.fn(),
     seekCue: vi.fn(),
+    pauseAll: vi.fn(),
+    resumeAll: vi.fn(),
+    togglePause: vi.fn(),
+    pauseCue: vi.fn((_: string) => true),
+    resumeCue: vi.fn((_: string) => true),
+    togglePauseCue: vi.fn((_: string) => true),
     log: vi.fn()
   } satisfies RemoteDeps
   return { deps, selection: () => selection }
@@ -130,6 +136,39 @@ describe('runRemote', () => {
     expect(selection()).toBe('id-2')
     expect(deps.go).not.toHaveBeenCalled()
     expect(deps.goById).not.toHaveBeenCalled()
+  })
+})
+
+describe('runRemote — pause', () => {
+  it('holds the show, lets it go, and toggles it, saying who asked', () => {
+    const { deps } = harness([cueOf('wait', '1')], 'id-1')
+    runRemote({ kind: 'pause' }, deps, 'OSC /pause from 10.0.0.5:53001')
+    runRemote({ kind: 'resume' }, deps, 'OSC /resume from 10.0.0.5:53001')
+    runRemote({ kind: 'toggle-pause' }, deps, 'OSC /togglePause from 10.0.0.5:53001')
+    expect(deps.pauseAll).toHaveBeenCalledTimes(1)
+    expect(deps.resumeAll).toHaveBeenCalledTimes(1)
+    expect(deps.togglePause).toHaveBeenCalledTimes(1)
+    expect(deps.log.mock.calls.map(([entry]) => entry.message)).toEqual([
+      'PAUSE from OSC /pause from 10.0.0.5:53001',
+      'RESUME from OSC /resume from 10.0.0.5:53001',
+      'PAUSE/RESUME from OSC /togglePause from 10.0.0.5:53001'
+    ])
+  })
+
+  it('holds one cue by number, and logs only what the runner did', () => {
+    const { deps } = harness([cueOf('audio', '4')])
+    runRemote({ kind: 'cue-pause', cue: { by: 'number', number: '4' } }, deps, SOURCE)
+    expect(deps.pauseCue).toHaveBeenCalledWith('id-4')
+    expect(deps.log).toHaveBeenCalledWith({ level: 'info', message: `Paused by ${SOURCE}`, label: '4 · Cue 4' })
+
+    deps.log.mockClear()
+    deps.resumeCue.mockReturnValueOnce(false)
+    runRemote({ kind: 'cue-resume', cue: { by: 'number', number: '4' } }, deps, SOURCE)
+    // The runner says why it would not, in its own line; the remote adds nothing to it.
+    expect(deps.log).not.toHaveBeenCalled()
+
+    runRemote({ kind: 'cue-toggle-pause', cue: { by: 'number', number: '4' } }, deps, SOURCE)
+    expect(deps.togglePauseCue).toHaveBeenCalledWith('id-4')
   })
 })
 

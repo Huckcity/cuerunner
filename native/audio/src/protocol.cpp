@@ -186,6 +186,14 @@ const WireField kCancelFields[] = {
     wireRequired("cueId", WireFieldType::String),
     wireNumber("whenMs", "0"),
 };
+const WireField kPauseFields[] = {
+    wireRequired("cueId", WireFieldType::String),
+    wireNumber("whenMs", "0"),
+};
+const WireField kResumeFields[] = {
+    wireRequired("cueId", WireFieldType::String),
+    wireNumber("whenMs", "0"),
+};
 const WireField kFadeFields[] = {
     wireRequired("cueId", WireFieldType::String),
     wireText("param", "volume"),
@@ -241,6 +249,8 @@ const WireVerb kWireVerbs[] = {
     {"seek", fieldsOf(kSeekFields)},
     {"release", fieldsOf(kReleaseFields)},
     {"cancel", fieldsOf(kCancelFields)},
+    {"pause", fieldsOf(kPauseFields)},
+    {"resume", fieldsOf(kResumeFields)},
     {"fade", fieldsOf(kFadeFields)},
     {"routing", fieldsOf(kRoutingFields)},
     {"progress", fieldsOf(kProgressFields)},
@@ -1046,6 +1056,21 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
       cJSON_AddBoolToObject(body, "ok", 1);
       cJSON_AddNumberToObject(body, "at", result.atMs);
       cJSON_AddNumberToObject(body, "canceled", result.canceled);
+      out = replyOk(id, body);
+    } else {
+      out = replyError(id, error.code, error.message);
+    }
+  } else if (verb == "pause" || verb == "resume") {
+    CommandResultDTO result;
+    EngineError error;
+    const bool ok = verb == "pause"
+                        ? engine.pauseCue(textOf("cueId"), numberOf("whenMs"), result, error)
+                        : engine.resumeCue(textOf("cueId"), numberOf("whenMs"), result, error);
+    if (ok) {
+      cJSON* body = cJSON_CreateObject();
+      cJSON_AddBoolToObject(body, "ok", 1);
+      cJSON_AddNumberToObject(body, "at", result.atMs);
+      cJSON_AddBoolToObject(body, "applied", result.applied);
       out = replyOk(id, body);
     } else {
       out = replyError(id, error.code, error.message);

@@ -171,6 +171,8 @@
 .show-card[data-state='running'] { background: var(--bg-playing-row); border-color: var(--ok-border); }
 .show-card[data-state='running'] .show-card-state { color: var(--ok-fg); font-weight: var(--fw-bold); }
 .show-card[data-state='pre-wait'],
-.show-card[data-state='post-wait'] { background: var(--bg-prewait-row); }
+.show-card[data-state='post-wait'],
+.show-card[data-state='paused'] { background: var(--bg-prewait-row); }
+.show-card[data-state='paused'] .show-card-state { color: var(--accent-amber); font-weight: var(--fw-bold); }
 
 .show-card[data-armed='false'] .show-card-name { text-decoration: line-through; }

@@ -17,6 +17,10 @@ export type RemoteCommand =
   | { kind: 'go' }
   | { kind: 'stop' }
   | { kind: 'panic' }
+  /** Holds the whole show where it stands, lets it go on, or whichever it is not. */
+  | { kind: 'pause' }
+  | { kind: 'resume' }
+  | { kind: 'toggle-pause' }
   | { kind: 'select-next' }
   | { kind: 'select-previous' }
   /** Moves the selection to the cue and fires it, as GO from there would. */
@@ -27,6 +31,10 @@ export type RemoteCommand =
   | { kind: 'cue-select'; cue: RemoteCueRef }
   /** Moves a running audio cue's playhead, seconds into the cue's own region. */
   | { kind: 'cue-seek'; cue: RemoteCueRef; seconds: number }
+  /** Holds one playing audio cue, lets it go on, or whichever it is not. */
+  | { kind: 'cue-pause'; cue: RemoteCueRef }
+  | { kind: 'cue-resume'; cue: RemoteCueRef }
+  | { kind: 'cue-toggle-pause'; cue: RemoteCueRef }
 
 /**
  * Which cue a `/cue/…` address names: a number as the list shows it, or the cue the
@@ -93,6 +101,12 @@ export function parseRemote(
       // QLab's hard stop is this app's STOP: everything is cut where it stands.
       case 'hardstop': return { kind: 'stop' }
       case 'panic': return { kind: 'panic' }
+      case 'pause': return { kind: 'pause' }
+      case 'resume': return { kind: 'resume' }
+      // QLab's `togglePause`, and the `pause_toggle` other remotes send.
+      case 'togglepause':
+      case 'pausetoggle':
+        return { kind: 'toggle-pause' }
       default: return null
     }
   }
@@ -121,6 +135,11 @@ export function parseRemote(
       case 'hardstop':
         return { kind: 'cue-stop', cue }
       case 'select': return { kind: 'cue-select', cue }
+      case 'pause': return { kind: 'cue-pause', cue }
+      case 'resume': return { kind: 'cue-resume', cue }
+      case 'togglepause':
+      case 'pausetoggle':
+        return { kind: 'cue-toggle-pause', cue }
       case 'seek': {
         const seconds = numberArg(args)
         return seconds === null || seconds < 0 ? null : { kind: 'cue-seek', cue, seconds }
