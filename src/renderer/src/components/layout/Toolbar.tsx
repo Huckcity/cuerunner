@@ -12,6 +12,7 @@ import { isProCueType } from '../../../../shared/cue'
 import { ProMark } from '../license/ProLock'
 import { CueIcon } from '../../utils/cueIcons'
 import { formatShortcut } from '../../utils/shortcuts'
+import { startNewCueDrag } from '../../utils/newCueDrag'
 import { FILE_MENU, type FileMenuAction, type FileMenuItem } from '../../../../shared/fileMenu'
 import './Toolbar.css'
 
@@ -292,7 +293,16 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
 
       <div className="toolbar-actions" hidden={view !== 'cues'}>
         {PRIMARY_CUES.map(({ type, label }) => (
-          <button key={type} className="toolbar-cue-btn" onClick={() => handleAddCue(type)}>
+          <button
+            key={type}
+            className="toolbar-cue-btn"
+            onClick={() => handleAddCue(type)}
+            // Dragged into the list, the cue lands where it is let go rather than after the
+            // selection — the way a cue is put between two others without selecting either.
+            draggable
+            onDragStart={e => startNewCueDrag(e.dataTransfer, type)}
+            title={`${label}: click to add after the selection, or drag into the list`}
+          >
             <CueIcon type={type} className="toolbar-cue-icon" />
             {label}
           </button>
@@ -310,6 +320,8 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
                   className="toolbar-more-menu-item"
                   data-locked={isProCueType(type) && !pro}
                   onClick={() => { handleAddCue(type); setMoreMenuOpen(false) }}
+                  draggable
+                  onDragStart={e => startNewCueDrag(e.dataTransfer, type)}
                 >
                   <CueIcon type={type} className="toolbar-more-menu-icon" />
                   {label}

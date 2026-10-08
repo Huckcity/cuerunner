@@ -202,10 +202,12 @@ interface CueListState {
    */
   patchCues: (patches: Record<string, Partial<Cue>>) => void
   /**
-   * Puts a block of new cues — a group and its children, already in order — at the top level
-   * after the top-level cue that holds `afterId`, as one edit, and selects the first of them.
+   * Puts a block of new cues — a group and its children, already in order — into the list as
+   * one edit, and selects the first of them: at the top level after the top-level cue that
+   * holds `afterId`, or in front of the cue at a flat index (`cues.length` is the end), where
+   * a drop put it with the parent it gave the block's first cue.
    */
-  insertCues: (block: Cue[], afterId: string | null) => void
+  insertCues: (block: Cue[], at: string | null | { beforeIndex: number }) => void
 
   // Selection. The set is what a bulk edit acts on; `selectedId` is the cue the operator
   // last put their hand on — the one GO fires and advances from, and always a member of
@@ -1016,17 +1018,22 @@ export const useStore = create<CueListState>((set) => ({
     }
   }),
 
-  insertCues: (block, afterId) => set(s => {
+  insertCues: (block, at) => set(s => {
     if (block.length === 0) return s
     const cues = [...s.cues]
-    // The block goes after the top-level cue that holds `afterId`, past its whole subtree:
-    // inside a group it would become part of what it acts on.
-    let anchor = afterId === null ? -1 : cues.findIndex(c => c.id === afterId)
-    while (anchor >= 0 && cues[anchor].parentId !== null) {
-      const parentId = cues[anchor].parentId
-      anchor = cues.findIndex(c => c.id === parentId)
+    let insertIdx: number
+    if (at !== null && typeof at === 'object') {
+      insertIdx = Math.min(Math.max(at.beforeIndex, 0), cues.length)
+    } else {
+      // The block goes after the top-level cue that holds `at`, past its whole subtree:
+      // inside a group it would become part of what it acts on.
+      let anchor = at === null ? -1 : cues.findIndex(c => c.id === at)
+      while (anchor >= 0 && cues[anchor].parentId !== null) {
+        const parentId = cues[anchor].parentId
+        anchor = cues.findIndex(c => c.id === parentId)
+      }
+      insertIdx = anchor < 0 ? cues.length : subtreeEndIndex(cues, anchor) + 1
     }
-    const insertIdx = anchor < 0 ? cues.length : subtreeEndIndex(cues, anchor) + 1
     cues.splice(insertIdx, 0, ...block)
     return { cues, ...selectionFor(block[0].id), isDirty: true, past: pushPast(s.past, snapshotOf(s)), future: [] }
   }),
