@@ -317,6 +317,8 @@ export interface OutputStatus {
   /** The cues it is showing, bottom first. */
   layers: string[]
   testPattern: boolean
+  /** Its window was closed by hand: the show still has the output, and it can be opened again. */
+  windowClosed: boolean
 }
 
 // ─── The cue defaults ─────────────────────────────────────────────────────────

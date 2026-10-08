@@ -144,7 +144,9 @@ function OutputCard({ output, status, preview, displays }: {
     set({ warp: { ...output.warp, blend: { ...output.warp.blend, [edge]: value } } })
 
   const showing = (status?.layers ?? []).map(id => cues.find(cue => cue.id === id)).filter(cue => cue !== undefined)
-  const state = status === undefined || !status.open
+  const state = status?.windowClosed === true
+    ? 'window closed'
+    : status === undefined || !status.open
     ? 'opening…'
     : [status.renderer === 'webgl' ? 'GPU' : status.renderer === 'canvas' ? '2D fallback' : '', `${status.width} × ${status.height}`].filter(Boolean).join(' · ')
 
@@ -218,6 +220,9 @@ function OutputCard({ output, status, preview, displays }: {
           }}>
           {status?.testPattern === true ? 'Hide test pattern' : 'Test pattern'}
         </button>
+        {status?.windowClosed === true && (
+          <button className="outputs-btn output-reopen" onClick={() => place(placement)}>Open its window</button>
+        )}
         <button className="outputs-btn output-remove" onClick={() => remove(output.id)}>Remove output</button>
       </div>
 

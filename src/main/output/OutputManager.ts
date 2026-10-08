@@ -553,7 +553,8 @@ export class OutputManager {
       displayMissing: entry?.displayMissing !== null && entry?.displayMissing !== undefined,
       placement,
       layers: this.registry.cuesOn(outputId),
-      testPattern: entry?.testPattern ?? false
+      testPattern: entry?.testPattern ?? false,
+      windowClosed: entry === undefined && output !== null && !this.closing
     }
   }
 

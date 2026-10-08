@@ -87,9 +87,13 @@ export function useOutputs(): void {
 
   // An edit to a picture that is up reaches it on its next frame.
   useEffect(() => {
-    let previous = new Map<string, Cue>(useStore.getState().cues.map(cue => [cue.id, cue]))
+    let previousList = useStore.getState().cues
+    let previous = new Map<string, Cue>(previousList.map(cue => [cue.id, cue]))
     return useStore.subscribe(state => {
-      if (state.cues === undefined) return
+      // Most changes to the store are not to the cues — a running row, a log line — and
+      // those cost nothing here.
+      if (state.cues === previousList) return
+      previousList = state.cues
       const next = new Map<string, Cue>()
       for (const cue of state.cues) {
         next.set(cue.id, cue)

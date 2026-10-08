@@ -383,6 +383,16 @@ test.describe('on the 2D fallback', () => {
       if (await decodesSound(page, BLUE)) {
         await expect.poll(async () => (await engineCues(app)).length, { timeout: 5_000 }).toBe(1)
       }
+      await stopEverything(page)
+
+      // An output closed by hand is still the show's: its card says so and opens it again.
+      await app.evaluate(({ BrowserWindow }) => {
+        BrowserWindow.getAllWindows().find(win => win.webContents.getURL().includes('role=output'))?.close()
+      })
+      await expect(page.locator('.output-card .output-state')).toHaveText('window closed')
+      await page.locator('.output-reopen').click()
+      await outputWindow(app)
+      await expect(page.locator('.output-card .output-state')).toContainText('2D fallback')
     } finally {
       await closeApp(app)
     }
