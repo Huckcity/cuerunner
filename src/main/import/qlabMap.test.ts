@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import path from 'node:path'
 import type {
   AudioCue, Cue, FadeCue, GroupCue, MidiCue, MscCue, OscCue, StopCue, DevampCue, WaitCue
 } from '../../shared/cue'
-import { mapQLabShow, oscTokens, parseOscMessage } from './qlabMap'
+import { mapQLabShow, mediaPath, oscTokens, parseOscMessage } from './qlabMap'
 import { parseQLabWorkspace } from './qlabFile'
 import { pressNightWorkspace } from './archiveFixture'
 import type { QLabCue, QLabShow } from './qlabShow'
@@ -17,8 +18,11 @@ function rec(kind: QLabCue['kind'], fields: Partial<QLabCue> = {}): QLabCue {
   }
 }
 
+/** The workspace's folder, as this machine writes a folder: `C:\shows\test` on Windows. */
+const BASE = path.resolve('/shows/test')
+
 function show(cues: QLabCue[], extra: Partial<QLabShow> = {}): QLabShow {
-  return { name: 'Test', baseDir: '/shows/test', lists: [{ name: 'Main', uniqueID: 'L', cart: false, cues }], ...extra }
+  return { name: 'Test', baseDir: BASE, lists: [{ name: 'Main', uniqueID: 'L', cart: false, cues }], ...extra }
 }
 
 function byNumber<T extends Cue>(cues: Cue[], number: string): T {
@@ -158,10 +162,29 @@ describe('audio', () => {
       startTime: 1.5, endTime: 10, playCount: 3, rate: 1.5, levels: { master: 0.25, left: 1, right: 0.5 }
     })]), ids)
     expect(cues[0]).toMatchObject({
-      type: 'audio', filePath: '/shows/test/audio/a.wav', startTime: 1500, endTime: 10000, loopCount: 2,
+      type: 'audio', filePath: path.join(BASE, 'audio', 'a.wav'), startTime: 1500, endTime: 10000, loopCount: 2,
       playbackRate: 1.5, volume: 0.25, outputs: null, fadeInDuration: 0
     })
     expect((cues[0] as AudioCue).pan).toBeCloseTo(-1 / 3, 5)
+  })
+
+  it('joins QLab’s relative path to the workspace folder by each platform’s own rules', () => {
+    const cue = rec('audio', { media: { relative: 'audio/Walk In.wav', absolute: '/Users/sm/Show/audio/Walk In.wav' } })
+    expect(mediaPath(cue, 'C:\\Shows\\Press Night', path.win32)).toBe('C:\\Shows\\Press Night\\audio\\Walk In.wav')
+    expect(mediaPath(cue, '\\\\server\\shows\\Press Night', path.win32)).toBe('\\\\server\\shows\\Press Night\\audio\\Walk In.wav')
+    expect(mediaPath(cue, '/Users/sm/Show', path.posix)).toBe('/Users/sm/Show/audio/Walk In.wav')
+    // A relative path written with the other separator, or climbing out of the folder.
+    const climbing = rec('audio', { media: { relative: '..\\Sound\\a.wav', absolute: '' } })
+    expect(mediaPath(climbing, 'C:\\Shows\\Press Night', path.win32)).toBe('C:\\Shows\\Sound\\a.wav')
+  })
+
+  it('keeps a Mac absolute exactly as QLab wrote it on Windows too, rather than reading it as a drive path', () => {
+    const cue = rec('audio', { media: { relative: '', absolute: '/Users/sm/Show/audio/a.wav' } })
+    expect(mediaPath(cue, 'C:\\Shows', path.win32)).toBe('/Users/sm/Show/audio/a.wav')
+    // A "relative" half that is really a Mac absolute is not joined to the folder.
+    const misfiled = rec('audio', { media: { relative: '/Volumes/SFX/door.wav', absolute: '' } })
+    expect(mediaPath(misfiled, 'C:\\Shows', path.win32)).toBe('/Volumes/SFX/door.wav')
+    expect(mediaPath(misfiled, '/Users/sm/Show', path.posix)).toBe('/Volumes/SFX/door.wav')
   })
 
   it('loops for ever where QLab does, and names an unnamed cue after its file', () => {

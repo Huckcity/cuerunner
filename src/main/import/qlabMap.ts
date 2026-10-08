@@ -13,7 +13,7 @@
 // The mapping reads only `QLabShow`, which both the file reader and the OSC reader
 // produce, so a show imported either way becomes the same cues.
 
-import { isAbsolute, resolve } from 'node:path'
+import nodePath, { type PlatformPath } from 'node:path'
 import type {
   AudioCue, Cue, CueBase, CueColor, CueType, FadeCue, GroupCue, GroupMode, MidiCue,
   MidiMessageKind, MscCommand, MscCue, MscFormat, OscArg, OscCue, StopCue, DevampCue, WaitCue
@@ -136,14 +136,30 @@ export function parseOscMessage(message: string): { address: string; args: OscAr
   return { address: first.text, args: rest.map(part => oscArg(part.text, part.quoted)) }
 }
 
-/** Where an audio file is on this machine, as best the record says: the folder's copy first. */
-export function mediaPath(cue: QLabCue, baseDir: string | null): string {
+/**
+ * Where an audio file is on this machine, as best the record says: the folder's copy first.
+ *
+ * QLab writes its paths the Mac's way: a relative path with forward slashes, an absolute one
+ * from `/`. The relative half is joined to the workspace folder with this machine's own path
+ * rules (`paths`, Node's own for the platform it runs on), so a show copied to Windows plays
+ * from `C:\…\audio\walk-in.wav`. A Mac absolute is never rewritten: on Windows it names no
+ * file, and it is kept exactly as QLab wrote it so the report shows where the file was and
+ * Find in Folder can follow its tail. A relative path that climbs out of the folder
+ * (`../Sound/a.wav`) is joined the same way, because that is where QLab would look too.
+ */
+export function mediaPath(
+  cue: QLabCue,
+  baseDir: string | null,
+  paths: Pick<PlatformPath, 'isAbsolute' | 'resolve'> = nodePath
+): string {
   const media = cue.media
   if (!media) return ''
   const relative = media.relative.replace(/\\/g, '/')
-  if (relative !== '' && !isAbsolute(relative) && baseDir !== null) return resolve(baseDir, relative)
+  // Absolute in either convention: a Mac path, or a drive or share on Windows.
+  const absolute = (candidate: string): boolean => candidate.startsWith('/') || paths.isAbsolute(candidate)
+  if (relative !== '' && !absolute(relative) && baseDir !== null) return paths.resolve(baseDir, relative)
   if (media.absolute !== '') return media.absolute
-  return relative !== '' && baseDir !== null ? resolve(baseDir, relative) : relative
+  return relative
 }
 
 function fileStem(path: string): string {
