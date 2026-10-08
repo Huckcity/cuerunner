@@ -93,6 +93,12 @@ Format sniffFormat(const std::string& path) {
     return Format::Aiff;
   }
   if (std::memcmp(magic + 4, "ftyp", 4) == 0) return Format::M4a;
+  // A QuickTime movie written before the ftyp atom existed — an older camera's or editor's
+  // .mov — opens with one of the movie's own atoms instead. The container reader walks the
+  // top level for `moov` either way.
+  for (const char* atom : {"moov", "mdat", "wide", "free", "skip", "pnot"}) {
+    if (std::memcmp(magic + 4, atom, 4) == 0) return Format::M4a;
+  }
   // EBML's own magic: a Matroska or WebM file, which is how a video cue's file often comes.
   if (magic[0] == 0x1A && magic[1] == 0x45 && magic[2] == 0xDF && magic[3] == 0xA3) return Format::Matroska;
   if (std::memcmp(magic, "ID3", 3) == 0) return Format::Mp3;

@@ -10,8 +10,13 @@
 // engine voice like any audio cue's, which the engine's own record says.
 //
 // The media are tiny files under e2e/fixtures/visual, made with FFmpeg's test sources:
-// red-green.mp4 (64×36, 1 s red then 1 s green, AAC 440 Hz), blue.webm (VP8 + Opus),
-// silent.mp4 (yellow, no sound) and magenta.png.
+// red-green.mp4 (64×36 H.264, 1 s red then 1 s green, AAC 440 Hz), red-green.mov (the same in a
+// QuickTime container), blue.webm (VP8 + Opus), silent.mp4 (yellow, no sound) and magenta.png.
+//
+// An H.264/AAC video's sound is asserted as an engine voice on every lane: Windows decodes the
+// AAC with Media Foundation, macOS with AudioToolbox, Linux with the packaged FFmpeg helper the
+// CI lane builds. A WebM's Opus is the helper's on Linux alone, so its voice is checked there
+// and said to be unchecked elsewhere.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import os from 'os'
@@ -34,6 +39,7 @@ declare global {
 
 const FIXTURES = path.join(process.cwd(), 'e2e', 'fixtures', 'visual')
 const RED_GREEN = path.join(FIXTURES, 'red-green.mp4')
+const RED_GREEN_MOV = path.join(FIXTURES, 'red-green.mov')
 const SILENT = path.join(FIXTURES, 'silent.mp4')
 const BLUE = path.join(FIXTURES, 'blue.webm')
 const MAGENTA = path.join(FIXTURES, 'magenta.png')
@@ -130,17 +136,15 @@ async function stopEverything(page: Page): Promise<void> {
 }
 
 /**
- * Whether this machine's engine can decode the fixture's AAC. Linux decodes it with the
- * packaged FFmpeg helper (`npm run build:ffmpeg`), which a lane that never built it has not
- * got; there the picture plays silent, as it would on a show machine, and what the engine
- * does with the sound is unproven on that run — said, rather than passed.
+ * Holds that this machine's engine reads a fixture's sound, with the engine's own reason when
+ * it does not — on Linux that is the packaged FFmpeg helper missing (`npm run build:ffmpeg`).
  */
-async function decodesSound(page: Page, file: string): Promise<boolean> {
-  const decodes = await page.evaluate(path => window.cuerunner.audio.probe(path).then(() => true, () => false), file)
-  if (!decodes) {
-    test.info().annotations.push({ type: 'unproven', description: 'no AAC decoder on this machine: the video played silent, and its engine voice was not checked' })
-  }
-  return decodes
+async function expectDecodes(page: Page, file: string): Promise<void> {
+  const answer = await page.evaluate(
+    path => window.cuerunner.audio.probe(path).then(() => 'ok', (error: unknown) => String(error instanceof Error ? error.message : error)),
+    file
+  )
+  expect(answer, `the engine could not read the sound of ${path.basename(file)}`).toBe('ok')
 }
 
 async function engineCues(app: ElectronApplication): Promise<string[]> {
@@ -201,9 +205,8 @@ test.describe('on the GPU', () => {
     // The first second of the file is red, the second green: the picture is up, and it moves.
     await expect.poll(async () => near(await centre(output), RED), { timeout: 10_000 }).toBe(true)
     // The sound is the engine's: a voice, like any audio cue's — and the show has no other.
-    if (await decodesSound(page, RED_GREEN)) {
-      await expect.poll(async () => (await engineCues(app)).length, { timeout: 5_000 }).toBe(1)
-    }
+    await expectDecodes(page, RED_GREEN)
+    await expect.poll(async () => (await engineCues(app)).length, { timeout: 5_000 }).toBe(1)
     await expect.poll(async () => near(await centre(output), GREEN), { timeout: 10_000 }).toBe(true)
     // And it goes when the video does, the cue with it.
     await expect.poll(async () => near(await centre(output), BLACK, 8), { timeout: 10_000 }).toBe(true)
@@ -218,7 +221,6 @@ test.describe('on the GPU', () => {
     await page.locator('.cue-row').nth(0).click()
     await tab(page, 'Video')
     await page.locator('.visual-pause', { hasText: 'Pause' }).click()
-    const voiced = await decodesSound(page, RED_GREEN)
     await expect.poll(async () => (await engineCues(app)).length, { timeout: 5_000 }).toBe(0)
     // Past the second the file turns green at, still red: the picture stood still.
     await page.waitForTimeout(1500)
@@ -226,10 +228,33 @@ test.describe('on the GPU', () => {
     await expect(page.locator('.cue-row').nth(0)).toHaveAttribute('data-running', 'true')
 
     await page.locator('.visual-pause', { hasText: 'Resume' }).click()
-    if (voiced) await expect.poll(async () => (await engineCues(app)).length, { timeout: 5_000 }).toBe(1)
+    await expect.poll(async () => (await engineCues(app)).length, { timeout: 5_000 }).toBe(1)
     await expect.poll(async () => near(await centre(output), GREEN), { timeout: 10_000 }).toBe(true)
     await expect.poll(async () => near(await centre(output), BLACK, 8), { timeout: 10_000 }).toBe(true)
     await expect(page.locator('.cue-row').nth(0)).toHaveAttribute('data-running', 'false')
+  })
+
+  test('plays a QuickTime movie\'s picture, and its AAC sound as an engine voice', async () => {
+    test.setTimeout(40_000)
+    await page.locator('.cue-row').last().click()
+    await pickNext(app, RED_GREEN_MOV)
+    await addCueFromMoreMenu(page, 'Video')
+    await tab(page, 'Video')
+    await page.locator('.inspector-btn', { hasText: 'Browse' }).click()
+    const row = page.locator('.cue-row').last()
+    await expect(row.locator('.name-text')).toHaveText('red-green')
+    await row.click()
+    await page.waitForTimeout(350)
+    await page.locator('.btn-go').click()
+    await expect.poll(async () => near(await centre(output), RED), { timeout: 10_000 }).toBe(true)
+    await expectDecodes(page, RED_GREEN_MOV)
+    await expect.poll(async () => (await engineCues(app)).length, { timeout: 5_000 }).toBe(1)
+    await expect.poll(async () => near(await centre(output), GREEN), { timeout: 10_000 }).toBe(true)
+    await expect.poll(async () => near(await centre(output), BLACK, 8), { timeout: 10_000 }).toBe(true)
+    // Out of the way of the rows the cases after this one count on.
+    await row.click()
+    await page.keyboard.press('Delete')
+    await expect(page.locator('.cue-row')).toHaveCount(1)
   })
 
   test('takes GO from the keyboard while the floating output has the focus', async () => {
@@ -358,7 +383,12 @@ test.describe('on the GPU', () => {
 
 test.describe('on the 2D fallback', () => {
   test('draws the same picture where the machine gives the output no WebGL, a WebM video included', async () => {
-    const { app, page } = await launchApp()
+    // The fallback, held on whatever GPU the runner has — WebGL is switched on for this launch
+    // too, so the switch is what decides — through a development build's test-only switch.
+    const { app, page } = await launchApp({
+      args: ['--enable-unsafe-swiftshader'],
+      env: { CUERUNNER_TEST_OUTPUT_RENDERER: 'canvas' }
+    })
     try {
       await addOutput(page)
       const output = await outputWindow(app)
@@ -380,8 +410,11 @@ test.describe('on the 2D fallback', () => {
       await page.locator('.inspector-btn', { hasText: 'Browse' }).click()
       await fire(page, 1)
       await expect.poll(async () => near(await centre(output), BLUE_RGB), { timeout: 10_000 }).toBe(true)
-      if (await decodesSound(page, BLUE)) {
+      if (process.platform === 'linux') {
+        await expectDecodes(page, BLUE)
         await expect.poll(async () => (await engineCues(app)).length, { timeout: 5_000 }).toBe(1)
+      } else {
+        test.info().annotations.push({ type: 'unchecked', description: `a WebM's Opus sound is not decoded by ${process.platform}'s own codecs; its voice is checked on Linux` })
       }
       await stopEverything(page)
 

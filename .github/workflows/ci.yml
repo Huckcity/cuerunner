@@ -273,7 +273,9 @@ jobs:
     # self-hosted lane is the whole label list.
     name: e2e (${{ matrix.label }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
+    # 30 rather than 20 for the one run after the FFmpeg helper's flags change, which builds
+    # it from source before the suite; every other run takes it from the cache.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -307,6 +309,21 @@ jobs:
             sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
 
       - run: npm ci --legacy-peer-deps
+
+      # A video cue's sound is decoded by the engine: on Linux through the packaged FFmpeg
+      # helper (Windows and macOS use their own codecs), so the lane builds it — from the
+      # cache, keyed like the native lane's — and e2e/visual-cues.spec.ts asserts the voice
+      # on every lane rather than calling it unproven here.
+      - name: Cache the packaged decoder (pinned FFmpeg release build)
+        if: runner.os == 'Linux'
+        uses: actions/cache@v6
+        with:
+          path: native/audio/build/decoders
+          key: ffmpeg-helper-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-linux.mjs') }}
+
+      - name: Build the engine and the decoder
+        if: runner.os == 'Linux'
+        run: node scripts/ensure-native.mjs --with-decoders
 
       # Electron tests use the app's own Chromium, so nothing is downloaded; a Linux host
       # still needs the system libraries a Chromium process links against. GitHub's

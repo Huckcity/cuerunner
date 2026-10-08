@@ -18,6 +18,10 @@
  *   video-tone.mp4   64×36 H.264, 2 s (1 s red, 1 s green) + AAC 440 Hz stereo, 48 kHz
  *   video-tone.webm  64×36 VP8, 1 s blue + Opus 660 Hz stereo, 48 kHz
  *   video-silent.mp4 64×36 H.264, 1 s yellow, no audio track
+ *   video-tone.mov   as video-tone.mp4, in a QuickTime container (`ftyp qt`)
+ *   video-tone-moov-last.mp4  64×36 H.264, 1 s red + AAC 550 Hz, index (`moov`) after the media
+ *   video-tone-noftyp.mov     video-tone.mov with its ftyp atom renamed `wide`, as a QuickTime
+ *                             movie from before ftyp opens (offsets unchanged)
  * The same three sit under e2e/fixtures/visual for the window's specs.
  *
  *   node native/audio/tests/video-audio.mjs [--binary path]
@@ -131,6 +135,26 @@ try {
     const crossings = crossingsInHalfSecond(wav)
     check('its sound is the 440 Hz tone that was encoded', Math.abs(crossings - 220) <= 12, `${crossings} rising crossings`)
     check('no decode errors', summary.events.filter(event => event.type === 'error').length === 0)
+  }
+
+  // The containers most theatre video comes in: H.264 and AAC in a QuickTime .mov, an MP4
+  // written with its index at the end (no fast start — what a camera or an editor leaves),
+  // and a .mov old enough to open with one of the movie's own atoms rather than `ftyp`.
+  for (const [what, name, hz, ms] of [
+    ['a MOV video\'s AAC track', 'video-tone.mov', 440, 2000],
+    ['an MP4 whose index is at its end', 'video-tone-moov-last.mp4', 550, 1000],
+    ['a QuickTime movie with no ftyp atom', 'video-tone-noftyp.mov', 440, 2000]
+  ]) {
+    console.log(`\n${what}`)
+    const file = join(fixtures, name)
+    check(`the ${name} fixture is present`, existsSync(file), file)
+    const { summary, wav } = prepareAndPlay(file, SAMPLE_RATE)
+    const prepared = summary.results[0].reply.result
+    check('it is read as the MP4/QuickTime container it is', prepared?.format === 'm4a' && prepared.sampleRate === SAMPLE_RATE && prepared.channels === 2, JSON.stringify(summary.results[0].reply))
+    check('its length is the video\'s', Math.abs((prepared?.durationMs ?? 0) - ms) < 30, `${prepared?.durationMs} ms`)
+    check('its sound is audible', peakOf(wav) > AUDIBLE, `peak ${peakOf(wav).toFixed(4)}`)
+    const crossings = crossingsInHalfSecond(wav)
+    check(`its sound is the ${hz} Hz tone that was encoded`, Math.abs(crossings - hz / 2) <= 12, `${crossings} rising crossings`)
   }
 
   console.log('\na WebM video\'s Opus track')
