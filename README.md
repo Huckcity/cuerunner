@@ -24,7 +24,7 @@ An Electron app with three layers — main process, preload bridge, renderer —
 exclusively over IPC. The renderer has no Node access; the audio engine is a native
 process of its own, so a renderer crash does not stop the sound.
 
-The **cue stack is free**: thirteen cue types, groups and timelines, the waveform editor,
+The **cue stack is free**: sixteen cue types, groups and timelines, the waveform editor,
 the run log, workspaces, undo — and the ears it needs: OSC and MIDI input, cue triggers,
 and the monitor that shows what arrived. **Cuerunner Pro** is the show around it —
 wireless and the mic plot, scenes and the desk, the script panel with its tablet view,

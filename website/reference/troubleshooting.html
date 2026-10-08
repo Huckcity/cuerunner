@@ -108,6 +108,18 @@
               <td>Its timeout is 0, which waits for ever. Set one, or check what the script is waiting on in the log.</td>
             </tr>
             <tr>
+              <td>A video, image or text cue fails with <em>the show has no video output</em></td>
+              <td>The show has no output, or the cue names one that was removed. Add one in the dock's Outputs tab, or choose another on the cue's Picture tab.</td>
+            </tr>
+            <tr>
+              <td>An output has a red banner across it</td>
+              <td>The display it was placed on is not connected, so it opened as a window. Plug the display in and it moves back; or choose another on its card.</td>
+            </tr>
+            <tr>
+              <td>A video plays with no sound</td>
+              <td>The file has no sound track (its Sound tab says so), or — a WebM or MKV on Windows — the computer has no decoder for its sound. The picture still plays; convert the file to MP4 for sound everywhere.</td>
+            </tr>
+            <tr>
               <td>A trigger does not fire the cue</td>
               <td>The input is off (Settings → Network or MIDI), the cue is disarmed, the address does not match exactly, or the repeat guard is swallowing a second message. The Monitor shows what actually arrived.</td>
             </tr>
@@ -146,7 +158,8 @@
     <section class="panel reveal delay-2" id="limitations">
       <h2>Known limitations</h2>
       <ul class="tight-list">
-        <li>No video or image cues. Video is driven by talking to something that plays it, through a network, OSC or MIDI cue.</li>
+        <li>Video plays what Chromium decodes (H.264, VP8, VP9, AV1 and the rest); ProRes and other professional codecs need converting first. On Windows a WebM's or MKV's sound needs the system's own decoder for it, and plays silent where there is none.</li>
+        <li>One crossfade at a time per output: a second that starts while one is running lands the first at once. Blend modes other than normal are not offered.</li>
         <li>No cue-level audio effects beyond level, pan, rate and fades.</li>
         <li>ASIO runs a single driver at a time and at most 32 channels: a rig that needs two interfaces on two ASIO drivers at once is not covered.</li>
         <li>OSC input is UDP only.</li>

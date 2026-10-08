@@ -1,0 +1,192 @@
+/* The video outputs, in the dock: one card per output, side by side, each with a picture of
+   what it is showing. The cards scroll sideways; each scrolls its own settings down. */
+.outputs-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border);
+}
+
+.outputs-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--h-waveform-header);
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--border-soft);
+  flex-shrink: 0;
+}
+
+.outputs-title {
+  font-size: var(--text-xs);
+  font-weight: var(--fw-bold);
+  color: var(--fg-subtle);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+}
+
+.outputs-count {
+  flex: 1;
+  font-size: var(--text-sm);
+  color: var(--fg-subtle);
+}
+
+.outputs-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.outputs-btn {
+  height: 24px;
+  padding: 0 var(--space-2);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-lg);
+  color: var(--fg-body);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.outputs-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--fg-primary); }
+.outputs-btn:disabled { opacity: 0.4; cursor: default; }
+.outputs-btn[data-active='true'] { border-color: var(--accent-blue); color: var(--fg-primary); }
+
+.outputs-timer-window {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+
+.outputs-timer-window select {
+  height: 24px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-lg);
+  color: var(--fg-primary);
+  font-size: var(--text-sm);
+}
+
+.outputs-error {
+  padding: var(--space-1) var(--space-3);
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  font-size: var(--text-sm);
+  flex-shrink: 0;
+}
+
+.outputs-body {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
+.outputs-empty {
+  margin: var(--space-2) 0;
+  color: var(--fg-muted);
+  font-size: var(--text-base);
+  max-width: 640px;
+}
+
+.output-card {
+  flex: 0 0 380px;
+  overflow-y: auto;
+  padding: var(--space-2);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.output-card[data-missing='true'] { border-color: var(--warn-border); }
+
+.output-card-top {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.output-preview {
+  flex: 0 0 160px;
+  height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000000;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  color: var(--fg-subtle);
+  font-size: var(--text-xs);
+}
+
+.output-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.output-card-facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  flex: 1;
+}
+
+.output-card-facts input.output-name {
+  height: var(--h-input);
+  padding: 0 var(--space-2);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-lg);
+  color: var(--fg-primary);
+  font-size: var(--text-base);
+}
+
+.output-state,
+.output-showing {
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.output-missing {
+  font-size: var(--text-sm);
+  color: var(--warn-fg);
+}
+
+.field-row label.output-inline {
+  width: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--fg-body);
+  white-space: nowrap;
+}
+
+.field-row label.output-inline input {
+  flex: none;
+  height: auto;
+}
+
+.output-times {
+  color: var(--fg-muted);
+}
+
+.output-projector summary {
+  cursor: pointer;
+  margin: var(--space-2) 0;
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}

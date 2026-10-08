@@ -3,6 +3,7 @@ import type { ShowSettings } from './show'
 import type { ShowHistoryEntry } from './showfile'
 import type { LightingSettings } from './dmx'
 import type { TimecodeShowSettings } from './timecode'
+import type { VideoOutput } from './visual'
 
 export interface AudioSettings {
   /**
@@ -167,6 +168,12 @@ export interface Workspace {
    * is the machine's, not here.
    */
   timecode?: TimecodeShowSettings
+  /**
+   * The windows the show's pictures go to (src/shared/visual.ts). Optional: a show with no
+   * video output carries none, which is every show written before outputs existed — so
+   * their bytes are what they were. Where each output is on a machine is that machine's.
+   */
+  videoOutputs?: VideoOutput[]
   cues: Cue[]
 }
 

@@ -40,6 +40,7 @@ import {
   type DeclaredFields,
   type ShapeLeaf
 } from '../../shared/workspaceSections'
+import { carriesMediaFile } from '../../shared/visual'
 
 /**
  * The largest workspace file this app opens: 64 MiB of JSON is already far past a
@@ -824,8 +825,9 @@ function resolveCueMedia(
   workspaceDir: string | null,
   missingMedia: MissingMedia[]
 ): Cue {
-  if (cue.type !== 'audio') return cue
-  const audio = cue as AudioCue
+  // Audio, video and image cues name a file; every other cue has nothing to resolve.
+  if (!carriesMediaFile(cue)) return cue
+  const audio = cue as unknown as AudioCue
   const stored = mediaOf(audio)
   // A cue with no file is waiting to be given one, not broken: blank audio cues are
   // added from the toolbar and filled in later.
@@ -1237,7 +1239,7 @@ export async function relinkWorkspaceMedia(
 
   const workspaceDir = workspacePath === null ? null : dirname(workspacePath)
   const cues = current.workspace.cues.map(cue => {
-    const relinked = cue.type === 'audio' ? plan.get(cue.id) : undefined
+    const relinked = carriesMediaFile(cue) ? plan.get(cue.id) : undefined
     if (relinked === undefined) return cue
     // The picked file replaces the show's stored route as well as the runtime path: the
     // next save writes where the file is now, not where the show last saw it. The route

@@ -68,6 +68,16 @@ function engineIsStale() {
   return readFileSync(asioStamp, 'utf8').trim() !== describeAsioState()
 }
 
+/** Whether the helper on disk was built from the configure line the build script carries. */
+function decoderMatchesFlags() {
+  try {
+    execFileSync('node', [ffmpegScript, '--check'], { stdio: 'ignore', cwd: repoRoot })
+    return true
+  } catch {
+    return false
+  }
+}
+
 function run(script) {
   console.log(`[ensure-native] ${script.replace(repoRoot + '/', '')}`)
   execFileSync('node', [script], { stdio: 'inherit', cwd: repoRoot, timeout: 3600_000 })
@@ -82,9 +92,10 @@ if (force || engineIsStale()) {
 if (withDecoders) {
   if (process.platform !== 'linux') {
     console.log('[ensure-native] M4A decoder: not needed here (the platform codec is used)')
-  } else if (!existsSync(decoderPath)) {
-    // The helper is a pinned release built from a verified tarball; once it exists, the
-    // build script and this check both leave it alone.
+  } else if (!existsSync(decoderPath) || !decoderMatchesFlags()) {
+    // The helper is a pinned release built from a verified tarball; once it exists and was
+    // built with the flags the build script now carries, the script and this check both
+    // leave it alone.
     run(ffmpegScript)
   } else {
     console.log(`[ensure-native] M4A decoder up to date (${decoderPath.replace(repoRoot + '/', '')})`)

@@ -57,6 +57,9 @@ const MORE_CUES: { type: CueType; label: string }[] = [
   { type: 'midiFile', label: 'MIDI File' },
   { type: 'light',   label: 'Light' },
   { type: 'timecode', label: 'Timecode' },
+  { type: 'video',   label: 'Video' },
+  { type: 'image',   label: 'Image' },
+  { type: 'text',    label: 'Text' },
 ]
 
 interface Props {

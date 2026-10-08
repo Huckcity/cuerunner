@@ -13,6 +13,7 @@ import { sendToWindow } from '../ipc/broadcast'
 import { reportMainError } from '../errors'
 import { audioEngine } from '../audio/AudioEngine'
 import { midiFiles } from '../midi/midiFileRuntime'
+import { existingOutputManager } from '../output/ipc'
 import { UPDATE_CHANNELS } from '../../shared/ipc/update'
 import { UPDATE_DOWNLOAD_PAGE, UPDATE_FEED_URL } from '../../shared/update'
 import { writeFileAtomically } from '../workspace/recovery'
@@ -84,7 +85,12 @@ function create(): UpdateService {
     install,
     filePath: join(userData, 'updates.json'),
     changelog: readChangelog,
-    engineBusy: () => (audioEngine.snapshot()?.active ?? false) || midiFiles.isPlaying(),
+    // This process's own share of the show: sound, a MIDI file, or a picture on an output —
+    // a video, image or text cue on a screen, which stays there after its cue stops counting.
+    engineBusy: () =>
+      (audioEngine.snapshot()?.active ?? false) ||
+      midiFiles.isPlaying() ||
+      (existingOutputManager()?.showing() ?? false),
     push: status => {
       for (const win of BrowserWindow.getAllWindows()) sendToWindow(win, UPDATE_CHANNELS.events, status)
     },
