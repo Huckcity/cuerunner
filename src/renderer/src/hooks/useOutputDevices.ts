@@ -89,9 +89,12 @@ export function useOutputDevices({ listDevices = false }: { listDevices?: boolea
   }), [info?.deviceId, info?.deviceName])
 
   const fallbacks = useMemo(() => {
-    if (readings < 2) return []
     const names = new Map(devices.map(device => [device.id, device.name] as const))
-    return patchFallbacks(routing.patches, statuses, main, patchDeviceReasons(), names)
+    const all = patchFallbacks(routing.patches, statuses, main, patchDeviceReasons(), names)
+    // A device the engine reports lost is lost whenever it is read; one it does not hold yet
+    // may only be on its way open.
+    if (readings < 2) return all.filter(fallback => statuses.some(status => status.device === fallback.deviceId && status.failed))
+    return all
     // `statuses` changes with every poll, which is when a reason the sync recorded is read again.
   }, [routing, statuses, main, devices, readings])
 

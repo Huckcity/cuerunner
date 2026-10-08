@@ -317,6 +317,10 @@
   color: var(--accent-amber);
 }
 
+/* A hint is one line: the whole sentence is its title. */
 .patch-fallback {
   color: var(--accent-amber);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

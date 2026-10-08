@@ -137,7 +137,8 @@ export function AudioRoutingSection() {
                 <button className="inspector-btn patch-remove" onClick={() => removePatch(patch.id)}>Remove</button>
               </div>
               {fallback && (
-                <p className="inspector-hint patch-fallback" title={fallback.reason}>
+                <p className="inspector-hint patch-fallback"
+                  title={`Plays on outputs ${fallback.outputs} of ${fallback.to}: ${fallback.reason}.`}>
                   Plays on outputs {fallback.outputs} of {fallback.to}: {fallback.reason}.
                 </p>
               )}
