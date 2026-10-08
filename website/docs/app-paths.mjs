@@ -207,6 +207,12 @@ export const APP_PATHS = [
     printed: `${prose(SETTINGS_ITEM)} → General`,
     names: [{ tab: 'general' }]
   },
+  // The remote's own switch, on the tab the OSC listener is set up on.
+  {
+    page: 'reference/control.html',
+    printed: `${prose(SETTINGS_ITEM)} → Network`,
+    names: [{ tab: 'network' }]
+  },
   {
     page: 'reference/control.html',
     printed: `${prose(SHOW_SETTINGS)} → Channels`,

@@ -410,6 +410,8 @@ export const REFERENCE = [
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
             <tr><td>OSC control</td><td>on, port 53000</td><td>Takes cues and commands from consoles, desks and tablets. A port another program holds is reported rather than taken.</td></tr>
+            <tr><td>↳ Remote</td><td>on</td><td>Answers the transport addresses — <code>/go</code>, <code>/stop</code>, <code>/cue/12/start</code> and the rest, in Cuerunner's namespace and QLab's. See <a href="control.html#remote">the remote</a>.</td></tr>
+            <tr><td>↳ Allow from</td><td>anyone</td><td>Addresses or IPv4 ranges (<code>10.0.0.5, 192.168.1.0/24</code>). Anyone else's datagrams are dropped before a trigger, the remote or the Monitor sees them, and each refused sender is named once in the log.</td></tr>
             <tr><td>Find devices<span class="pro">Pro</span></td><td>off</td><td>Lists gear that announces itself on the network — Dante endpoints among them — in the Monitor, and warns when one drops off.</td></tr>
             <tr><td>↳ Service types</td><td><code>_netaudio-arc._udp.local</code>, <code>_netaudio-cmc._udp.local</code></td><td>Under Advanced. What to browse for.</td></tr>
             <tr><td>↳ Gone after</td><td>30 s</td><td>Under Advanced. How long a device can go unseen before it counts as gone.</td></tr>
@@ -615,6 +617,50 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
         Both are acted on where the engine is rather than in the window, so the fade starts
         whether or not the interface is answering. The run log records the sender:
         <code>[main] panic (osc): /cuerunner/panic from 192.168.1.24:8000</code>.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1" id="remote">
+      <h2>The remote</h2>
+      <p>
+        The OSC port also answers the transport, so a tablet or a console can run the show
+        without a cue written for each press. Two namespaces are answered: Cuerunner's own,
+        under <code>/cuerunner</code>, and QLab's bare one — with or without the
+        <code>/workspace/{id}</code> prefix QLab's remotes send — so a remote set up for QLab
+        on port 53000 runs a Cuerunner show unchanged. Verbs are read without regard to case
+        or underscores: <code>hardStop</code>, <code>hardstop</code> and <code>hard_stop</code>
+        are one address.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Address</th><th>Effect</th></tr></thead>
+          <tbody>
+            <tr><td><code>/go</code></td><td>GO, exactly as <kbd>Space</kbd>: the selected cue fires and the selection moves on.</td></tr>
+            <tr><td><code>/stop</code>, <code>/hardStop</code></td><td>STOP: everything is cut where it stands.</td></tr>
+            <tr><td><code>/panic</code></td><td>Panic, answered where the engine is, as <code>/cuerunner/panic</code> is.</td></tr>
+            <tr><td><code>/select/next</code>, <code>/select/previous</code> (also <code>/playhead/…</code>)</td><td>Move the selection one row, over the rows the list shows. Nothing fires.</td></tr>
+            <tr><td><code>/select/{number}</code>, <code>/cue/{number}/select</code></td><td>Stand on that cue. Nothing fires.</td></tr>
+            <tr><td><code>/cue/{number}/go</code></td><td>Stand on that cue and press GO.</td></tr>
+            <tr><td><code>/cue/{number}/start</code></td><td>Fire that cue where it is; the selection stays where the operator left it. A disarmed cue is not fired, and the log says so.</td></tr>
+            <tr><td><code>/cue/{number}/stop</code></td><td>Stop that cue (and a group's children with it).</td></tr>
+            <tr><td><code>/cue/{number}/seek</code> <em>seconds</em></td><td>Move a running audio cue to that many seconds into its region.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <code>{number}</code> is the cue's number as the list shows it, or
+        <code>selected</code> / <code>playhead</code> for the cue the selection stands on.
+        Every press is written to the run log with its sender — <code>GO from OSC /go from
+        10.0.0.5:53001</code> — and a number the show does not have is an error line rather
+        than a silence. The repeat guard (Settings → General) stands in front of the remote
+        as it does in front of a trigger, so a desk that sends twice steps once. An address
+        a cue's own trigger answers is left to that cue: a show that wired <code>/go</code>
+        to one cue keeps it.
+      </p>
+      <p>
+        Turn the remote off with the Remote box under Settings → Network; triggers and
+        <code>/cuerunner/panic</code> still answer. <strong>Allow from</strong> closes the port
+        to everyone not on its list — triggers, remote and Monitor alike.
       </p>
     </section>
 

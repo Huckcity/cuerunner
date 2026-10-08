@@ -292,7 +292,12 @@ export type BoundedNumber = { readonly bounded: readonly [min: number, max: numb
  * holds the declaration against a value of the whole of `ShowSettings`.
  */
 export const SHOW_SETTINGS_SHAPE = {
-  oscIn: { enabled: 'boolean', port: 'number' },
+  oscIn: {
+    enabled: 'boolean',
+    port: 'number',
+    remote: { absent: true, of: 'boolean' },
+    allowFrom: { absent: true, of: { items: 'string' } }
+  },
   midiIn: { enabled: 'boolean', portNames: { items: 'string' } },
   desk: {
     kind: 'string',

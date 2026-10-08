@@ -2,6 +2,8 @@ import { useEffect } from 'react'
 import { cueEngine } from '../engine/CueEngine'
 import { describeTriggerSource, triggeredCues } from '../engine/triggers'
 import { firingIdentity, noteKey } from '../engine/inputGuard'
+import { runRemote } from '../engine/oscRemote'
+import { parseRemote, remoteEnabled } from '../../../shared/oscRemote'
 import { useStore } from '../store'
 
 /**
@@ -45,7 +47,15 @@ export function useCueTriggers(): void {
         // Read the cue list per event rather than per batch: a trigger that fires a cue
         // which is itself edited by that run should be matched against what is there.
         const store = useStore.getState()
-        for (const cue of triggeredCues(store.cues, event)) {
+        const triggered = triggeredCues(store.cues, event)
+        // An address a cue's own trigger answers is the operator's, written for that cue; the
+        // remote namespace is only what is left. So a show that wired `/go` to one cue keeps it.
+        if (event.kind === 'osc' && triggered.length === 0 && remoteEnabled(store.showSettings.oscIn)) {
+          const command = parseRemote(event.address, event.args)
+          if (command !== null) runRemote(command, remoteDeps(), `OSC ${event.address} from ${event.from}`)
+          continue
+        }
+        for (const cue of triggered) {
           // The cause is written before the run, so the log reads in the order the show
           // happened — and so a cue that then fails has its reason above it.
           store.appendLog([{
@@ -58,4 +68,20 @@ export function useCueTriggers(): void {
       }
     })
   }, [])
+}
+
+/** The window's half of the remote: the runner, the store and the log. */
+function remoteDeps() {
+  const store = useStore.getState()
+  return {
+    getCues: () => useStore.getState().cues,
+    getSelected: () => useStore.getState().selectedId,
+    getCollapsed: () => useStore.getState().collapsedGroupIds,
+    select: store.select,
+    go: () => cueEngine.go(),
+    stop: (cueId?: string) => cueEngine.stop(cueId),
+    goById: (cueId: string) => cueEngine.goById(cueId),
+    seekCue: (cueId: string, positionMs: number) => cueEngine.seekCue(cueId, positionMs),
+    log: (entry: Parameters<typeof store.appendLog>[0][number]) => useStore.getState().appendLog([entry])
+  }
 }

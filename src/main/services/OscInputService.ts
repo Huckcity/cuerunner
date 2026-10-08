@@ -1,4 +1,5 @@
 import type { OscArg } from '../../shared/cue'
+import { senderAllowed, senderHost } from '../../shared/oscRemote'
 import type { ShowSettings } from '../../shared/show'
 import type { ServiceContext, ShowService } from '../bus/ServiceHost'
 
@@ -43,6 +44,14 @@ export class OscInputService implements ShowService {
   private server: OscServer | null = null
   /** Whether a datagram that was not OSC has been reported, so it is reported once. */
   private warnedJunk = false
+  /** The senders this show hears; empty is everyone. Read when the service starts. */
+  private allowFrom: readonly string[] = []
+  /**
+   * The senders already told they are not on the list, so a desk that is refused is said
+   * once rather than once per datagram. Bounded: past the cap a refusal is still a refusal,
+   * it is only no longer announced.
+   */
+  private refused = new Set<string>()
 
   constructor(private readonly connect: ServerFactory = connectOscServer) {}
 
@@ -56,6 +65,8 @@ export class OscInputService implements ShowService {
     const server = this.connect(port, '0.0.0.0')
     this.server = server
     this.warnedJunk = false
+    this.allowFrom = settings.oscIn.allowFrom ?? []
+    this.refused.clear()
     context.setState('starting', `binding 0.0.0.0:${port}`)
 
     // Without a listener, an 'error' event on the server is an unhandled throw that
@@ -133,6 +144,16 @@ export class OscInputService implements ShowService {
   private publishMessage(context: ServiceContext, message: unknown[], rinfo: Rinfo): void {
     const [address, ...values] = message
     if (typeof address !== 'string') return
+    // A sender off the list is dropped here, before the bus: what it sent never reaches a
+    // trigger, the remote or the Monitor, which is what a closed door means.
+    if (!senderAllowed(rinfo.address, this.allowFrom)) {
+      const host = senderHost(rinfo.address)
+      if (!this.refused.has(host) && this.refused.size < MAX_REFUSED_REPORTED) {
+        this.refused.add(host)
+        context.bus.alert('info', this.id, `OSC input: ignored ${host}, which is not on the allow list`)
+      }
+      return
+    }
     context.bus.publish({
       kind: 'osc',
       at: Date.now(),
@@ -167,6 +188,9 @@ export function toOscArgs(values: unknown[]): OscArg[] {
     return { type: 's', value: String(value) }
   })
 }
+
+/** How many refused senders are each named once before the rest go unannounced. */
+const MAX_REFUSED_REPORTED = 32
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error)

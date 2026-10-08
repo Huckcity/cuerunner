@@ -89,6 +89,7 @@ import { liveWindow, sendToWindow } from './broadcast'
 import { playbackSafety, noteEngineEvents } from '../safety/runtime'
 import { deviceFaultAlert } from '../safety/engineFaults'
 import { panicFromShowEvent } from '../safety/panicBindings'
+import { remotePanicFromEvent } from '../safety/remotePanic'
 import { OscEngine } from '../osc/OscEngine'
 import {
   openWorkspace,
@@ -269,7 +270,7 @@ show.subscribe(events => {
   // licensed show inputs — the same socket and the same ports as everything else the
   // panel shows — so nothing new is listening and nothing is loosened to make it work.
   for (const event of events) {
-    const binding = panicFromShowEvent(event)
+    const binding = panicFromShowEvent(event) ?? remotePanicFromEvent(event, lastShowSettings.oscIn)
     if (binding) playbackSafety.panic(binding.source, binding.reason)
   }
 })
