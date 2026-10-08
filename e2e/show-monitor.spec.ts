@@ -134,12 +134,17 @@ test('a port another program holds is reported instead of swallowed', async () =
     await expect(state).toContainText(PORT_IN_USE)
     await dialog.getByRole('button', { name: 'Close' }).click()
 
-    // A service that cannot start is an alarm the operator can read, and the app is
-    // still there to show it.
+    // A port that is refused is the service's status, said where the services are and once in
+    // the log — and not an alarm: another show holding a port is not the stage going wrong, and
+    // several shows started on one machine at once must not each raise one.
     await openMonitor(page)
-    // This port's alarm: the launch's own default port may have its own where another app in
-    // the run holds 53000.
-    await expect(monitor(page).locator('.monitor-alert', { hasText: new RegExp(`${port}.*(EADDRINUSE|EACCES)`) })).toBeVisible()
+    await expect(service(page, 'OSC input')).toHaveAttribute('data-state', 'degraded')
+    await expect(service(page, 'OSC input')).toContainText(String(port))
+    // (The move itself is noted — "port changed: 53000 → …" — which is not the refusal.)
+    await expect(monitor(page).locator('.monitor-alert', { hasText: /in use|EADDRINUSE|EACCES/ })).toHaveCount(0)
+    await page.locator('.btn-log').click()
+    await expect(page.locator('.log-panel .log-row[data-level="info"]', { hasText: new RegExp(`OSC input: port ${port} .*(EADDRINUSE|EACCES)`) })).toHaveCount(1)
+    await expect(page.locator('.transport-bar .alert-chip', { hasText: /in use|EADDRINUSE|EACCES/ })).toHaveCount(0)
   } finally {
     squatter.close()
   }

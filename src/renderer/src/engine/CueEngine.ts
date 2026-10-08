@@ -1854,6 +1854,8 @@ export class CueEngine {
             this.log({ level: 'error', message: 'not started: it is disarmed', label: this.cueLabel(target) })
             continue
           }
+          // A list taken out of the show fires none of its cues, from a Control cue as from GO.
+          if (!this.listFires(target.id)) continue
           // A cue already running is left to its own policy, as a second press of it would be.
           if (this.hasActiveRun(target.id) && refirePolicy(target) === 'ignore') continue
           this.log({ level: 'info', message: `started by ${label}`, label: this.cueLabel(target) })
@@ -1880,10 +1882,13 @@ export class CueEngine {
         for (const target of targets) this.resetCue(target)
         break
       case 'goto': {
-        // The playhead is one place: the first target the show still has is where it goes.
+        // A playhead is one place in one list: the first target the show still has is where its
+        // own list's playhead goes — that list's, whichever list is in front. Moving the list
+        // on screen to a cue in another list would leave this list standing where it was and
+        // put a cue of another list under its GO.
         const first = targets[0]
         if (first !== undefined) {
-          this.deps!.setSelected(first.id)
+          this.playheadOf(listOfCue(cues, first.id) ?? undefined).set(first.id)
           this.log({ level: 'info', message: `moved the playhead to ${this.cueLabel(first)}`, label })
         }
         break

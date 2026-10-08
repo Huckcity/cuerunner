@@ -219,3 +219,95 @@ describe('a Control cue', () => {
     expect(running.has('w1')).toBe(true)
   })
 })
+
+describe('a Control, Stop and Fade cue across cue lists', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  /** Two lists: the main one in front, and a cart behind it with its own playhead. */
+  function lists(cues: Cue[], disarmedCart = false) {
+    const runner = new CueEngine()
+    const running = new Map<string, RunningCue>()
+    const lastRuns = new Map<string, CueRunResult>()
+    const setSelected = vi.fn()
+    const setListPlayhead = vi.fn()
+    const appendLog = vi.fn()
+    runner.init({
+      getCues: () => cues,
+      getSelected: () => cues[0].id,
+      setSelected,
+      setRunning: (id, state) => { if (state === null) running.delete(id); else running.set(id, state) },
+      clearAllRunning: () => running.clear(),
+      syncCueDuration: vi.fn(),
+      setLastRun: (id, result) => { lastRuns.set(id, result) },
+      appendLog,
+      getWorkspacePath: () => null,
+      getMidiDefaultPort: () => '',
+      getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
+      getRunning: () => running,
+      isPro: () => false,
+      getCueLists: () => [{ id: 'main', name: 'Main Cue List' }, { id: 'sfx', name: 'Effects', cart: true, disarmed: disarmedCart }],
+      getActiveListId: () => 'main',
+      getListPlayhead: () => null,
+      setListPlayhead
+    })
+    runners.push(runner)
+    const logged = (): string[] => appendLog.mock.calls.flat(2).map((entry: { message: string }) => entry.message)
+    return { runner, running, lastRuns, setSelected, setListPlayhead, logged }
+  }
+
+  const inCart = <T extends Cue>(cue: T): T => ({ ...cue, listId: 'sfx' })
+
+  it('starts a cue in another list', async () => {
+    const cues: Cue[] = [control('start', ['x1']), wait('w1'), inCart(wait('x1'))]
+    const { runner, running } = lists(cues)
+    runner.go()
+    await vi.advanceTimersByTimeAsync(50)
+    expect(running.has('x1')).toBe(true)
+  })
+
+  it('moves the playhead of the list its target is in, not the list in front', async () => {
+    const cues: Cue[] = [control('goto', ['x2']), wait('w1'), inCart(wait('x1')), inCart(wait('x2'))]
+    const { runner, setSelected, setListPlayhead } = lists(cues)
+    runner.go()
+    await vi.advanceTimersByTimeAsync(50)
+    expect(setListPlayhead).toHaveBeenCalledWith('sfx', 'x2')
+    // The list in front's GO moved on from the control cue the way any GO does, and was not
+    // put on a cue of another list.
+    expect(setSelected).not.toHaveBeenCalledWith('x2')
+  })
+
+  it('moves the list in front’s own playhead the way it always did', async () => {
+    const cues: Cue[] = [control('goto', ['w2']), wait('w1'), wait('w2'), inCart(wait('x1'))]
+    const { runner, setSelected, setListPlayhead } = lists(cues)
+    runner.go()
+    await vi.advanceTimersByTimeAsync(50)
+    expect(setSelected).toHaveBeenLastCalledWith('w2')
+    expect(setListPlayhead).not.toHaveBeenCalled()
+  })
+
+  it('starts nothing in a list that has been taken out of the show, and says so', async () => {
+    const cues: Cue[] = [control('start', ['x1']), inCart(wait('x1'))]
+    const { runner, running, logged } = lists(cues, true)
+    runner.go()
+    await vi.advanceTimersByTimeAsync(50)
+    expect(running.has('x1')).toBe(false)
+    expect(logged()).toContain('not fired: the list “Effects” is disarmed')
+  })
+
+  it('stops and fades cues in several lists at once', async () => {
+    const stop = { ...(createCue('stop', 's') as Cue), id: 's', targetCueId: undefined, targetCueIds: ['w1', 'x1'] } as Cue
+    const fade = { ...(createCue('fade', 'f') as Cue), id: 'f', targetCueIds: ['a1', 'xa'], duration: 500 } as Cue
+    const cues: Cue[] = [stop, fade, wait('w1'), tone('a1'), inCart(wait('x1')), inCart(tone('xa'))]
+    const { runner, running } = lists(cues)
+    runner.goById('w1')
+    runner.goById('x1')
+    await vi.advanceTimersByTimeAsync(50)
+    runner.goById('f')
+    expect(engine.fade.mock.calls.map(call => call[0]).sort()).toEqual(['a1', 'xa'])
+    runner.goById('s')
+    await vi.advanceTimersByTimeAsync(50)
+    expect(running.has('w1')).toBe(false)
+    expect(running.has('x1')).toBe(false)
+  })
+})

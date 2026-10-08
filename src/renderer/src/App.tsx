@@ -24,6 +24,7 @@ import { useCueTriggers } from './hooks/useCueTriggers'
 import { useHotkeyTriggers } from './hooks/useHotkeyTriggers'
 import { useClockTriggers } from './hooks/useClockTriggers'
 import { useOscFeedback } from './hooks/useOscFeedback'
+import { useOscPortReport } from './hooks/useOscPortReport'
 import { useDeskButtons } from './hooks/useDeskButtons'
 import { useHighestWins } from './hooks/useHighestWins'
 import { useCompanionPublisher } from './hooks/useCompanionPublisher'
@@ -75,6 +76,7 @@ export function App() {
   useHotkeyTriggers()
   useClockTriggers()
   useOscFeedback()
+  useOscPortReport()
   useDeskButtons()
   useHighestWins()
   useCompanionPublisher()

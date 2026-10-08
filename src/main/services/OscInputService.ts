@@ -138,11 +138,17 @@ export class OscInputService implements ShowService {
     // Without a listener, an 'error' event on the socket is an unhandled throw that takes
     // the main process down — and a port already in use is the likeliest error there is,
     // since the operator's QLab or TouchOSC may hold it.
+    //
+    // A port that is refused is a status, not an alarm: the row under OSC control says why, and
+    // the window writes it to the log once (`useOscPortReport`). Several shows started on one
+    // machine at once — the rehearsal room's second laptop, a CI host's parallel jobs — each find
+    // 53000 taken but one, and an alarm per refusal would be an alarm about nothing on the stage.
+    // A socket that bound and then fails is an outage, and that is an alarm.
     let bound = false
     socket.on('error', (error: Error) => {
       const sentence = bound ? `stopped listening: ${describe(error)}` : refusalSentence(error, bindAddress, port)
       context.setState('degraded', sentence)
-      context.bus.alert('warning', this.id, `OSC input: ${sentence}`)
+      if (bound) context.bus.alert('warning', this.id, `OSC input: ${sentence}`)
       if (!bound) {
         // A socket that never bound holds nothing; closing it lets the next start begin clean.
         this.closeSocket(socket)
@@ -168,9 +174,7 @@ export class OscInputService implements ShowService {
       socket.bind(port, bindAddress)
     } catch (error) {
       // A bind that throws at once — a port out of range — is the same refusal.
-      const sentence = refusalSentence(error, bindAddress, port)
-      context.setState('degraded', sentence)
-      context.bus.alert('warning', this.id, `OSC input: ${sentence}`)
+      context.setState('degraded', refusalSentence(error, bindAddress, port))
     }
   }
 

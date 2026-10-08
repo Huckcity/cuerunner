@@ -1,5 +1,6 @@
 // A merge of two copies of a show where one side dropped an optional section — took the rig
-// out, put the clock back to its defaults, removed the last output, went back to one list. The
+// out, put the clock back to its defaults, removed the last output, went back to one list,
+// removed the last OSC patch. The
 // section the blend settles on as nothing is left out of the merged show rather than written as
 // `null`, which the load funnel refuses: the merged show has to open, and save back the bytes it
 // opened with. One rule for every optional section the merge blends whole, held here for each.
@@ -51,6 +52,11 @@ const SECTIONS: Array<{ key: WorkspaceKey; value: unknown; changed: unknown }> =
     key: 'cueLists',
     value: [...defaultCueLists(), { id: 'fx', name: 'Effects' }],
     changed: [...defaultCueLists(), { id: 'fx', name: 'Effects', cart: true }]
+  },
+  {
+    key: 'oscPatches',
+    value: [{ id: 'p-desk', name: 'Lighting desk', host: '10.0.0.30', port: 8000 }],
+    changed: [{ id: 'p-desk', name: 'Lighting desk', host: '10.0.0.31', port: 8000 }]
   }
 ]
 

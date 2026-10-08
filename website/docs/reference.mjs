@@ -272,7 +272,7 @@ export const REFERENCE = [
             </tr>
             <tr>
               <td><strong>Control</strong></td>
-              <td><strong>Action</strong> and <strong>Targets</strong>: <strong>Start</strong> (each target where it is, as its own GO would; a disarmed one is not started and the log says so), <strong>Stop</strong> (at once, a group whole), <strong>Pause</strong> / <strong>Resume</strong> (each playing audio or video cue, and those inside a group), <strong>Load</strong> (readies each target to start <strong>Load to</strong> seconds into itself the next time it fires — its file decoded, a picture opened on its output — or moves a playing audio or video cue there now), <strong>Reset</strong> (stops it, forgets its load, puts a playlist back at its first child and a random group's draw afresh), <strong>Go to</strong> (the playhead to the first target; nothing fires) and <strong>Arm</strong> / <strong>Disarm</strong> (an edit of the show, with an undo). It completes at once, never acts on itself, and with no target does nothing and says so. QLab's Start, Pause, Load, Reset, GoTo, Arm and Disarm cues import as Control cues.</td>
+              <td><strong>Action</strong> and <strong>Targets</strong>: <strong>Start</strong> (each target where it is, as its own GO would; a disarmed one, or one in a disarmed list, is not started and the log says so), <strong>Stop</strong> (at once, a group whole), <strong>Pause</strong> / <strong>Resume</strong> (each playing audio or video cue, and those inside a group), <strong>Load</strong> (readies each target to start <strong>Load to</strong> seconds into itself the next time it fires — its file decoded, a picture opened on its output — or moves a playing audio or video cue there now), <strong>Reset</strong> (stops it, forgets its load, puts a playlist back at its first child and a random group's draw afresh), <strong>Go to</strong> (the playhead of the first target's own list to it — that list's, whichever list is in front; nothing fires) and <strong>Arm</strong> / <strong>Disarm</strong> (an edit of the show, with an undo). Targets may be in any cue list. It completes at once, never acts on itself, and with no target does nothing and says so. QLab's Start, Pause, Load, Reset, GoTo, Arm and Disarm cues import as Control cues.</td>
             </tr>
           </tbody>
         </table>
@@ -500,7 +500,7 @@ export const REFERENCE = [
         <table>
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
-            <tr><td>OSC control</td><td>on, port 53000</td><td>Takes cues and commands from consoles, desks and tablets. The port is Cuerunner's alone: one another program holds — QLab, a second Cuerunner — is refused and said here and in the log (<code>EADDRINUSE</code>), rather than shared with it in silence.</td></tr>
+            <tr><td>OSC control</td><td>on, port 53000</td><td>Takes cues and commands from consoles, desks and tablets. The port is Cuerunner's alone: one another program holds — QLab, a second Cuerunner — is refused and said here and once in the log (<code>EADDRINUSE</code>), rather than shared with it in silence. It is a status, not an alarm: a second show on the machine is not the stage going wrong.</td></tr>
             <tr><td>↳ Network interface</td><td>any</td><td>This machine's, not the show's. <strong>Listen on</strong> binds the port to one interface; <strong>Send from</strong> sends OSC cues out of one. An interface that has gone is said, and the port opens on every interface until it is back.</td></tr>
             <tr><td>↳ Feedback</td><td>off, 127.0.0.1:53001, 10 Hz</td><td><strong>Push state</strong> sends the playhead, what is running and its progress to <strong>Send to</strong> : <strong>Port</strong>, progress <strong>Progress (Hz)</strong> times a second (0–30). Remotes can also ask for it themselves. See <a href="control.html#feedback">feedback</a>.</td></tr>
             <tr><td>↳ OSC patches</td><td>none</td><td>Named destinations — a name, a host, a port — that an OSC cue's messages choose by name, so a show moved to another venue changes one address. Removing one that cues send through asks first.</td></tr>
@@ -889,21 +889,24 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
         <code>isRunning</code>, <code>isPaused</code>, <code>actionElapsed</code>,
         <code>duration</code> and <code>percentActionElapsed</code>;
         <code>/runningCues</code>, <code>/runningOrPausedCues</code>,
-        <code>/selectedCues</code>, <code>/cueLists</code>, <code>/workspaces</code>,
+        <code>/selectedCues</code>, <code>/cueLists</code> (every list, each with its own cues),
+        <code>/workspaces</code>,
         <code>/version</code> and <code>/thump</code> answer too. The same address with a
-        value is QLab's setter, and is not answered: a remote does not edit the show.
-        <code>/updates 1</code> asks for QLab's pushes:
-        <code>/update/workspace/{id}/cueList/main/playbackPosition</code> when the playhead
-        moves, and <code>/update/workspace/{id}/cue_id/{id}</code> when a cue starts, stops or
+        value is QLab's setter, and is not answered: a remote does not edit the show. A list
+        is a cue to QLab: <code>/cue_id/{list id}/playbackPosition</code> is that list's own
+        playhead. <code>/updates 1</code> asks for QLab's pushes:
+        <code>/update/workspace/{id}/cueList/{list id}/playbackPosition</code> when any list's
+        playhead moves, and <code>/update/workspace/{id}/cue_id/{id}</code> when a cue starts, stops or
         is held.
       </p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Cuerunner's own</th><th>What it carries</th></tr></thead>
           <tbody>
-            <tr><td><code>/cuerunner/playhead/number</code>, <code>/name</code>, <code>/id</code>, <code>/type</code></td><td>The cue GO fires next; empty strings at the end of the show.</td></tr>
+            <tr><td><code>/cuerunner/playhead/number</code>, <code>/name</code>, <code>/id</code>, <code>/type</code></td><td>The cue the list in front's GO fires next; empty strings at the end of it.</td></tr>
+            <tr><td><code>/cuerunner/lists/count</code>; <code>/cuerunner/list/{place}/id</code>, <code>/name</code>, <code>/playhead/number</code>, <code>/playhead/name</code>, <code>/playhead/id</code>, <code>/running/count</code></td><td>Every cue list by its place among the tabs, counting from 1 — the place <code>/list/{place}/go</code> names it by — with its own playhead and how many of its cues run. A list that goes is emptied once.</td></tr>
             <tr><td><code>/cuerunner/running/count</code>, <code>/active</code></td><td>How many cues run, and 1 or 0.</td></tr>
-            <tr><td><code>/cuerunner/running/{0–7}/number</code>, <code>/name</code>, <code>/id</code>, <code>/state</code></td><td>The running cues as slots, topmost first. A slot that empties is written once as empty.</td></tr>
+            <tr><td><code>/cuerunner/running/{0–7}/number</code>, <code>/name</code>, <code>/id</code>, <code>/state</code>, <code>/list</code></td><td>The running cues as slots, in show order, each with the name of the list it runs in. A slot that empties is written once as empty.</td></tr>
             <tr><td><code>/cuerunner/running/{0–7}/progress</code>, <code>/elapsed</code>, <code>/remaining</code>, <code>/duration</code></td><td>0–1 and seconds, at the feedback's rate; −1 where nobody can say (a loop for ever). A freed slot gets one zeroing pulse.</td></tr>
             <tr><td><code>/cuerunner/cues/count</code>, <code>/cuerunner/cues/options</code></td><td>The list, and a JSON list of <code>[number, "number — name"]</code> a dropdown takes as its values.</td></tr>
           </tbody>

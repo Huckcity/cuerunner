@@ -90,3 +90,38 @@ test('a Control cue aimed at nothing does nothing, and says so', async () => {
   await expect(page.locator('.log-panel')).toContainText('no cue chosen')
   await expect(page.locator('.cue-row[data-running="true"]')).toHaveCount(0)
 })
+
+test('across cue lists: Go to moves its target’s own list’s playhead, and Start fires a cue in another list', async () => {
+  // Two lists: the main one with cues 1–3, and Effects with 4 and 5, its playhead left on 5.
+  for (let i = 0; i < 3; i++) await toolbarCueBtn(page, 'Wait').click()
+  await page.locator('.cue-list-tab-add').click()
+  await expect(page.locator('.cue-list-tab')).toHaveCount(2)
+  for (let i = 0; i < 2; i++) await toolbarCueBtn(page, 'Wait').click()
+  await expect(row('5')).toHaveAttribute('data-selected', 'true')
+  await page.locator('.cue-list-tab').nth(0).click()
+
+  // In the main list, a Go to aimed at cue 4 of the other list, and a Start aimed at cue 5.
+  await row('3').click()
+  await addCueFromMoreMenu(page, 'Control')
+  await row('6').click()
+  await page.locator('.inspector-tab', { hasText: 'Control' }).click()
+  await page.locator('#control-action').selectOption('goto')
+  await addTarget('4')
+  await addCueFromMoreMenu(page, 'Control')
+  await row('7').click()
+  await page.locator('.inspector-tab', { hasText: 'Control' }).click()
+  await addTarget('5')
+
+  await row('6').click()
+  await page.keyboard.press('Space')
+  await page.waitForTimeout(400)
+  // The main list stays in front; its own playhead went on to the next cue, as GO's does.
+  await expect(page.locator('.cue-list-tab').nth(0)).toHaveAttribute('aria-selected', 'true')
+  await expect(row('7')).toHaveAttribute('data-selected', 'true')
+  await page.keyboard.press('Space')
+
+  // The other list's playhead is on cue 4 now, and cue 5 — in that list — was started.
+  await page.locator('.cue-list-tab').nth(1).click()
+  await expect(row('4')).toHaveAttribute('data-selected', 'true')
+  await expect(row('5')).toHaveAttribute('data-running', 'true')
+})
