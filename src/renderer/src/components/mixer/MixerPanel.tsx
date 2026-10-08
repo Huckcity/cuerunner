@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { useStore } from '../../store'
 import { audioEngine } from '../../engine/audioEngineClient'
 import { currentPatchSlots } from '../../engine/audioRouting'
+import { useOutputDevices } from '../../hooks/useOutputDevices'
 import {
   audioRoutingOf,
   FADER_FLOOR_DB,
@@ -91,6 +92,14 @@ export function MixerPanel({ onClose }: Props) {
   const master = useSyncExternalStore(subscribeMaster, masterDb)
   const [meters, setMeters] = useState<AudioMeters | null>(null)
   const [outputs, setOutputs] = useState(2)
+  // The extra devices the patches play on, so a strip can say which device it is on.
+  const { statuses, fallbacks } = useOutputDevices()
+  const patchDetail = (channels: number[], deviceId: string): string => {
+    const outputsLabel = patchChannelsLabel(channels)
+    if (deviceId === '' || fallbacks.some(fallback => fallback.deviceId === deviceId)) return outputsLabel
+    const device = statuses.find(status => status.device === deviceId)
+    return device ? `${outputsLabel} · ${device.name}` : outputsLabel
+  }
 
   useEffect(() => {
     let current = true
@@ -154,7 +163,7 @@ export function MixerPanel({ onClose }: Props) {
                 kind="patch"
                 testId={`patch-${patch.id}`}
                 name={patch.name}
-                detail={patchChannelsLabel(patch.channels)}
+                detail={patchDetail(patch.channels, patch.deviceId)}
                 db={patch.gainDb}
                 muted={patch.muted}
                 floor={FADER_FLOOR_DB}

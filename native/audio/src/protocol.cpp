@@ -281,15 +281,30 @@ const WireField kPatchFields[] = {
     wireRequired("slot", WireFieldType::Number),
     wireNull("outputs", WireFieldType::Array, true),
     wireNumber("gain", "1"),
+    wireText("device", ""),
 };
 const WireField kOutputGainsFields[] = {
     wireRequired("gains", WireFieldType::Array),
+};
+// The extra output devices (aux_output.h).
+const WireField kOutputOpenFields[] = {
+    wireRequired("device", WireFieldType::String),
+    wireNumber("sampleRate", "0"),
+    wireNumber("channels", "2"),
+    wireNumber("skewPpm", "0"),
+    wireNumber("periodFrames", "0"),
+    wireNumber("latencyMs", "0"),
+    wireNumber("jitterMs", "0"),
+};
+const WireField kOutputCloseFields[] = {
+    wireRequired("device", WireFieldType::String),
 };
 // ── end of the live input and mixer fields ───────────────────────────────────
 
 const WireField kSimulateDeviceNotificationFields[] = {
     wireRequired("type", WireFieldType::String),
     wireFlag("deliberate", false),
+    wireText("device", ""),
 };
 
 // ── Linear timecode (ltc.h) ──────────────────────────────────────────────────
@@ -363,6 +378,11 @@ const WireVerb kWireVerbs[] = {
     {"startInput", fieldsOf(kStartInputFields)},
     {"patch", fieldsOf(kPatchFields)},
     {"outputGains", fieldsOf(kOutputGainsFields)},
+    // Extra output devices (aux_output.h).
+    {"outputs", {}},
+    {"outputOpen", fieldsOf(kOutputOpenFields)},
+    {"outputClose", fieldsOf(kOutputCloseFields)},
+    {"outputStatus", {}},
 };
 
 constexpr size_t kWireVerbCount = sizeof(kWireVerbs) / sizeof(kWireVerbs[0]);
@@ -763,6 +783,34 @@ bool parseCurveTable(const cJSON* owner, const WireField& declared, CurveTable& 
   out.count = static_cast<int>(values.size());
   for (size_t i = 0; i < values.size(); i++) out.values[i] = static_cast<float>(values[i]);
   return true;
+}
+
+cJSON* outputStatusJson(const OutputStatus& output) {
+  cJSON* object = cJSON_CreateObject();
+  cJSON_AddNumberToObject(object, "slot", output.slot);
+  cJSON_AddStringToObject(object, "device", output.device.c_str());
+  cJSON_AddStringToObject(object, "name", output.name.c_str());
+  cJSON_AddNumberToObject(object, "channels", output.channels);
+  cJSON_AddNumberToObject(object, "sampleRate", output.sampleRate);
+  cJSON_AddBoolToObject(object, "running", output.running);
+  cJSON_AddBoolToObject(object, "failed", output.failed);
+  cJSON_AddBoolToObject(object, "synthetic", output.synthetic);
+  if (output.error.empty()) {
+    cJSON_AddNullToObject(object, "error");
+  } else {
+    cJSON_AddStringToObject(object, "error", output.error.c_str());
+  }
+  cJSON_AddNumberToObject(object, "latencyMs", output.latencyMs);
+  cJSON_AddNumberToObject(object, "targetMs", output.targetMs);
+  cJSON_AddNumberToObject(object, "deviceLatencyMs", output.deviceLatencyMs);
+  cJSON_AddNumberToObject(object, "driftPpm", output.driftPpm);
+  cJSON_AddNumberToObject(object, "periodFrames", output.periodFrames);
+  cJSON_AddNumberToObject(object, "underruns", static_cast<double>(output.underruns));
+  cJSON_AddNumberToObject(object, "overruns", static_cast<double>(output.overruns));
+  cJSON_AddNumberToObject(object, "resyncs", static_cast<double>(output.resyncs));
+  cJSON_AddNumberToObject(object, "playedFrames", static_cast<double>(output.playedFrames));
+  cJSON_AddNumberToObject(object, "startedAtMs", output.startedAtMs);
+  return object;
 }
 
 cJSON* inputStatusJson(const InputFeedStatus& feed) {
@@ -1365,6 +1413,17 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
       }
       cJSON_AddItemToArray(buses, bus);
     }
+    // Each open extra output device's own meter, after the master level.
+    std::vector<OutputMeterDTO> outputMeters;
+    engine.outputMeters(outputMeters);
+    cJSON* devices = cJSON_AddArrayToObject(body, "devices");
+    for (const OutputMeterDTO& meter : outputMeters) {
+      cJSON* device = cJSON_CreateObject();
+      cJSON_AddStringToObject(device, "device", meter.device.c_str());
+      cJSON* deviceList = cJSON_AddArrayToObject(device, "peaks");
+      for (float peak : meter.peaks) cJSON_AddItemToArray(deviceList, cJSON_CreateNumber(peak));
+      cJSON_AddItemToArray(devices, device);
+    }
     out = replyOk(id, body);
   } else if (verb == "clock") {
     cJSON* body = cJSON_CreateObject();
@@ -1506,7 +1565,27 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
     // Test hook for the device-loss classification: it runs the same code the backend
     // callback runs, and is refused whenever a real device is open, so it cannot be
     // mistaken for (or mask) a genuine device event.
-    if (!engine.hasNoDevice()) {
+    const std::string device = textOf("device");
+    if (!device.empty()) {
+      // An extra output device's loss, through the same classification: refused for anything
+      // but a test output, so it can neither stand in for nor mask a real device's event.
+      const std::string type = textOf("type");
+      int notificationType = -1;
+      if (type == "stopped") notificationType = 1;
+      else if (type == "interruption_began") notificationType = 2;
+      else if (type == "unlocked") notificationType = 3;
+      EngineError error;
+      if (notificationType < 0) {
+        out = replyError(id, "invalid", "unknown notification type '" + type + "'");
+      } else if (!engine.simulateOutputNotification(device, notificationType,
+                                                    booleanField(root, wireField(verb, "deliberate")), error)) {
+        out = replyError(id, error.code, error.message);
+      } else {
+        cJSON* body = cJSON_CreateObject();
+        cJSON_AddBoolToObject(body, "ok", 1);
+        out = replyOk(id, body);
+      }
+    } else if (!engine.hasNoDevice()) {
       out = replyError(id, "invalid", "simulateDeviceNotification is only available with the silent/offline backend");
     } else {
       const std::string type = textOf("type");
@@ -1730,14 +1809,27 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
     } else {
       std::vector<int> map;
       for (double output : outputs) map.push_back(static_cast<int>(output));
-      CommandResultDTO result;
+      PatchResultDTO result;
       EngineError error;
-      if (engine.setPatch(static_cast<int>(numberOf("slot")), carries("outputs"), map, numberOf("gain"), result,
-                          error)) {
+      if (engine.setPatch(static_cast<int>(numberOf("slot")), carries("outputs"), map, numberOf("gain"),
+                          textOf("device"), result, error)) {
         cJSON* body = cJSON_CreateObject();
         cJSON_AddBoolToObject(body, "ok", 1);
         cJSON_AddNumberToObject(body, "at", result.atMs);
         cJSON_AddBoolToObject(body, "applied", result.applied);
+        // Where it plays: an extra device's id, or null for the main device — and whether that
+        // is a fallback from a device that would not open, and why.
+        if (result.device.empty()) {
+          cJSON_AddNullToObject(body, "device");
+        } else {
+          cJSON_AddStringToObject(body, "device", result.device.c_str());
+        }
+        cJSON_AddBoolToObject(body, "fallback", result.fallback);
+        if (result.reason.empty()) {
+          cJSON_AddNullToObject(body, "reason");
+        } else {
+          cJSON_AddStringToObject(body, "reason", result.reason.c_str());
+        }
         out = replyOk(id, body);
       } else {
         out = replyError(id, error.code, error.message);
@@ -1761,6 +1853,57 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
         out = replyError(id, error.code, error.message);
       }
     }
+  } else if (verb == "outputs") {
+    std::vector<OutputDeviceInfo> devices;
+    EngineError error;
+    if (!engine.outputDevices(devices, error)) {
+      out = replyError(id, error.code, error.message);
+    } else {
+      cJSON* body = cJSON_CreateObject();
+      cJSON* list = cJSON_AddArrayToObject(body, "outputs");
+      for (const OutputDeviceInfo& device : devices) {
+        cJSON* entry = cJSON_CreateObject();
+        cJSON_AddStringToObject(entry, "id", device.id.c_str());
+        cJSON_AddStringToObject(entry, "name", device.name.c_str());
+        cJSON_AddNumberToObject(entry, "channels", device.channels);
+        cJSON_AddNumberToObject(entry, "sampleRate", device.sampleRate);
+        cJSON_AddBoolToObject(entry, "isDefault", device.isDefault);
+        cJSON_AddBoolToObject(entry, "synthetic", device.synthetic);
+        cJSON_AddItemToArray(list, entry);
+      }
+      out = replyOk(id, body);
+    }
+  } else if (verb == "outputOpen") {
+    OutputOpenOptions options;
+    options.device = textOf("device");
+    options.sampleRate = static_cast<int>(numberOf("sampleRate"));
+    options.channels = static_cast<int>(numberOf("channels"));
+    options.skewPpm = numberOf("skewPpm");
+    options.periodFrames = static_cast<int>(numberOf("periodFrames"));
+    options.latencyMs = numberOf("latencyMs");
+    options.jitterMs = numberOf("jitterMs");
+    OutputStatus status;
+    EngineError error;
+    if (engine.openOutput(options, status, error)) {
+      out = replyOk(id, outputStatusJson(status));
+    } else {
+      out = replyError(id, error.code, error.message);
+    }
+  } else if (verb == "outputClose") {
+    bool closed = false;
+    EngineError error;
+    if (engine.closeOutput(textOf("device"), closed, error)) {
+      cJSON* body = cJSON_CreateObject();
+      cJSON_AddBoolToObject(body, "closed", closed);
+      out = replyOk(id, body);
+    } else {
+      out = replyError(id, error.code, error.message);
+    }
+  } else if (verb == "outputStatus") {
+    cJSON* body = cJSON_CreateObject();
+    cJSON* list = cJSON_AddArrayToObject(body, "outputs");
+    for (const OutputStatus& output : engine.outputStatus()) cJSON_AddItemToArray(list, outputStatusJson(output));
+    out = replyOk(id, body);
   } else if (verb == "loudness") {
     LoudnessDTO result;
     EngineError error;

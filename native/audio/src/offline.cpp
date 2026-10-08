@@ -106,6 +106,8 @@ int runOfflineRender(EngineOptions engineOptions, const OfflineOptions& options)
   });
 
   engineOptions.backend = "offline";
+  // The test output devices tee what they play beside the render, named for each device.
+  engineOptions.testOutputCapture = options.outPath;
   // Several MiB of embedded queues: heap, so a one-MiB thread stack (Windows) cannot
   // overflow before the render starts.
   auto engine = std::make_unique<Engine>();

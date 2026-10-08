@@ -295,3 +295,32 @@
   color: var(--fg-muted);
   font-size: var(--text-sm);
 }
+
+/* The output devices the show plays on, one line each: the show's own, then each extra one a
+   patch names, with its state. A lost one reads in the warning's amber and offers its
+   reconnect beside it. */
+.output-device-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+
+.output-device-state {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.output-device[data-state='lost'] .output-device-state {
+  color: var(--accent-amber);
+}
+
+/* A hint is one line: the whole sentence is its title. */
+.patch-fallback {
+  color: var(--accent-amber);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

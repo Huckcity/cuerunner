@@ -1,0 +1,37 @@
+/* The patch-fallback bar: the same shape as the other operator notices across the top of the
+   window (GroupingNote.css), in the amber of a warning — the cue is still heard, just not
+   where it was patched to. */
+
+.patch-fallback-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--accent-amber-bg);
+  border-bottom: 1px solid var(--accent-amber);
+  color: var(--fg-primary);
+  font-size: var(--text-base);
+}
+
+.patch-fallback-bar-text { flex: 1; min-width: 0; }
+
+.patch-fallback-list {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-4);
+}
+
+.patch-fallback-bar-actions { display: flex; gap: var(--space-2); }
+
+.patch-fallback-settings,
+.patch-fallback-dismiss {
+  padding: var(--space-1) var(--space-3);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--fg-body);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.patch-fallback-settings:hover,
+.patch-fallback-dismiss:hover { background: var(--bg-hover); }

@@ -29,6 +29,8 @@ import {
   type AudioStartInputPayload,
   type AudioPatchPayload,
   type AudioOutputGainsPayload,
+  type AudioOutputOpenPayload,
+  type AudioOutputClosePayload,
   type AudioConfigurePayload,
   type AudioEngineEvent,
   type AudioFadePayload,
@@ -518,9 +520,16 @@ export function registerIpcHandlers(): void {
     audioVerb(() =>
       audioEngine.startInput(payload.cueId, payload.whenMs, payload.device, payload.channels, payload.options)))
   ipcMain.handle(AUDIO_CHANNELS.patch, (_, payload: AudioPatchPayload) =>
-    audioVerb(() => audioEngine.patch(payload.slot, payload.outputs, payload.gain)))
+    audioVerb(() => audioEngine.patch(payload.slot, payload.outputs, payload.gain, payload.device ?? '')))
   ipcMain.handle(AUDIO_CHANNELS.outputGains, (_, payload: AudioOutputGainsPayload) =>
     audioVerb(() => audioEngine.outputGains(payload.gains)))
+  // The extra output devices a patch can name, and their state.
+  ipcMain.handle(AUDIO_CHANNELS.outputs, () => audioVerb(() => audioEngine.outputs()))
+  ipcMain.handle(AUDIO_CHANNELS.outputOpen, (_, payload: AudioOutputOpenPayload) =>
+    audioVerb(() => audioEngine.outputOpen(payload)))
+  ipcMain.handle(AUDIO_CHANNELS.outputClose, (_, payload: AudioOutputClosePayload) =>
+    audioVerb(() => audioEngine.outputClose(payload.device)))
+  ipcMain.handle(AUDIO_CHANNELS.outputStatus, () => audioVerb(() => audioEngine.outputStatus()))
 
   // Every engine event is both forwarded to the window and kept for the safety net: a
   // burst — a panic stopping twenty voices at once — is one message rather than twenty,

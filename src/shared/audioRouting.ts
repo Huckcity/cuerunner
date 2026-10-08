@@ -19,9 +19,12 @@ export interface OutputPatch {
   id: string
   name: string
   /**
-   * The output device the patch was made for, or '' for whichever the show is using. The
-   * engine plays one device at a time: a patch made for another device plays on the
-   * device's outputs of the same numbers, and the window says so beside it.
+   * The output device the patch plays on, by the id the device list gives it, or '' for the
+   * show's own device (Settings → Audio). The engine plays every device a show's patches name
+   * at once, each locked to the show's device's clock. On a machine that does not have the
+   * device the patch falls back to the show's device's outputs of the same numbers and the
+   * window says so — and the id is kept, so the show carried back to the machine it was made
+   * on plays as it was made, the same way the show's own device setting is kept.
    */
   deviceId: string
   /** Device outputs, zero-based, one per patch channel: [0, 1] is outputs 1 and 2. */
@@ -178,6 +181,82 @@ export function patchChannelsLabel(channels: readonly number[]): string {
   const consecutive = ones.every((c, i) => i === 0 || c === ones[i - 1] + 1)
   if (consecutive && ones.length > 1) return `${ones[0]}–${ones[ones.length - 1]}`
   return ones.join(', ')
+}
+
+/** The extra output devices a show's patches name, besides the show's own device. */
+export function patchDevices(patches: readonly OutputPatch[], mainDeviceId: string | null): string[] {
+  const devices: string[] = []
+  for (const patch of patches) {
+    if (patch.deviceId === '' || patch.deviceId === mainDeviceId || devices.includes(patch.deviceId)) continue
+    devices.push(patch.deviceId)
+  }
+  return devices
+}
+
+/** An extra output device as the engine reports it: as much as the fallback rule reads. */
+export interface OutputDeviceState {
+  device: string
+  name: string
+  running: boolean
+  failed: boolean
+  error: string | null
+}
+
+/** A patch that plays on this machine somewhere other than where it was made to. */
+export interface PatchFallback {
+  patchId: string
+  patchName: string
+  /** The device the patch names, by id. */
+  deviceId: string
+  /** What that device is called, as far as this machine can say; its id when it cannot. */
+  deviceName: string
+  /** The device it plays on instead: the show's own. */
+  to: string
+  /** The outputs it plays on there: the patch's own numbers. */
+  outputs: string
+  /** Why, as a sentence about the device: in the engine's words when it gave some. */
+  reason: string
+}
+
+/**
+ * Which of a show's patches fell back to the show's own device, where to and why: each one
+ * naming a device that is not playing — one this machine does not have, one that would not
+ * open, one lost since it opened. `reasons` is what the engine answered a patch that named a
+ * device it could not open (a sentence that names the device), and `names` what the device
+ * list calls each device.
+ */
+export function patchFallbacks(
+  patches: readonly OutputPatch[],
+  open: readonly OutputDeviceState[],
+  main: { id: string | null; name: string },
+  reasons: ReadonlyMap<string, string> = new Map(),
+  names: ReadonlyMap<string, string> = new Map()
+): PatchFallback[] {
+  const fallbacks: PatchFallback[] = []
+  for (const patch of patches) {
+    if (patch.deviceId === '' || patch.deviceId === main.id || patch.channels.length === 0) continue
+    const state = open.find(entry => entry.device === patch.deviceId)
+    if (state?.running === true) continue
+    const deviceName = state?.name ?? names.get(patch.deviceId) ?? patch.deviceId
+    const reason = state?.failed === true
+      ? `${deviceName} was lost${state.error ? ` (${state.error})` : ''}`
+      : reasons.get(patch.deviceId) ?? `${deviceName} is not connected to this machine`
+    fallbacks.push({
+      patchId: patch.id,
+      patchName: patch.name,
+      deviceId: patch.deviceId,
+      deviceName,
+      to: main.name === '' ? 'the show\'s device' : main.name,
+      outputs: patchChannelsLabel(patch.channels),
+      reason
+    })
+  }
+  return fallbacks
+}
+
+/** A fallback as the window says it, in one line: which patch, where to, and why. */
+export function describePatchFallback(fallback: PatchFallback): string {
+  return `${fallback.patchName} plays on outputs ${fallback.outputs} of ${fallback.to}: ${fallback.reason}`
 }
 
 /** A new patch's id: unique within the show it is added to. */

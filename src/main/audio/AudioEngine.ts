@@ -39,6 +39,10 @@ import type {
   AudioInputDevice,
   AudioInputOpenOptions,
   AudioInputStatus,
+  AudioOutputDevice,
+  AudioOutputOpenOptions,
+  AudioOutputStatus,
+  AudioPatchResult,
   AudioProgress,
   AudioSeekResult,
   AudioStartOptions,
@@ -85,7 +89,12 @@ const SLOW_VERBS: Partial<Record<AudioWireVerb, number>> = {
   inputOpen: SLOW_REQUEST_TIMEOUT_MS,
   startInput: SLOW_REQUEST_TIMEOUT_MS,
   configure: SLOW_REQUEST_TIMEOUT_MS,
-  devices: SLOW_REQUEST_TIMEOUT_MS
+  devices: SLOW_REQUEST_TIMEOUT_MS,
+  // An extra output device is opened by the patch that first names it, and by its reconnect:
+  // the device's own business, as long as a configure.
+  patch: SLOW_REQUEST_TIMEOUT_MS,
+  outputs: SLOW_REQUEST_TIMEOUT_MS,
+  outputOpen: SLOW_REQUEST_TIMEOUT_MS
 }
 
 interface WireReply {
@@ -491,8 +500,26 @@ export class NativeAudioEngine {
       Promise<AudioStartResult>
   }
 
-  patch(slot: number, outputs: number[] | null, gain: number): Promise<AudioCommandResult> {
-    return this.request('patch', { slot, outputs, gain }) as Promise<AudioCommandResult>
+  patch(slot: number, outputs: number[] | null, gain: number, device = ''): Promise<AudioPatchResult> {
+    return this.request('patch', { slot, outputs, gain, device }, SLOW_VERBS.patch) as Promise<AudioPatchResult>
+  }
+
+  async outputs(): Promise<AudioOutputDevice[]> {
+    const result = (await this.request('outputs', {}, SLOW_VERBS.outputs)) as { outputs: AudioOutputDevice[] }
+    return result.outputs
+  }
+
+  outputOpen(options: AudioOutputOpenOptions): Promise<AudioOutputStatus> {
+    return this.request('outputOpen', { ...options }, SLOW_VERBS.outputOpen) as Promise<AudioOutputStatus>
+  }
+
+  outputClose(device: string): Promise<{ closed: boolean }> {
+    return this.request('outputClose', { device }) as Promise<{ closed: boolean }>
+  }
+
+  async outputStatus(): Promise<AudioOutputStatus[]> {
+    const result = (await this.request('outputStatus', {})) as { outputs: AudioOutputStatus[] }
+    return result.outputs
   }
 
   outputGains(gains: number[]): Promise<AudioCommandResult> {
@@ -532,6 +559,8 @@ export class NativeAudioEngine {
     if (capture !== undefined && !appIsPackaged()) args.push('--capture', capture)
     // The engine's synthetic live inputs, for a test run on a machine with no input device.
     if (readEnv('CUERUNNER_TEST_INPUTS') === '1' && !appIsPackaged()) args.push('--test-inputs')
+    // And its test output devices, for a test of a show on two devices on a machine with one.
+    if (readEnv('CUERUNNER_TEST_OUTPUTS') === '1' && !appIsPackaged()) args.push('--test-outputs')
     const deviceId = readEnv('CUERUNNER_AUDIO_DEVICE')
     if (deviceId !== undefined) args.push('--device', deviceId)
     const exclusive = readEnv('CUERUNNER_AUDIO_EXCLUSIVE')
@@ -975,6 +1004,16 @@ export class NativeAudioEngine {
    */
   simulateDeviceLossForTest(): Promise<void> {
     return this.request('simulateDeviceNotification', { type: 'stopped', deliberate: false }).then(() => undefined)
+  }
+
+  /**
+   * Pulls one of the engine's test output devices, for the multi-device acceptance test. The
+   * engine runs the same classification a real device's notification runs, and refuses the
+   * verb for anything but a test output, so it can neither stand in for nor mask a genuine
+   * event. Reachable only through the dev harness, which a packaged build never installs.
+   */
+  simulateOutputLossForTest(device: string): Promise<void> {
+    return this.request('simulateDeviceNotification', { type: 'stopped', deliberate: false, device }).then(() => undefined)
   }
 
   /**

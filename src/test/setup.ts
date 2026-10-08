@@ -3,7 +3,9 @@ import type {
   AudioCommandResult,
   AudioEngineInfo,
   AudioMetadata,
+  AudioOutputStatus,
   AudioPanicResult,
+  AudioPatchResult,
   AudioProbe,
   AudioSeekResult,
   AudioStartResult
@@ -203,8 +205,14 @@ Object.defineProperty(window, 'cuerunner', {
       startInput: vi.fn((): Promise<AudioStartResult> => Promise.resolve({
         cueId: 'cue', runId: 'run', state: 'playing', startAtMs: 0
       })),
-      patch: vi.fn((): Promise<AudioCommandResult> => Promise.resolve({ ok: true, at: 0, applied: true })),
+      patch: vi.fn((): Promise<AudioPatchResult> => Promise.resolve({
+        ok: true, at: 0, applied: true, device: null, fallback: false, reason: null
+      })),
       outputGains: vi.fn((): Promise<AudioCommandResult> => Promise.resolve({ ok: true, at: 0, applied: true })),
+      outputs: vi.fn(() => Promise.resolve([])),
+      outputOpen: vi.fn((): Promise<AudioOutputStatus> => Promise.reject(new Error('no output devices in this test'))),
+      outputClose: vi.fn(() => Promise.resolve({ closed: false })),
+      outputStatus: vi.fn(() => Promise.resolve([])),
       onEvents: vi.fn(() => () => {}),
       pickFile: vi.fn(() => Promise.resolve(null))
     },

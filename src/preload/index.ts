@@ -40,6 +40,12 @@ import {
   type AudioStartInputPayload,
   type AudioPatchPayload,
   type AudioOutputGainsPayload,
+  type AudioOutputOpenPayload,
+  type AudioOutputClosePayload,
+  type AudioOutputDevice,
+  type AudioOutputOpenOptions,
+  type AudioOutputStatus,
+  type AudioPatchResult,
   type AudioSilence,
   type AudioOnsetsPayload,
   type AudioOnsets,
@@ -330,10 +336,18 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invokeAudio(AUDIO_CHANNELS.startInput, {
         cueId, whenMs, device, channels, options
       } satisfies AudioStartInputPayload),
-    patch: (slot: number, outputs: number[] | null, gain: number): Promise<AudioCommandResult> =>
-      invokeAudio(AUDIO_CHANNELS.patch, { slot, outputs, gain } satisfies AudioPatchPayload),
+    patch: (slot: number, outputs: number[] | null, gain: number, device?: string): Promise<AudioPatchResult> =>
+      invokeAudio(AUDIO_CHANNELS.patch, { slot, outputs, gain, device } satisfies AudioPatchPayload),
     outputGains: (gains: number[]): Promise<AudioCommandResult> =>
       invokeAudio(AUDIO_CHANNELS.outputGains, { gains } satisfies AudioOutputGainsPayload),
+    outputs: (): Promise<AudioOutputDevice[]> =>
+      invokeAudio(AUDIO_CHANNELS.outputs),
+    outputOpen: (options: AudioOutputOpenOptions): Promise<AudioOutputStatus> =>
+      invokeAudio(AUDIO_CHANNELS.outputOpen, options satisfies AudioOutputOpenPayload),
+    outputClose: (device: string): Promise<{ closed: boolean }> =>
+      invokeAudio(AUDIO_CHANNELS.outputClose, { device } satisfies AudioOutputClosePayload),
+    outputStatus: (): Promise<AudioOutputStatus[]> =>
+      invokeAudio(AUDIO_CHANNELS.outputStatus),
     /** Engine events, batched by main. Returns the unsubscribe function. */
     onEvents: (callback: (events: AudioEngineEvent[]) => void): (() => void) =>
       subscribe(AUDIO_CHANNELS.events, callback),
