@@ -35,6 +35,7 @@ import type {
   AudioProbe,
   AudioOnsets,
   AudioSilence,
+  AudioMeters,
   AudioProgress,
   AudioSeekResult,
   AudioRegion,
@@ -187,12 +188,51 @@ export class AudioEngineClient {
    * over from wherever this had got to (`adoptClock`), so nothing scheduled meanwhile moves.
    */
   nowMs(): number {
+    // A held show stands still: nothing scheduled on this clock comes due while it is held.
+    if (this.heldAtMs !== null) return this.heldAtMs
     if (!this.anchor) {
       const perfMs = performance.now()
       if (this.unanchoredSincePerfMs === null) this.unanchoredSincePerfMs = perfMs
       return perfMs - this.unanchoredSincePerfMs
     }
     return this.anchor.engineMs + (performance.now() - this.anchor.perfMs) + this.currentEpoch()
+  }
+
+  /** The show-clock moment the show was held at, or null while it runs. */
+  private heldAtMs: number | null = null
+
+  /**
+   * Holds the show clock where it stands: `nowMs()` reads the same until it is released, so
+   * no wait, pre-wait, handover or planned end comes due. The engine's own clock goes on —
+   * the voices the show is holding are held in the engine, by the runner.
+   */
+  holdClock(): void {
+    if (this.heldAtMs !== null) return
+    this.heldAtMs = this.nowMs()
+  }
+
+  /** Whether the show clock is held. */
+  clockHeld(): boolean {
+    return this.heldAtMs !== null
+  }
+
+  /**
+   * Lets the show clock go on from where it was held. The engine's clock kept running, so
+   * the projection absorbs the time held — the same way it absorbs an engine that was
+   * replaced — and a time on the show clock maps to an engine time that is that much later.
+   */
+  releaseClock(): void {
+    const heldAt = this.heldAtMs
+    if (heldAt === null) return
+    this.heldAtMs = null
+    const live = this.nowMs()
+    const gap = live - heldAt
+    if (gap <= 0) return
+    if (!this.anchor) {
+      if (this.unanchoredSincePerfMs !== null) this.unanchoredSincePerfMs += gap
+      return
+    }
+    if (this.sessionId !== null) this.epochs.set(this.sessionId, this.currentEpoch() - gap)
   }
 
   /** The epoch of the session the show is currently running on. */
@@ -533,6 +573,29 @@ export class AudioEngineClient {
   async release(cueId: string, whenMs?: number, endMs?: number): Promise<AudioCommandResult> {
     const result = await bridge().release(cueId, whenMs === undefined ? undefined : this.toEngineMs(whenMs), endMs)
     return { ...result, at: this.toShowMs(result.at) }
+  }
+
+  /** Holds a cue's voice where it stands; its timed things wait with it. */
+  async pause(cueId: string, whenMs?: number): Promise<AudioCommandResult> {
+    const result = await bridge().pause(cueId, whenMs === undefined ? undefined : this.toEngineMs(whenMs))
+    return { ...result, at: this.toShowMs(result.at) }
+  }
+
+  /** Lets a held voice go on. */
+  async resume(cueId: string, whenMs?: number): Promise<AudioCommandResult> {
+    const result = await bridge().resume(cueId, whenMs === undefined ? undefined : this.toEngineMs(whenMs))
+    return { ...result, at: this.toShowMs(result.at) }
+  }
+
+  /** Sets the level everything leaves the engine at. */
+  async master(gain: number): Promise<AudioCommandResult> {
+    const result = await bridge().master(gain)
+    return { ...result, at: this.toShowMs(result.at) }
+  }
+
+  /** Reads the output's meter: each channel's peak over the last block, after the master. */
+  meters(): Promise<AudioMeters> {
+    return bridge().meters()
   }
 
   /** Drops a cue's future-dated verbs — a start or a stop that has not fired yet. */

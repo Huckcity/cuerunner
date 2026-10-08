@@ -37,6 +37,12 @@ const PATHS: Record<CueType, string[]> = {
   msc: ['M2.4 4.2h6.4v7.6H2.4z', 'M4.6 7.4v1.2', 'M6.6 7.4v1.2', 'M10.4 8h3.2', 'M12.2 6.4 13.8 8l-1.6 1.6'],
   // A microphone: the capsule, the cradle it sits in, and the stand.
   mic: ['M8 2a2 2 0 0 0-2 2v3.6a2 2 0 0 0 4 0V4a2 2 0 0 0-2-2z', 'M4.4 7.4a3.6 3.6 0 0 0 7.2 0', 'M8 11v2.6', 'M5.8 13.6h4.4'],
+  // A sheet with its corner turned and two lines on it: a note, not a command.
+  memo: ['M3.5 2.5h6.2l2.8 2.8v8.2h-9z', 'M9.7 2.5v2.8h2.8', 'M5.6 8.2h4.8', 'M5.6 10.8h4.8'],
+  // A page with notes on it: a file of MIDI, rather than one message.
+  midiFile: ['M3.5 2h6.2l2.8 2.8V14h-9z', 'M9.6 2v2.9h2.9', 'M6 11.6V7.2l3.8-.9v4.4', 'M6 11.6a1 1 0 1 1-2 0 1 1 0 0 1 2 0', 'M9.8 10.7a1 1 0 1 1-2 0 1 1 0 0 1 2 0'],
+  // A lantern on its yoke, and its beam.
+  light: ['M4 3.2h5.2l1.2 4.4H2.8z', 'M6.6 1.6v1.6', 'M3.4 9.6 2 13.4', 'M6.6 9.6v4', 'M9.8 9.6l1.4 3.8', 'M11.6 5.4h2.6'],
   // A timecode display: two pairs of digits either side of the colon.
   timecode: ['M1.8 4.4h12.4v7.2H1.8z', 'M4.2 6.4v3.2', 'M6 6.4v3.2', 'M10 6.4v3.2', 'M11.8 6.4v3.2', 'M8 6.9v.01', 'M8 9.1v.01']
 }

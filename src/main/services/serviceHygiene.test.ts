@@ -36,6 +36,10 @@ import { WirelessService } from './WirelessService'
 import { PresenceService, type PresenceSocket } from './PresenceService'
 import { CompanionService } from './CompanionService'
 import { RedundancyService } from './RedundancyService'
+import { DmxService } from './DmxService'
+import { DmxLighting, DMX_FRAME_MS } from '../dmx/lighting'
+import { createMachineDmx } from '../dmx/machine'
+import type { DmxSocket } from '../dmx/network'
 import { TimecodeService } from './TimecodeService'
 import { TimecodeHub } from '../timecode/hub'
 import { MidiTimecodeTap } from '../timecode/midiTap'
@@ -661,6 +665,36 @@ function sqNativeDriver(): Driver {
   }
 }
 
+function dmxDriver(): Driver {
+  const sockets: FakeSocket[] = []
+  const createSocket = (): DmxSocket => {
+    const socket = new FakeSocket()
+    sockets.push(socket)
+    // The real socket's methods return `this`; the lighting reads only the ones the fake has.
+    return socket as unknown as DmxSocket
+  }
+  return {
+    // The frame loop.
+    arms: [DMX_FRAME_MS],
+    names: 'EADDRINUSE',
+    start(h) {
+      const lighting = new DmxLighting({
+        transmitter: { createSocket },
+        receiver: { createSocket },
+        machine: createMachineDmx(),
+        interfaces: () => []
+      })
+      const service = new DmxService(lighting)
+      service.start(h.context, h.settings())
+      return service
+    },
+    crash() {
+      // The sending socket, refused the way the machine refuses it.
+      sockets[0].emit('error', new Error('EADDRINUSE'))
+    }
+  }
+}
+
 const DRIVERS: Record<string, () => Driver> = {
   OscInputService: oscDriver,
   MidiInputService: midiInputDriver,
@@ -670,6 +704,7 @@ const DRIVERS: Record<string, () => Driver> = {
   PresenceService: presenceDriver,
   CompanionService: companionDriver,
   RedundancyService: redundancyDriver,
+  DmxService: dmxDriver,
   TimecodeService: timecodeDriver
 }
 

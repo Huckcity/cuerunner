@@ -880,6 +880,17 @@ double Engine::snapshotClockMs() const {
 
 void Engine::copySnapshot(MixSnapshot& out) const { snapshotCell_.read(out); }
 
+void Engine::meters(int& channels, float* peaks, double& master, double& atMs) const {
+  // The snapshot is large (every voice), so it is read off the heap rather than a socket
+  // thread's stack.
+  auto snapshot = std::make_unique<MixSnapshot>();
+  snapshotCell_.read(*snapshot);
+  channels = std::min(snapshot->meterChannels, kMaxOutputChannels);
+  for (int channel = 0; channel < channels; channel++) peaks[channel] = snapshot->meterPeak[channel];
+  master = snapshot->masterGain;
+  atMs = snapshot->clockMs;
+}
+
 double Engine::clockMs() const { return snapshotClockMs(); }
 
 bool Engine::prepare(const std::string& cueId, const std::string& filePath, PrepareDTO& out, EngineError& error) {
@@ -1162,6 +1173,53 @@ bool Engine::releaseCue(const std::string& cueId, double whenMs, bool hasEnd, do
   command.whenMs = whenMs;
   command.hasEndMs = hasEnd;
   command.endMs = endMs;
+  AckResult ack;
+  if (!submitCommand(command, ack, error)) return false;
+  out.atMs = clockMs();
+  out.applied = ack.applied;
+  return true;
+}
+
+bool Engine::pauseCue(const std::string& cueId, double whenMs, CommandResultDTO& out, EngineError& error) {
+  if (!finiteNumber(whenMs)) {
+    error = {"invalid", "pause needs a finite time"};
+    return false;
+  }
+  Command command;
+  command.kind = Command::Pause;
+  copyStr(command.cueId, sizeof(command.cueId), cueId);
+  command.whenMs = whenMs;
+  AckResult ack;
+  if (!submitCommand(command, ack, error)) return false;
+  out.atMs = clockMs();
+  out.applied = ack.applied;
+  return true;
+}
+
+bool Engine::resumeCue(const std::string& cueId, double whenMs, CommandResultDTO& out, EngineError& error) {
+  if (!finiteNumber(whenMs)) {
+    error = {"invalid", "resume needs a finite time"};
+    return false;
+  }
+  Command command;
+  command.kind = Command::Resume;
+  copyStr(command.cueId, sizeof(command.cueId), cueId);
+  command.whenMs = whenMs;
+  AckResult ack;
+  if (!submitCommand(command, ack, error)) return false;
+  out.atMs = clockMs();
+  out.applied = ack.applied;
+  return true;
+}
+
+bool Engine::setMaster(double gain, CommandResultDTO& out, EngineError& error) {
+  if (!finiteNumber(gain) || gain < 0.0) {
+    error = {"invalid", "master needs a level of zero or more"};
+    return false;
+  }
+  Command command;
+  command.kind = Command::Master;
+  command.value = gain;
   AckResult ack;
   if (!submitCommand(command, ack, error)) return false;
   out.atMs = clockMs();

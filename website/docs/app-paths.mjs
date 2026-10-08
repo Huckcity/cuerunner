@@ -119,6 +119,12 @@ export const APP_PATHS = [
     printed: `${CARET} → Export Bundle…`,
     names: [{ menu: 'export-bundle' }]
   },
+  // The QLab guide walks to the import the same way, then on into the dialog's own button.
+  {
+    page: 'guides/qlab.html',
+    printed: `${CARET} → Import QLab Workspace…`,
+    names: [{ menu: 'import-qlab' }]
+  },
   // The support page's report: a path under the brand caret to the File menu item.
   {
     page: 'support.html',
@@ -212,6 +218,12 @@ export const APP_PATHS = [
     printed: `${prose(SETTINGS_ITEM)} → General`,
     names: [{ tab: 'general' }]
   },
+  // The remote's own switch, on the tab the OSC listener is set up on.
+  {
+    page: 'reference/control.html',
+    printed: `${prose(SETTINGS_ITEM)} → Network`,
+    names: [{ tab: 'network' }]
+  },
   {
     page: 'reference/control.html',
     printed: `${prose(SHOW_SETTINGS)} → Channels`,
@@ -264,6 +276,17 @@ export const APP_PATHS = [
     page: 'reference/keyboard.html',
     printed: 'Ctrl/⌘ + Shift + P → PANIC from the application menu — the same silence, reached without the window',
     names: [{ item: 'playback-panic', own: true }]
+  },
+  // The View menu's Show Mode: F5 is printed on the item and answered by the window itself.
+  {
+    page: 'reference/keyboard.html',
+    printed: 'F5 → Show mode — the show in large type, read-only; F5 again to edit',
+    names: [{ item: 'view-show-mode', own: true }]
+  },
+  {
+    page: 'reference/keyboard.html',
+    printed: 'F6 → Cart — the list as a wall of buttons, each playing its cue; F6 again for the list',
+    names: [{ item: 'view-cart', own: true }]
   },
   {
     page: 'reference/keyboard.html',

@@ -37,10 +37,10 @@ export const NOT_YET_PROVED = '(not yet proved on real hardware)'
  * built from this list, so a type that moves across the line moves the words with it, and the
  * guard reads the list against `CUE_TYPES` minus `PRO_CUE_TYPES`.
  */
-const FREE_CUES = ['audio', 'MIDI', 'OSC', 'MSC', 'network', 'script', 'wait', 'fade', 'stop', 'group', 'devamp']
+const FREE_CUES = ['audio', 'MIDI', 'MIDI file', 'OSC', 'MSC', 'network', 'script', 'wait', 'fade', 'stop', 'group', 'devamp', 'memo']
 
 /** How a count reads at the head of a sentence: "Eleven cue types". Past the last word, the numeral stands. */
-const COUNT = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve']
+const COUNT = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty']
 
 /**
  * The cue stack's sentence: how many types the free app has, said as a reader says a list, and
@@ -135,6 +135,17 @@ export const PRO_ROWS = [
       identifiers: ['rf', 'show:ewdx-set-password', 'show:ewdx-trust-again'],
       cues: ['mic'],
       prose: `Battery and RF for every transmitter, in the Monitor and the mic plot; a check before the doors that every pack is ready; alarms when a pack or an aerial misbehaves; the session report afterwards, with what was playing when a pack had trouble. Reads Sennheiser EW-DX receivers directly, any other receiver over a telemetry document, or the demo rack on the bench. A Mic cue mutes or unmutes an EW-DX mic from the cue list.`
+    }
+  },
+  {
+    label: 'Lighting',
+    free: {
+      prose: `MSC and OSC cues to a lighting desk that runs the lights itself.`
+    },
+    pro: {
+      identifiers: ['dmx'],
+      cues: ['light'],
+      prose: `sACN and Art-Net out of this machine: a fixture patch with clash warnings and identify, groups, faders to build a look and record it, and Light cues that fade it with tracking — latest or highest takes precedence — plus chases and sine effects. A console on the network can be watched or merged in, and Art-Net nodes found.`
     }
   },
   {
@@ -256,6 +267,27 @@ export const PRO_MARKS = [
     page: 'reference/control.html',
     words: 'Mic cue',
     cues: ['mic']
+  },
+  {
+    page: 'guides/cue-list.html',
+    words: 'Light',
+    cues: ['light']
+  },
+  {
+    page: 'guides/lighting.html',
+    words: 'Lighting from the cue list',
+    identifiers: ['dmx'],
+    cues: ['light']
+  },
+  {
+    page: 'reference/cue-types.html',
+    words: 'Light',
+    cues: ['light']
+  },
+  {
+    page: 'reference/control.html',
+    words: 'Light cue',
+    cues: ['light']
   },
   {
     page: 'guides/cue-list.html',

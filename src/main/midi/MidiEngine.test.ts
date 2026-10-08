@@ -180,4 +180,22 @@ describe('MidiEngine', () => {
       expect(fake.sent).toEqual([[0x90, 61, 100]])
     })
   })
+
+  describe('raw bytes, as a MIDI file sends them', () => {
+    it('sends the bytes as they are, including what the cue union has no shape for', () => {
+      const fake = withPorts(['Stage Rack'])
+      const engine = new MidiEngine(fake.loader)
+
+      // Pitch bend and channel pressure: a file carries both.
+      expect(engine.sendRaw('Stage Rack', [[0xe0, 0, 64], [0xd2, 90]])).toEqual({ ok: true })
+      expect(fake.sent).toEqual([[0xe0, 0, 64], [0xd2, 90]])
+    })
+
+    it('answers whether a port is there when asked with nothing to send', () => {
+      const engine = new MidiEngine(withPorts(['Stage Rack']).loader)
+
+      expect(engine.sendRaw('Stage Rack', [])).toEqual({ ok: true })
+      expect(engine.sendRaw('Nowhere', [])).toEqual({ ok: false, error: 'No MIDI output port named "Nowhere"' })
+    })
+  })
 })

@@ -224,7 +224,10 @@ export async function readRecovered(app: ElectronApplication, expression: string
 // Adds a cue from the toolbar's "More" menu (MIDI, OSC, Network, Script).
 export async function addCueFromMoreMenu(page: Page, label: string): Promise<void> {
   await page.locator('.toolbar-more-btn').click()
-  await page.locator('.toolbar-more-menu-item', { hasText: label }).click()
+  // The whole label, not a part of it: "MIDI" is also the start of "MIDI File". A locked
+  // entry carries its Pro mark after the label, which the match allows.
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  await page.locator('.toolbar-more-menu-item', { hasText: new RegExp(`^\\s*${escaped}\\s*(pro)?\\s*$`) }).click()
 }
 
 /** Sets the show's firing window, the way an operator would, and closes the panel. */

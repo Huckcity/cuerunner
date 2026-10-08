@@ -124,15 +124,17 @@ export class MidiEngine {
     return null
   }
 
-  /**
-   * Bytes that are already MIDI, for the messages no cue composes: MIDI Time Code's quarter
-   * frames (`F1 0n`) and its full-frame SysEx. Same port, same guards, same answer.
-   */
-  sendRaw(portName: string, messages: number[][]): MidiSendResult {
-    return this.send(portName, messages.map(bytes => ({ kind: 'raw', data: bytes })))
+  send(portName: string, messages: MidiMessage[]): MidiSendResult {
+    return this.sendRaw(portName, messages.map(encodeMidiMessage))
   }
 
-  send(portName: string, messages: MidiMessage[]): MidiSendResult {
+  /**
+   * Bytes as they go on the wire, already encoded. The MIDI file player sends this way: a
+   * file carries pitch bend, pressure and the escape form, which the cue's message union
+   * has no shape for, and its bytes are already the file's own. Asked with no messages it
+   * sends nothing and answers whether the port is there.
+   */
+  sendRaw(portName: string, messages: readonly number[][]): MidiSendResult {
     // Without the module there is no port to look for, and saying "no port named X"
     // would send the operator looking at their rack instead of their installation.
     if (!this.moduleAnswered) {
@@ -155,7 +157,7 @@ export class MidiEngine {
       }
     }
     try {
-      for (const msg of messages) out.sendMessage(msg.kind === 'raw' ? [...(msg.data ?? [])] : encodeMidiMessage(msg))
+      for (const bytes of messages) out.sendMessage([...bytes])
       return { ok: true }
     } catch (error) {
       // A device unplugged mid-show leaves a handle that throws on every later send.

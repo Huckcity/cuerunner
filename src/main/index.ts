@@ -8,6 +8,7 @@ import { onMainError, reportMainError } from './errors'
 import { audioEngine } from './audio/AudioEngine'
 import { playbackSafety, recentEngineEvents } from './safety/runtime'
 import { installPlaybackDevHarness } from './safety/devHarness'
+import { midiFiles } from './midi/midiFileRuntime'
 import { keepAwake, keepAwakeHeld } from './safety/keepAwake'
 import { refuseNavigation } from './safety/navigation'
 import { placeWindow, readWindowState, saveWindowState } from './windowState'
@@ -137,6 +138,35 @@ function createMenu(): void {
         { role: 'copy' },
         { role: 'paste' },
         { role: 'selectAll' }
+      ]
+    },
+    {
+      // How the window is drawn. Show mode is the window's to switch, and F5 is answered by
+      // the window itself — the accelerator is printed here and not registered, so a press
+      // is one toggle rather than the menu's and the window's both. The zoom is the
+      // operator's: a booth monitor across a desk reads larger than a laptop in front of them.
+      label: 'View',
+      submenu: [
+        {
+          id: 'view-show-mode',
+          label: 'Show Mode',
+          accelerator: 'F5',
+          registerAccelerator: false,
+          click: () => sendMenuAction('show-mode')
+        },
+        {
+          id: 'view-cart',
+          label: 'Cart',
+          accelerator: 'F6',
+          registerAccelerator: false,
+          click: () => sendMenuAction('cart')
+        },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
       ]
     },
     {
@@ -351,6 +381,9 @@ app.whenReady().then(() => {
   app.on('will-quit', () => {
     playbackSafety.close()
     audioEngine.forceShutdown()
+    // A MIDI file still playing at quit lets go of its notes on the way out: a port outlives
+    // the app that held it, and a synth left with a chord down drones until someone finds it.
+    midiFiles.stopAll()
   })
   createWindow()
   app.on('activate', () => {

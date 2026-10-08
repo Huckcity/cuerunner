@@ -17,11 +17,14 @@ import { StopInspector } from './StopInspector'
 import { DevampInspector } from './DevampInspector'
 import { MscInspector } from './MscInspector'
 import { MicInspector } from './MicInspector'
+import { MidiFileInspector } from './MidiFileInspector'
+import { LightInspector, LightTrackingTab } from '../lighting/LightInspector'
 import { TimecodeInspector } from './TimecodeInspector'
 import type {
   Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue, DevampCue,
-  MscCue, MicCue, TimecodeCue
+  MscCue, MicCue, LightCue, TimecodeCue
 } from '../../../../shared/cue'
+import type { MidiFileCue } from '../../../../shared/cue'
 import { isProCueType } from '../../../../shared/cue'
 import './Inspector.css'
 
@@ -42,6 +45,10 @@ const TYPE_TABS: Record<string, string[]> = {
   devamp: ['Basics', 'Devamp'],
   msc: ['Basics', 'Show Control'],
   mic: ['Basics', 'Mic'],
+  // A memo is its name and its note, and both are on Basics: it has nothing else to set.
+  memo: ['Basics'],
+  midiFile: ['Basics', 'MIDI File', 'Channels'],
+  light: ['Basics', 'Light', 'Tracking'],
   timecode: ['Basics', 'Timecode']
 }
 
@@ -75,6 +82,7 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
   if (tab === 'Stop') return <StopInspector cue={cue as StopCue} />
   if (tab === 'Devamp') return <DevampInspector cue={cue as DevampCue} />
   if (tab === 'Show Control') return <MscInspector cue={cue as MscCue} />
+  if (tab === 'MIDI File' || tab === 'Channels') return <MidiFileInspector cue={cue as MidiFileCue} tab={tab} />
   if (tab === 'Mic') {
     return pro ? (
       <MicInspector cue={cue as MicCue} />
@@ -83,6 +91,17 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
         variant="inspector"
         feature="Mic cues"
         blurb="A cue that mutes or unmutes a radio mic at its receiver, so a pack is closed by the cue list and not by a hand on a fader."
+      />
+    )
+  }
+  if (tab === 'Light' || tab === 'Tracking') {
+    return pro ? (
+      tab === 'Light' ? <LightInspector cue={cue as LightCue} /> : <LightTrackingTab cue={cue as LightCue} />
+    ) : (
+      <ProLock
+        variant="inspector"
+        feature="Light cues"
+        blurb="A cue that fades the lighting rig to a look over sACN or Art-Net, tracking what it does not change."
       />
     )
   }

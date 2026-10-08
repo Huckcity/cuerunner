@@ -7,6 +7,7 @@ import { LogPanel } from '../log/LogPanel'
 import { MonitorPanel } from '../monitor/MonitorPanel'
 import { RfPanel } from '../rf/RfPanel'
 import { ScriptPanel } from '../script/ScriptPanel'
+import { ActivePanel } from '../active/ActivePanel'
 import { ProLock, ProMark } from '../license/ProLock'
 import { CueIcon } from '../../utils/cueIcons'
 import { formatDuration } from '../../utils/cueDefaults'
@@ -16,12 +17,13 @@ import type { AppView } from './Toolbar'
 import './Dock.css'
 
 /** What the dock is showing: the selected cue, or one of the show's panels. */
-export type DockTab = 'cue' | ShowStrip
+export type DockTab = 'cue' | 'active' | ShowStrip
 
 // The class names are the ones the strips' buttons had, which is what the specs and the
 // guide's screenshot script press.
 const TABS: { id: DockTab; label: string; className: string; pro?: true }[] = [
   { id: 'cue', label: 'Cue', className: 'btn-cue' },
+  { id: 'active', label: 'Active', className: 'btn-active' },
   { id: 'log', label: 'Log', className: 'btn-log' },
   { id: 'monitor', label: 'Monitor', className: 'btn-monitor' },
   { id: 'rf', label: 'Wireless', className: 'btn-rf', pro: true },
@@ -212,6 +214,8 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
         }
         if (selected?.type === 'audio') return <WaveformPanel />
         return <CueSummary cue={selected} />
+      case 'active':
+        return <ActivePanel onClose={backToCue} />
       case 'log':
         return <LogPanel onClose={backToCue} />
       case 'monitor':

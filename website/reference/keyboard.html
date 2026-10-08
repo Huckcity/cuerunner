@@ -54,9 +54,13 @@
           <thead><tr><th>Keys</th><th>Action</th><th>Where</th></tr></thead>
           <tbody>
             <tr><td><kbd>Space</kbd></td><td>GO — fire the selected cue and move on to the next. With nothing selected, as after the last cue, it fires nothing.</td><td>Anywhere except a text field</td></tr>
-            <tr><td><kbd>Esc</kbd></td><td>STOP — stop everything</td><td>Anywhere except a text field. With a menu open, the press closes the menu and stops nothing</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>STOP — stop everything, at once or over the show's STOP fade; a second press during the fade cuts it</td><td>Anywhere except a text field. With a menu open, the press closes the menu and stops nothing</td></tr>
+            <tr><td><kbd>P</kbd></td><td>PAUSE — hold the whole show where it stands, and let it go on. While it is held GO waits; STOP and PANIC end the hold</td><td>Anywhere except a text field</td></tr>
             <tr><td><kbd>Shift</kbd> + <kbd>Esc</kbd></td><td>PANIC — stop with a short fade</td><td>Anywhere except a text field</td></tr>
             <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd></td><td>PANIC from the application menu — the same silence, reached without the window</td><td>Anywhere, including while the window is busy</td></tr>
+            <tr><td><kbd>F5</kbd></td><td>Show mode — the show in large type, read-only; F5 again to edit</td><td>Anywhere a panel is not open</td></tr>
+            <tr><td><kbd>F6</kbd></td><td>Cart — the list as a wall of buttons, each playing its cue; F6 again for the list</td><td>Anywhere a panel is not open</td></tr>
+            <tr><td><kbd>1</kbd> … <kbd>9</kbd>, <kbd>0</kbd></td><td>Play the first ten cart tiles</td><td>The cart</td></tr>
           </tbody>
         </table>
       </div>
@@ -87,6 +91,7 @@
             <tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>Move the selection</td><td>Cue list</td></tr>
             <tr><td><kbd>Delete</kbd></td><td>Delete the selected cue. The selection moves to the cue that took its place, so GO stays where you were working.</td><td>Cue list</td></tr>
             <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>D</kbd></td><td>Duplicate the selected cue</td><td>Cue list</td></tr>
+            <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd></td><td>Copy, cut or paste the selected cues — a group with everything in it. A paste lands after the cue you stand on, as new cues with the next numbers; a copied fade aimed at a cue copied with it is aimed at that cue's copy. The copy outlives opening another show, so cues move between shows</td><td>Cue list; in a text field the field's own text</td></tr>
             <tr><td><kbd>Enter</kbd> / <kbd>Esc</kbd></td><td>Commit or cancel a rename</td><td>Renaming a cue</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>Close a menu — the row menu, Cuerunner ▾ or More ▾ — or cancel a rename; a bare press is the transport's</td><td>Cue list and toolbar</td></tr>
             <tr><td><kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd></td><td>Undo</td><td>Anywhere except a text field</td></tr>

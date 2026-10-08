@@ -184,6 +184,16 @@
   letter-spacing: var(--ls-caps);
 }
 
+/* A memo's words are what it is for, so the first line of its note is read on the row, in
+   the tone the list keeps for what is said rather than what runs. */
+.memo-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
 /* A group carries its children's names as well as its own, so it leads them. */
 .cue-row[data-type='group'] .name-text {
   font-weight: var(--fw-semi);
@@ -242,3 +252,20 @@
 .col-dur-media[data-media='measuring'] { color: var(--fg-subtle); }
 .col-dur-media[data-media='missing'] { color: var(--accent-amber); }
 .col-dur-media[data-media='none'] { color: var(--accent-amber); }
+
+/* A time cell being edited where it stands: the rename field's look, sized to the cell. */
+.time-cell-edit {
+  width: 100%;
+  height: 22px;
+  background: var(--bg-selected);
+  border: 1px solid var(--border-focus);
+  border-radius: var(--radius-sm);
+  color: var(--fg-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  text-align: right;
+  padding: 0 var(--space-1);
+  outline: none;
+}
+
+.cue-row [data-editable] { cursor: text; }

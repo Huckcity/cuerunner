@@ -23,7 +23,7 @@ inline constexpr const char* kEngineVersion = "1.0.0";
  * held against the declaration in src/shared/audio.ts by src/main/audio/audioWire.test.ts.
  * There is one copy of this number, in code, tests and docs: this one.
  */
-inline constexpr int kWireProtocolVersion = 3;
+inline constexpr int kWireProtocolVersion = 4;
 
 /**
  * How a declared bound treats a request that asks past it. `Refuse` is a request that
@@ -245,6 +245,11 @@ struct MixSnapshot {
   uint64_t xruns = 0;
   int voiceCount = 0;
   VoiceSnapshot voices[kMaxVoices] = {};
+  // The output's own reading: each channel's peak over the last block rendered, after the
+  // master level, and the level itself — what the window's meter draws.
+  int meterChannels = 0;
+  float meterPeak[kMaxOutputChannels] = {};
+  double masterGain = 1.0;
 };
 
 struct Event {
@@ -285,7 +290,13 @@ struct Command {
     Routing = 7,
     Panic = 8,
     Shutdown = 9,
-    Release = 10
+    Release = 10,
+    // A hold on one voice where it stands, and the end of it: the voice keeps its place in
+    // the file and every timed thing about it — a fade, a scheduled stop — waits with it.
+    Pause = 11,
+    Resume = 12,
+    // The level everything leaves the engine at, after every voice is mixed.
+    Master = 13
   } kind = None;
 
   char cueId[kMaxCueIdLen] = {};

@@ -205,4 +205,42 @@ describe('OscInputService', () => {
 
     expect(server.closed).toHaveBeenCalledTimes(1)
   })
+
+  describe('the allow list', () => {
+    function allowing(allowFrom: string[]): ShowSettings {
+      const base = settings(true, 53000)
+      return { ...base, oscIn: { ...base.oscIn, allowFrom } }
+    }
+
+    it('hears a sender on the list, and drops everyone else before the bus', () => {
+      const { service, servers, context, bus } = harness()
+      service.start(context, allowing(['10.0.0.0/24']))
+
+      servers[0].emit('message', ['/go'], { address: '10.0.0.7', port: 9000 })
+      servers[0].emit('message', ['/go'], { address: '172.16.0.9', port: 9000 })
+      servers[0].emit('bundle', { elements: [['/stop']] }, { address: '172.16.0.9', port: 9000 })
+
+      expect(oscEvents(bus).map(event => event.from)).toEqual(['10.0.0.7:9000'])
+    })
+
+    it('names a refused sender once, however much it sends', () => {
+      const { service, servers, context, bus } = harness()
+      service.start(context, allowing(['10.0.0.5']))
+
+      for (let i = 0; i < 5; i++) servers[0].emit('message', ['/go'], { address: '172.16.0.9', port: 9000 })
+
+      const refusals = bus.snapshot().alerts.filter(alert => alert.message.includes('172.16.0.9'))
+      expect(refusals).toHaveLength(1)
+      expect(refusals[0].message).toBe('OSC input: ignored 172.16.0.9, which is not on the allow list')
+    })
+
+    it('hears an IPv4 sender that arrives on a dual-stack socket', () => {
+      const { service, servers, context, bus } = harness()
+      service.start(context, allowing(['10.0.0.5']))
+
+      servers[0].emit('message', ['/go'], { address: '::ffff:10.0.0.5', port: 9000 })
+
+      expect(oscEvents(bus)).toHaveLength(1)
+    })
+  })
 })

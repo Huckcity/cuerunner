@@ -12,7 +12,10 @@ import { isProCueType } from '../../../../shared/cue'
 import { ProMark } from '../license/ProLock'
 import { CueIcon } from '../../utils/cueIcons'
 import { formatShortcut } from '../../utils/shortcuts'
+import { startNewCueDrag } from '../../utils/newCueDrag'
+import { openLogsFolder } from '../../hooks/useLogFile'
 import { FILE_MENU, type FileMenuAction, type FileMenuItem } from '../../../../shared/fileMenu'
+import { openQLabImport } from '../qlab/qlabImport'
 import './Toolbar.css'
 
 /** An Electron accelerator, written for this keyboard. */
@@ -50,6 +53,9 @@ const MORE_CUES: { type: CueType; label: string }[] = [
   { type: 'devamp',  label: 'Devamp'  },
   { type: 'msc',     label: 'Show Control' },
   { type: 'mic',     label: 'Mic' },
+  { type: 'memo',    label: 'Memo' },
+  { type: 'midiFile', label: 'MIDI File' },
+  { type: 'light',   label: 'Light' },
   { type: 'timecode', label: 'Timecode' },
 ]
 
@@ -63,7 +69,7 @@ interface Props {
  * What fills the middle of the window: the cue stack the show is built in, or the scenes
  * the show is run from and edited in.
  */
-export type AppView = 'cues' | 'scenes'
+export type AppView = 'cues' | 'scenes' | 'lighting'
 
 export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   const addCue = useStore(s => s.addCue)
@@ -86,9 +92,10 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
     // and aimed at it, as part of the add — written afterwards it was a second edit, and
     // the first undo after adding a fade only un-named it. Only an audio cue: a fade moves
     // a sound, so one made with a wait or a group selected is left for the operator to aim,
-    // rather than aimed at something its own tab would not offer.
+    // rather than aimed at something its own tab would not offer. A Light cue has a level
+    // too — its intensity — so a fade made with one selected is aimed at it the same way.
     const target = type === 'fade' && selectedId
-      ? useStore.getState().cues.find(c => c.id === selectedId && c.type === 'audio')
+      ? useStore.getState().cues.find(c => c.id === selectedId && (c.type === 'audio' || c.type === 'light'))
       : undefined
     addCue(
       type,
@@ -175,7 +182,9 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
     'merge': mergeAnotherShow,
     'export-bundle': exportShowBundle,
     'import-bundle': importShowBundle,
+    'import-qlab': openQLabImport,
     'report-problem': openReport,
+    'open-logs': () => openLogsFolder(),
     'show-settings': () => openShowSettings('channels'),
     'settings': onOpenSettings
   }
@@ -183,8 +192,9 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   fileActionsRef.current = fileActions
 
   useEffect(() => window.cuerunner.app.onMenuAction(action => {
-    if (action === 'undo' || action === 'redo') return
-    void fileActionsRef.current[action]()
+    // The File menu's own actions only: undo, redo and the View menu's are answered elsewhere.
+    if (!(action in fileActionsRef.current)) return
+    void fileActionsRef.current[action as FileMenuAction]()
   }), [])
 
   const fileItem = (item: FileMenuItem) => (
@@ -292,7 +302,16 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
 
       <div className="toolbar-actions" hidden={view !== 'cues'}>
         {PRIMARY_CUES.map(({ type, label }) => (
-          <button key={type} className="toolbar-cue-btn" onClick={() => handleAddCue(type)}>
+          <button
+            key={type}
+            className="toolbar-cue-btn"
+            onClick={() => handleAddCue(type)}
+            // Dragged into the list, the cue lands where it is let go rather than after the
+            // selection — the way a cue is put between two others without selecting either.
+            draggable
+            onDragStart={e => startNewCueDrag(e.dataTransfer, type)}
+            title={`${label}: click to add after the selection, or drag into the list`}
+          >
             <CueIcon type={type} className="toolbar-cue-icon" />
             {label}
           </button>
@@ -310,6 +329,8 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
                   className="toolbar-more-menu-item"
                   data-locked={isProCueType(type) && !pro}
                   onClick={() => { handleAddCue(type); setMoreMenuOpen(false) }}
+                  draggable
+                  onDragStart={e => startNewCueDrag(e.dataTransfer, type)}
                 >
                   <CueIcon type={type} className="toolbar-more-menu-icon" />
                   {label}
@@ -365,6 +386,18 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
           title={pro ? 'Scenes and mics, for running the show' : 'Scenes — part of Cuerunner Pro'}
         >
           Scenes
+          {!pro && <ProMark />}
+        </button>
+        <button
+          className="toolbar-view-btn"
+          role="tab"
+          aria-selected={view === 'lighting'}
+          data-active={view === 'lighting'}
+          data-locked={!pro}
+          onClick={() => onSwitchView('lighting')}
+          title={pro ? 'The lighting rig: patch, faders and the DMX going out' : 'Lighting — part of Cuerunner Pro'}
+        >
+          Lighting
           {!pro && <ProMark />}
         </button>
       </div>

@@ -205,6 +205,19 @@ describe('Toolbar', () => {
     expect(useStore.getState().cues.map(cue => cue.type)).toEqual(['audio'])
   })
 
+  it('aims a fade at a selected Light cue too: its intensity is a level', () => {
+    useStore.setState({ cues: [], selectedId: null, selectedIds: [], past: [], future: [] })
+    act(() => { useStore.getState().addCue('light') })
+    const light = useStore.getState().cues[0]
+    render('cues')
+
+    const fadeButton = [...container.querySelectorAll<HTMLButtonElement>('.toolbar-cue-btn')]
+      .find(button => button.textContent === 'Fade')!
+    act(() => fadeButton.click())
+
+    expect(useStore.getState().cues[1]).toMatchObject({ type: 'fade', name: 'Fade Light Cue', targetCueId: light.id })
+  })
+
   it('leaves a fade un-aimed when the selected cue has no sound to fade', () => {
     useStore.setState({ cues: [], selectedId: null, selectedIds: [], past: [], future: [] })
     act(() => { useStore.getState().addCue('wait') })

@@ -3,11 +3,20 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { useStore } from '../../store'
 import { CueRow } from './CueRow'
 import { CueContextMenu } from './CueContextMenu'
+import { BatchEditDialog } from './BatchEditDialog'
+import { clipboardHandlers } from '../../hooks/useCueClipboard'
+import { ColumnHeader } from './ColumnHeader'
+import { layoutStyle, loadLayout, saveLayout, type ColumnLayout } from '../../utils/cueColumns'
 import { groupDurationMs } from '../../utils/cueDuration'
-import { cueNameFromFile } from '../../utils/cueDefaults'
+import { createCue, cueNameFromFile, nextCueNumber } from '../../utils/cueDefaults'
+import { droppedCueType, isNewCueDrag } from '../../utils/newCueDrag'
+import { isProCueType } from '../../../../shared/cue'
+import { isPro } from '../../../../shared/license'
 import { groupLengthState, mediaLengthsFrom, mediaLengthState } from '../../utils/mediaLength'
 import { openDemoWorkspace } from '../../hooks/useWorkspace'
 import { AUDIO_FORMATS_SENTENCE, isPlayableAudioFile } from '../../../../shared/media'
+import { isMidiFileName } from '../../../../shared/midiFile'
+import { addMidiFileCuesFromFiles } from '../../utils/midiFileDrop'
 import './CueList.css'
 
 /** How many refused files a notice names before it counts the rest. */
@@ -22,7 +31,7 @@ export function refusedDropNotice(names: string[]): string {
   const named = names.slice(0, NAMED_REFUSALS).join(', ')
   const rest = names.length - NAMED_REFUSALS
   const others = rest > 0 ? ` and ${rest} more` : ''
-  return `Not added — Cuerunner plays ${AUDIO_FORMATS_SENTENCE}: ${named}${others}`
+  return `Not added — Cuerunner plays ${AUDIO_FORMATS_SENTENCE} audio, and MIDI files: ${named}${others}`
 }
 
 // One entry in the virtualizer's flat render list.
@@ -77,6 +86,7 @@ export function CueList() {
   const updateCues = useStore(s => s.updateCues)
   const moveCue = useStore(s => s.moveCue)
   const addAudioCuesFromFiles = useStore(s => s.addAudioCuesFromFiles)
+  const insertCues = useStore(s => s.insertCues)
 
   // Collapse state is session state in the store — the toolbar's expand/collapse act on
   // it, and it is not persisted to the workspace.
@@ -86,6 +96,8 @@ export function CueList() {
   // Context menu state
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; cueId: string } | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
+  // The cues a batch edit from the menu is open for; the menu closes as the dialog opens.
+  const [batchIds, setBatchIds] = useState<string[] | null>(null)
 
   const openCtxMenu = useCallback((e: React.MouseEvent, cueId: string) => {
     e.preventDefault()
@@ -131,6 +143,9 @@ export function CueList() {
     }
     return items
   }, [cues, collapsedGroupIds])
+  // Read by the background's drag handler, which is not rebuilt per render.
+  const renderItemsRef = useRef(renderItems)
+  renderItemsRef.current = renderItems
 
   // The rows the operator can see, in the order they are drawn: a shift-range runs along
   // this, so a collapsed group's hidden children are not part of a range anybody can see.
@@ -164,6 +179,14 @@ export function CueList() {
 
   const [dragRenderIndex, setDragRenderIndex] = useState<number | null>(null)
   const [dropRenderIndex, setDropRenderIndex] = useState<number | null>(null)
+  // A cue type dragged off the toolbar is over the list: it drops where the line is drawn.
+  const [newCueOver, setNewCueOver] = useState(false)
+  // The columns as this operator has arranged them on this machine.
+  const [columns, setColumnLayout] = useState<ColumnLayout>(loadLayout)
+  const setColumns = useCallback((next: ColumnLayout) => {
+    setColumnLayout(next)
+    saveLayout(next)
+  }, [])
 
   // Hover-expand: auto-expand a collapsed group when dragged over for 700ms
   const hoverGroupIdRef = useRef<string | null>(null)
@@ -216,6 +239,15 @@ export function CueList() {
   }, [])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
+    // A new cue over the list's own background — the empty list's message, the header — is a
+    // drop at the end of the show.
+    if (isNewCueDrag(e.dataTransfer)) {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+      setNewCueOver(true)
+      setDropRenderIndex(renderItemsRef.current.length)
+      return
+    }
     if (!e.dataTransfer.types.includes('Files')) return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
@@ -231,6 +263,7 @@ export function CueList() {
   }, [])
 
   const handleFileDrop = useCallback((e: React.DragEvent) => {
+    if (isNewCueDrag(e.dataTransfer)) { newCueDropRef.current?.(e); return }
     if (!e.dataTransfer.types.includes('Files')) return
     e.preventDefault()
     dragCounterRef.current = 0
@@ -247,7 +280,12 @@ export function CueList() {
     if (audioFiles.length > 0) {
       addAudioCuesFromFiles(audioFiles, selectedId ?? undefined)
     }
-    const refused = dropped.filter(f => !isPlayableAudioFile(f.name)).map(f => f.name)
+    // A MIDI file becomes a MIDI File cue, after whatever the drop has added so far.
+    const midiFiles = dropped.filter(f => isMidiFileName(f.name)).map(f => window.cuerunner.getPathForFile(f))
+    if (midiFiles.length > 0) {
+      addMidiFileCuesFromFiles(midiFiles, useStore.getState().selectedId ?? undefined)
+    }
+    const refused = dropped.filter(f => !isPlayableAudioFile(f.name) && !isMidiFileName(f.name)).map(f => f.name)
     if (refused.length > 0) useStore.getState().setNotice(refusedDropNotice(refused))
   }, [addAudioCuesFromFiles, selectedId])
 
@@ -267,9 +305,14 @@ export function CueList() {
   }, [clearHoverTimer])
 
   const handleRowDragOver = useCallback((e: React.DragEvent, renderIndex: number) => {
-    if (!e.dataTransfer.types.includes('application/x-cue-render-index')) return
+    const fresh = isNewCueDrag(e.dataTransfer)
+    if (!fresh && !e.dataTransfer.types.includes('application/x-cue-render-index')) return
     e.preventDefault()
     e.stopPropagation()
+    if (fresh) {
+      e.dataTransfer.dropEffect = 'copy'
+      setNewCueOver(true)
+    }
 
     const item = renderItems[renderIndex]
 
@@ -296,14 +339,59 @@ export function CueList() {
   }, [renderItems, clearHoverTimer, toggleGroup])
 
   const handleScrollDragOver = useCallback((e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes('application/x-cue-render-index')) return
+    const fresh = isNewCueDrag(e.dataTransfer)
+    if (!fresh && !e.dataTransfer.types.includes('application/x-cue-render-index')) return
     e.preventDefault()
     e.stopPropagation()
+    if (fresh) {
+      e.dataTransfer.dropEffect = 'copy'
+      setNewCueOver(true)
+    }
     clearHoverTimer()
     setDropRenderIndex(renderItems.length)
   }, [renderItems.length, clearHoverTimer])
 
+  // A cue type off the toolbar lands where the line was: a new cue, with the next number and
+  // the parent the drop position gives it, placed and selected as one edit.
+  const handleNewCueDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    clearHoverTimer()
+    const type = droppedCueType(e.dataTransfer)
+    const at = dropRenderIndex
+    setNewCueOver(false)
+    setDropRenderIndex(null)
+    if (type === null || at === null) return
+    const state = useStore.getState()
+    // A Pro type is the license's to give, as the toolbar's own click says.
+    if (isProCueType(type) && !isPro(state.license)) {
+      state.openSettings('license')
+      return
+    }
+    const cue = { ...createCue(type, nextCueNumber(cues)), parentId: dropParentId(renderItems, at) }
+    if (cue.type === 'audio') cue.trimSilence = state.audioSettings.autoTrimSilence === true
+    const beforeIndex = at < renderItems.length ? renderItems[at].flatIndex : cues.length
+    insertCues([cue], { beforeIndex })
+  }, [dropRenderIndex, renderItems, cues, insertCues, clearHoverTimer])
+
+  const newCueDropRef = useRef(handleNewCueDrop)
+  newCueDropRef.current = handleNewCueDrop
+
+  // A drag off the toolbar that ends anywhere but the list — dropped back on the toolbar,
+  // or let go outside the window — takes its line with it.
+  useEffect(() => {
+    const ended = (): void => {
+      setNewCueOver(over => {
+        if (over) setDropRenderIndex(null)
+        return false
+      })
+    }
+    document.addEventListener('dragend', ended)
+    return () => document.removeEventListener('dragend', ended)
+  }, [])
+
   const handleReorderDrop = useCallback((e: React.DragEvent) => {
+    if (isNewCueDrag(e.dataTransfer)) { handleNewCueDrop(e); return }
     if (!e.dataTransfer.types.includes('application/x-cue-render-index')) return
     e.preventDefault()
     e.stopPropagation()
@@ -327,7 +415,7 @@ export function CueList() {
     setDropRenderIndex(null)
 
     moveCue(fromFlat, beforeFlat, newParent)
-  }, [dropRenderIndex, renderItems, cues.length, moveCue, clearHoverTimer])
+  }, [dropRenderIndex, renderItems, cues.length, moveCue, clearHoverTimer, handleNewCueDrop])
 
   const handleRowDragEnd = useCallback(() => {
     clearHoverTimer()
@@ -398,12 +486,15 @@ export function CueList() {
     }
   }, [renderItems, selectedId, selectedIds, select, removeCues, duplicateCues, updateCues, cues, ctxMenu, closeCtxMenu])
 
+  // Edit → Copy, Cut and Paste, and their keys, as the list's own clipboard events.
+  const clipboard = useMemo(() => clipboardHandlers(() => useStore.getState().selectedIds), [])
+
   // ── Drop indicator ────────────────────────────────────────────────────────
 
-  const showDropIndicator = dropRenderIndex !== null &&
+  const showDropIndicator = dropRenderIndex !== null && (newCueOver || (
     dragRenderIndex !== null &&
     dropRenderIndex !== dragRenderIndex &&
-    dropRenderIndex !== dragRenderIndex + 1
+    dropRenderIndex !== dragRenderIndex + 1))
 
   const dropIndicatorTop = (() => {
     if (!showDropIndicator || dropRenderIndex === null) return null
@@ -427,20 +518,16 @@ export function CueList() {
       className="cue-list-container"
       tabIndex={0}
       onKeyDown={handleKeyDown}
+      {...clipboard}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleFileDrop}
       data-drag-over={isDragOver}
+      data-hidden={columns.hidden.join(' ')}
+      style={layoutStyle(columns)}
     >
-      <div className="cue-list-header">
-        <span className="col-num">#</span>
-        <span className="col-name">Name</span>
-        <span className="col-dur">Duration</span>
-        <span className="col-pre">Pre</span>
-        <span className="col-post">Post</span>
-        <span className="col-adv">Advance</span>
-      </div>
+      <ColumnHeader layout={columns} onLayout={setColumns} />
       <div
         ref={parentRef}
         className="cue-list-scroll"
@@ -503,7 +590,7 @@ export function CueList() {
       )}
       {isDragOver && (
         <div className="cue-list-drop-hint">
-          Drop audio files to create cues
+          Drop audio or MIDI files to create cues
         </div>
       )}
       {ctxMenu && (() => {
@@ -518,9 +605,11 @@ export function CueList() {
               setRenamingId(ctxMenu.cueId)
               setTimeout(() => setRenamingId(null), 100)
             }}
+            onBatchEdit={setBatchIds}
           />
         ) : null
       })()}
+      {batchIds !== null && <BatchEditDialog ids={batchIds} onClose={() => setBatchIds(null)} />}
     </div>
   )
 }

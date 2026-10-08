@@ -1,0 +1,184 @@
+/* The cart: the list as a wall of buttons. Tiles in the list's own surfaces, a running one in
+   the playing row's green, a disarmed one set back. */
+.app-main[data-view='cart'] { grid-template-columns: minmax(0, 1fr); }
+
+/* The cart plays the show rather than building it: the buttons that add cues step aside. */
+.app-shell.in-cart .toolbar-actions,
+.app-shell.in-cart .toolbar-list-actions,
+.app-shell.in-cart .toolbar-divider { display: none; }
+
+.cart {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg-well);
+}
+
+.cart-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.cart-title {
+  font-weight: var(--fw-bold);
+  color: var(--accent-blue);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  font-size: var(--text-sm);
+}
+
+.cart-hint {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.cart-exit {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-body);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.cart-exit:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+.cart-empty {
+  padding: var(--space-4);
+  color: var(--fg-muted);
+  font-size: var(--text-md);
+}
+
+.cart-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  grid-auto-rows: 112px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  align-content: start;
+}
+
+.cart-tile {
+  position: relative;
+  min-width: 0;
+}
+
+.cart-tile-fire {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-1);
+  width: 100%;
+  height: 100%;
+  padding: var(--space-2) var(--space-3) var(--space-2) calc(var(--space-3) + 4px);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--fg-primary);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.cart-tile-fire:hover:not(:disabled) { background: var(--bg-hover); }
+.cart-tile-fire:active:not(:disabled) { background: var(--bg-raised); }
+.cart-tile-fire:disabled { cursor: default; }
+
+.cart-tile-color {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+
+.cart-tile-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.cart-tile-number {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--fg-body);
+}
+
+.cart-tile-icon { color: var(--fg-muted); }
+
+.cart-tile-key {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--fg-muted);
+}
+
+.cart-tile-name {
+  font-size: var(--text-md);
+  font-weight: var(--fw-semi);
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.cart-tile-time {
+  margin-top: auto;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  color: var(--fg-body);
+}
+
+.cart-tile-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+}
+
+.cart-tile-progress i {
+  display: block;
+  height: 100%;
+  background: var(--ok-fg);
+  transform-origin: left center;
+  will-change: transform;
+}
+
+.cart-tile-stop {
+  position: absolute;
+  right: var(--space-2);
+  bottom: var(--space-2);
+  width: 28px;
+  height: 24px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--fg-body);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.cart-tile-stop:hover { background: var(--bg-hover); color: var(--fg-primary); }
+
+.cart-tile[data-state='playing'] .cart-tile-fire { background: var(--bg-playing-row); border-color: var(--ok-border); }
+.cart-tile[data-state='pre-wait'] .cart-tile-fire,
+.cart-tile[data-state='post-wait'] .cart-tile-fire,
+.cart-tile[data-state='paused'] .cart-tile-fire { background: var(--bg-prewait-row); }
+.cart-tile[data-armed='false'] .cart-tile-name { color: var(--fg-subtle); text-decoration: line-through; }

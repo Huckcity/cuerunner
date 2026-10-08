@@ -1,0 +1,60 @@
+/* The output strip: the meter and the master, at the transport's right edge. The bars are
+   scaled, not resized, so a reading is one compositor move rather than a layout. */
+.output-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.output-meter {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  width: 72px;
+  height: 22px;
+  padding: 3px;
+  background: var(--bg-well);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.output-meter[data-clipped='true'] { border-color: var(--danger-fg); }
+
+/* Green to the last fifth of the scale — the top 12 dB — amber there, as a desk's meter
+   reads. The scale is the track's own and stays put; the reading uncovers it from the left,
+   so the amber is always at the same place on the meter rather than squeezed into the bar. */
+.output-meter-track {
+  position: relative;
+  display: block;
+  height: 5px;
+  background: linear-gradient(90deg, var(--ok-fg) 0%, var(--ok-fg) 80%, var(--accent-amber) 80%);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.output-meter-bar {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-card);
+  transform-origin: right center;
+  transform: scaleX(1);
+  will-change: transform;
+}
+
+.master-fader {
+  width: 92px;
+  accent-color: var(--accent-blue);
+}
+
+.master-readout {
+  min-width: 56px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  color: var(--fg-body);
+  text-align: right;
+  cursor: default;
+}

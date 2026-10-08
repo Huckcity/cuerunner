@@ -1,5 +1,6 @@
 import { savedShape, type WorkspaceValues } from '../../../shared/workspaceSections'
 import type { Workspace } from '../../../shared/workspace'
+import { isEmptyLighting, type LightingSettings } from '../../../shared/dmx'
 import { isDefaultTimecodeShow, type TimecodeShowSettings } from '../../../shared/timecode'
 
 // The saved form of the current session. A real save and an autosave snapshot are built
@@ -22,12 +23,20 @@ import { isDefaultTimecodeShow, type TimecodeShowSettings } from '../../../share
 // to replace it and writes the entry itself. The store carries the result back, so a save
 // appends to the file's history rather than replacing it with this session's.
 //
+// The lighting rig is the one section every caller has to name, even as nothing: it is
+// optional on the saved form, so a call site that forgot it would compile and save a show
+// without its rig. A show with no rig writes no section, the way a show with no past writes
+// no history — so a show saved before lighting existed stays byte-identical.
+//
 // The show's timecode is a section every caller has to name, even as nothing: it is
 // optional on the saved form, so a call site that forgot it would compile and save a show
 // that had stopped chasing. A show that leaves it at the defaults writes no section — so a
 // show saved before timecode existed, or that never touched it, stays byte-identical.
 export function buildWorkspace(
-  values: Omit<WorkspaceValues, 'version' | 'timecode'> & { timecode: TimecodeShowSettings | undefined }
+  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode'> & {
+    lighting: LightingSettings | undefined
+    timecode: TimecodeShowSettings | undefined
+  }
 ): Workspace {
   return savedShape({
     version: 1,
@@ -35,6 +44,7 @@ export function buildWorkspace(
     // A file with nothing to say about its past says nothing: an empty array here would
     // be the key every save of every show carries for no reason.
     history: values.history && values.history.length > 0 ? values.history : undefined,
+    lighting: values.lighting === undefined || isEmptyLighting(values.lighting) ? undefined : values.lighting,
     timecode: values.timecode === undefined || isDefaultTimecodeShow(values.timecode) ? undefined : values.timecode
   })
 }

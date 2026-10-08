@@ -247,6 +247,13 @@ class Engine {
   bool stopAll(double fadeMs, CommandResultDTO& out, EngineError& error);
   bool seekCue(const std::string& cueId, double positionMs, double whenMs, SeekResultDTO& out, EngineError& error);
   bool cancelCue(const std::string& cueId, double whenMs, CancelResultDTO& out, EngineError& error);
+  /** Holds a cue's voice where it stands, at `whenMs` (0 is now); `applied` is false for a
+   *  voice already held or a cue with nothing playing. */
+  bool pauseCue(const std::string& cueId, double whenMs, CommandResultDTO& out, EngineError& error);
+  /** Lets a held voice go on, every timed thing about it moved on by the hold. */
+  bool resumeCue(const std::string& cueId, double whenMs, CommandResultDTO& out, EngineError& error);
+  /** Sets the level everything leaves the engine at, 0 to 2 (+6 dB), ramped over a block. */
+  bool setMaster(double gain, CommandResultDTO& out, EngineError& error);
   /**
    * Ends a voice's loop and plays it out to the end of the file, from wherever the loop
    * is — or to `endMs` when `hasEnd` names one, which is where a cue trimmed of its
@@ -262,6 +269,8 @@ class Engine {
                 CommandResultDTO& out, EngineError& error);
   bool panic(double fadeMs, PanicResultDTO& out, EngineError& error);
   bool progress(const std::string& cueId, VoiceSnapshot& out, bool& found) const;
+  /** The output's meter as the last block left it: each channel's peak, and the master level. */
+  void meters(int& channels, float* peaks, double& master, double& atMs) const;
   double clockMs() const;
   /** The identity minted when this engine instance was constructed. */
   const std::string& sessionId() const { return sessionId_; }

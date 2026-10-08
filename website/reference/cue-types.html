@@ -42,7 +42,7 @@
     <section class="panel reveal">
       <h1>Cue types</h1>
       <p class="doc-lede">
-        Twelve types. Every one of them carries the common fields below, and then its own.
+        Fourteen types. Every one of them carries the common fields below, and then its own.
       </p>
     </section>
 
@@ -77,6 +77,7 @@
             <tr><td>Start time / End time</td><td>0 / end of file</td><td>The part of the file this cue plays. Draggable on the waveform.</td></tr>
             <tr><td>Trim silence</td><td>off</td><td>Starts at the first sound in the file and ends at the last, where silence is anything below −60 dBFS. Never rewrites the region you set: turning it off plays the whole region again.</td></tr>
             <tr><td>Fade in</td><td>0 s</td><td>Ramps up from silence over this long when the cue starts.</td></tr>
+            <tr><td>Fade out</td><td>0 s</td><td>Ramps down to silence over this long so that the ramp ends where the cue does: the end of its region, or of its last loop. The engine times it from the cue's planned end, and a seek or a rate change moves it with the end. A cue that loops for ever has no end to land on; fade it with a fade or stop cue. STOP still cuts at once.</td></tr>
             <tr><td>Volume</td><td>100%</td><td>The cue's own level, applied to every output.</td></tr>
             <tr><td>Pan</td><td>centre</td><td>−1 to 1. Automatic routing spreads it across the pair.</td></tr>
             <tr><td>Rate</td><td>1.00×</td><td>Playback speed, 0.25× to 4×.</td></tr>
@@ -99,11 +100,11 @@
             </tr>
             <tr>
               <td><strong>Fade</strong></td>
-              <td><strong>Target</strong> (an audio cue), <strong>Property</strong> (volume or pan), <strong>Target value</strong>, <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic) and <strong>Stop when done</strong> — which makes it a fade-out.</td>
+              <td><strong>Target</strong> (an audio cue, or a Light cue), <strong>Property</strong> (volume, pan, or volume and pan together — a <strong>Target pan</strong> beside the volume, both on the one time and curve; a Light cue's is its intensity), <strong>Target value</strong> (0 to 1 for a volume, −1 left to 1 right for a pan), <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic) and <strong>Stop when done</strong> — which makes it a fade-out. On a Light cue the target value is a share of the intensity the cue set: 0 is out, 1 is where the cue put it, and stopping it when done releases the cue.</td>
             </tr>
             <tr>
               <td><strong>Stop</strong></td>
-              <td><strong>Target</strong> (a cue, or All cues), <strong>Fade out</strong> with a <strong>duration</strong>, and <strong>Wait for fade</strong>, which holds the show until the fade has finished instead of completing as soon as the target is told to stop.</td>
+              <td><strong>Target</strong> (a cue, or All cues), <strong>Fade out</strong> with a <strong>duration</strong>, and <strong>Wait for fade</strong>, which holds the show until the fade has finished instead of completing as soon as the target is told to stop. A Light cue stopped without a fade-out stays on where its fade had got to; with one, what it holds fades home over the fade-out.</td>
             </tr>
             <tr>
               <td><strong>Devamp</strong></td>
@@ -123,7 +124,7 @@
           <tbody>
             <tr><td>Sequence</td><td>Children in order, each after the one before.</td></tr>
             <tr><td>All at once</td><td>Every child together.</td></tr>
-            <tr><td>Random</td><td>One child, chosen at random.</td></tr>
+            <tr><td>Random</td><td>One child, drawn at random — every child once before any of them twice, and never the same one twice running across the seam between passes.</td></tr>
             <tr><td>Timeline</td><td>Each child at its own offset, edited by dragging in the dock.</td></tr>
           </tbody>
         </table>
@@ -131,6 +132,30 @@
       <p>
         A group's duration is worked out from its children. Stopping a group stops them
         too.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="light">
+      <h2>Light<span class="pro">Pro</span></h2>
+      <p>A look for the lighting rig, faded in over sACN or Art-Net. The rig itself is set up in the <a href="../guides/lighting.html">Lighting view</a>.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Field</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Fade</td><td>3 s</td><td>How long the look takes to arrive. It is the cue's duration: the run ends, and On end advances, when the fade does. Up to an hour.</td></tr>
+            <tr><td>Curve</td><td>Linear</td><td>Linear, S-curve or logarithmic — the shapes an audio fade takes.</td></tr>
+            <tr><td>Intensity</td><td>Latest takes precedence</td><td><strong>Latest takes precedence</strong>: the cue takes every parameter it sets from whichever cue had it. <strong>Highest takes precedence</strong>: its intensity sits beside every other such cue's, and the light is the brightest of them and of the tracked level. Colour and position are latest takes precedence either way.</td></tr>
+            <tr><td>Look</td><td>empty</td><td>Levels, 0–100%: a fixture's parameter, or a group's — reaching every member that has it. A later line for the same parameter wins. A fixture removed from the rig is shown as gone and sends nothing. What the look does not name tracks: it stays where earlier cues left it.</td></tr>
+            <tr><td>Effects</td><td>none</td><td>A parameter that keeps moving after the fade: sine, triangle, square or saw, between a low and a high, 0.01–25 cycles a second. On a group, <strong>spread</strong> shares a cycle out across the members — 100% is a chase. A later cue that sets the parameter ends it.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        STOP stops the fade where it is and leaves the light on; a Stop cue with a fade-out
+        releases it home; a panic does what the show's <strong>On panic</strong> says — hold,
+        release or black out. The <strong>Tracking</strong> tab lists every parameter with a
+        value at the cue: moved by it, set to what it already was, or tracking from an
+        earlier cue. Without a licence the cue stays in the show and is refused when fired.
       </p>
     </section>
 
@@ -142,11 +167,11 @@
           <tbody>
             <tr>
               <td><strong>MIDI</strong></td>
-              <td><strong>Port</strong> (or the show's default output) and a list of messages: note on, note off, control change, program change, or raw sysex bytes.</td>
+              <td><strong>Port</strong> (or the show's default output) and a list of messages: note on, note off, control change, program change, or raw sysex bytes. <strong>Send now</strong> sends them from the inspector without running the cue.</td>
             </tr>
             <tr>
               <td><strong>OSC</strong></td>
-              <td><strong>Host</strong>, <strong>Port</strong>, <strong>Address</strong>, and arguments typed as integer, float, string, true or false.</td>
+              <td><strong>Host</strong>, <strong>Port</strong>, <strong>Address</strong>, and arguments typed as integer, float, string, true or false. <strong>Send now</strong> sends the message from the inspector without running the cue — the check that the console is listening — and says whether it left.</td>
             </tr>
             <tr>
               <td><strong>Network</strong></td>
@@ -157,8 +182,16 @@
               <td>MSC. <strong>Send on</strong> the show's desk connection or a MIDI port, a <strong>command</strong> (Go, Stop, Resume, Load…), the equipment <strong>format</strong>, a <strong>device ID</strong> (127 reaches everything), and a <strong>cue</strong> and <strong>list</strong> where the command carries them.</td>
             </tr>
             <tr>
+              <td><strong>MIDI File</strong></td>
+              <td>Plays a Standard MIDI File (<code>.mid</code>, <code>.midi</code>, <code>.smf</code>, <code>.kar</code>, or an <code>.rmi</code> wrapping one) to one <strong>MIDI Port</strong>, or the show's default output. Formats 0, 1 and 2; the file's tempo map is read whole, so a tempo change anywhere in it moves everything after it, and an SMPTE-timed file plays by its frames. <strong>Rate</strong> 0.25×–4×, <strong>Start time</strong> and <strong>End time</strong> (the region, in the file's own seconds), and <strong>Loop count</strong> (0 plays once, −1 loops until stopped). On the <strong>Channels</strong> tab: each of the file's sixteen channels sent as itself, as another channel, or not at all; and <strong>Transpose</strong> in semitones (±48), which leaves channel 10 — General MIDI's drums — alone unless <strong>Channel 10 too</strong> is ticked. The tab lists the file's tracks by name with their notes, events and channels. The cue completes when its file does, so Auto-follow works; looping until stopped holds the show until a Stop takes it. Started part-way — a timeline seek, a takeover — or at a start time, every channel is first put where the file had it there: program and bank, controllers, RPN and NRPN settings such as the pitch-bend range, pitch bend and pressure; notes already sounding are not struck again. Stopping releases every note the cue started and lifts the sustain pedal on every channel it played on; PANIC also sends All Notes Off on those channels. While it runs, <strong>Pause</strong> holds the file silent and <strong>Resume</strong> plays on from the same place. A file that is not MIDI, or is damaged, says why in the tab and on the cue's Last run; so does a port that is not connected.</td>
+            </tr>
+            <tr>
               <td><strong>Script</strong></td>
               <td><strong>Script</strong> and <strong>Timeout</strong> (60000 ms; 0 waits for ever). See the <a href="./script-api.html">script API</a>.</td>
+            </tr>
+            <tr>
+              <td><strong>Memo</strong></td>
+              <td>A note in the stack — "hold for the bow", "LX 40 is called by the SM". Its words are its <strong>Name</strong> and <strong>Notes</strong> on Basics, and the first line of the note is read on its row. GO completes it at once: an advance passes straight through it, so a memo between two cues never holds the show.</td>
             </tr>
             <tr>
               <td><strong>Mic</strong><span class="pro">Pro</span></td>

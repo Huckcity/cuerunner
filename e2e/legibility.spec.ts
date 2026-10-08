@@ -73,7 +73,8 @@ test('the list header is dim words with room between them', async () => {
   expect(await color('.col-adv')).toBe(await color('.col-dur'))
 
   const post = await header.locator('.col-post').boundingBox()
-  const adv = await header.locator('.col-adv').evaluate(node => {
+  // The heading's words, not its resize handle, which reaches back into the gap on purpose.
+  const adv = await header.locator('.col-adv .column-label').evaluate(node => {
     const range = document.createRange()
     range.selectNodeContents(node)
     return range.getBoundingClientRect().left

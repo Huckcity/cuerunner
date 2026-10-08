@@ -18,6 +18,7 @@ function saved(): Workspace {
     midiSettings: s.midiSettings,
     showSettings: s.showSettings,
     triggerGuard: s.triggerGuard,
+    lighting: s.lighting,
     timecode: s.timecode,
     cues: s.cues
   })
@@ -34,7 +35,7 @@ beforeEach(() => {
 describe('the show’s timecode in the store', () => {
   it('opens with the show, and follows with the defaults when the file says nothing', () => {
     useStore.getState().loadWorkspace([], 'Chasing', '/shows/a.cuerunner', undefined, undefined, undefined,
-      undefined, undefined, [], chasing)
+      undefined, undefined, [], undefined, chasing)
     expect(useStore.getState().timecode).toEqual(chasing)
 
     useStore.getState().loadWorkspace([], 'Older', '/shows/b.cuerunner')

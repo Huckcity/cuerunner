@@ -382,3 +382,13 @@
   font-size: var(--text-xs);
   color: var(--fg-body);
 }
+
+/* Send now: what the press did, beside it — sent in the ok tone, a failure in the socket's
+   own words in the danger tone. */
+.send-now-result {
+  font-size: var(--text-sm);
+  min-width: 0;
+}
+
+.send-now-result[data-ok='true'] { color: var(--ok-fg); }
+.send-now-result[data-ok='false'] { color: var(--danger-fg); }

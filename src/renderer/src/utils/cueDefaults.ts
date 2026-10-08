@@ -1,7 +1,9 @@
 import type {
   AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, DevampCue, MicCue,
-  MscCue, Cue, CueType, AudioCrosspoint, TimecodeCue
+  MscCue, Cue, CueType, AudioCrosspoint, MemoCue, LightCue, TimecodeCue
 } from '../../../shared/cue'
+import type { MidiFileCue } from '../../../shared/cue'
+import { MIDI_FILE_IDENTITY_MAP } from '../../../shared/midiFile'
 
 // Every field a new cue is born with. createCue builds on these, and the inspector's
 // reset controls restore them — one definition, so the two can never drift apart.
@@ -28,6 +30,7 @@ export const AUDIO_DEFAULTS = {
   startTime: 0,
   endTime: null as number | null,
   fadeInDuration: 0,
+  fadeOutDuration: 0,
   volume: 1,
   pan: 0,
   // Automatic channel routing: the file's own channel layout decides where it goes.
@@ -116,6 +119,27 @@ export const MSC_DEFAULTS = {
   // console on a cable is the other answer, and it is one field away.
   destination: 'desk' as const,
   portName: ''
+}
+
+export const MIDI_FILE_DEFAULTS = {
+  // The show's own MIDI output port, like a MIDI cue that names none.
+  portName: '',
+  playbackRate: 1,
+  startTime: 0,
+  endTime: null as number | null,
+  loopCount: 0,
+  // The file as written: every channel on its own channel, nothing moved.
+  channelMap: [...MIDI_FILE_IDENTITY_MAP],
+  transpose: 0,
+  transposeDrums: false
+}
+
+export const LIGHT_DEFAULTS = {
+  // A look takes three seconds to arrive unless it says otherwise: long enough to read as a
+  // fade, short enough that a cue nobody has timed yet does not hold the show.
+  duration: 3000,
+  curve: 'linear' as const,
+  intensity: 'ltp' as const
 }
 
 /**
@@ -257,6 +281,30 @@ export function createCue(type: CueType, number = '1'): Cue {
         label: '',
         action: 'mute'
       } satisfies MicCue
+    case 'memo':
+      return {
+        ...base('Memo', number),
+        type: 'memo'
+      } satisfies MemoCue
+    case 'midiFile':
+      return {
+        ...base('MIDI File', number),
+        type: 'midiFile',
+        filePath: '',
+        ...MIDI_FILE_DEFAULTS,
+        // A fresh list per cue: the defaults' own must not be shared by every cue made.
+        channelMap: [...MIDI_FILE_IDENTITY_MAP]
+      } satisfies MidiFileCue
+    case 'light':
+      return {
+        ...base('Light Cue', number),
+        type: 'light',
+        // Nothing until it is recorded or built: a Light cue with an empty look changes
+        // nothing, which is what a cue nobody has written yet should do.
+        look: [],
+        effects: [],
+        ...LIGHT_DEFAULTS
+      } satisfies LightCue
     case 'timecode':
       return {
         ...base('Timecode', number),

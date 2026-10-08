@@ -15,8 +15,21 @@ const startTicker = (): void => {
   }, 25) as unknown as number
 }
 
+// The held show clock, faked the way the real client does it: a hold freezes the reading,
+// and a release takes the time held out of every reading after it.
+const clock = { heldAt: null as number | null, offset: 0 }
+
 export const audioEngine = {
-  nowMs: () => Date.now(),
+  nowMs: () => clock.heldAt ?? Date.now() - clock.offset,
+  holdClock: vi.fn(() => {
+    if (clock.heldAt === null) clock.heldAt = Date.now() - clock.offset
+  }),
+  releaseClock: vi.fn(() => {
+    if (clock.heldAt === null) return
+    clock.offset += (Date.now() - clock.offset) - clock.heldAt
+    clock.heldAt = null
+  }),
+  clockHeld: vi.fn(() => clock.heldAt !== null),
   syncClock: vi.fn(async () => Date.now()),
   onTick: (cb: () => void) => {
     subscribers.add(cb)
@@ -60,6 +73,10 @@ export const audioEngine = {
     state: 'playing' as const
   })),
   cancel: vi.fn(async (at: number) => ({ ok: true as const, at, canceled: 0 })),
+  pause: vi.fn(async () => ({ ok: true as const, at: Date.now(), applied: true })),
+  resume: vi.fn(async () => ({ ok: true as const, at: Date.now(), applied: true })),
+  master: vi.fn(async () => ({ ok: true as const, at: Date.now(), applied: true })),
+  meters: vi.fn(async () => ({ at: Date.now(), master: 1, peaks: [0, 0] })),
   routing: vi.fn(async (at: number) => ({ ok: true as const, at, applied: true })),
   fade: vi.fn(async (at: number) => ({ ok: true as const, at, applied: true })),
   progress: vi.fn(async () => null),
