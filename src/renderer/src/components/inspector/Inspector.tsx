@@ -17,9 +17,10 @@ import { StopInspector } from './StopInspector'
 import { DevampInspector } from './DevampInspector'
 import { MscInspector } from './MscInspector'
 import { MicInspector } from './MicInspector'
+import { LightInspector, LightTrackingTab } from '../lighting/LightInspector'
 import type {
   Cue, AudioCue, MidiCue, OscCue, WaitCue, FadeCue, GroupCue, NetworkCue, ScriptCue, StopCue, SceneCue, DevampCue,
-  MscCue, MicCue
+  MscCue, MicCue, LightCue
 } from '../../../../shared/cue'
 import { isProCueType } from '../../../../shared/cue'
 import './Inspector.css'
@@ -40,7 +41,8 @@ const TYPE_TABS: Record<string, string[]> = {
   scene: ['Basics', 'Scene'],
   devamp: ['Basics', 'Devamp'],
   msc: ['Basics', 'Show Control'],
-  mic: ['Basics', 'Mic']
+  mic: ['Basics', 'Mic'],
+  light: ['Basics', 'Light', 'Tracking']
 }
 
 const TRIGGERS_TAB = 'Triggers'
@@ -81,6 +83,17 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
         variant="inspector"
         feature="Mic cues"
         blurb="A cue that mutes or unmutes a radio mic at its receiver, so a pack is closed by the cue list and not by a hand on a fader."
+      />
+    )
+  }
+  if (tab === 'Light' || tab === 'Tracking') {
+    return pro ? (
+      tab === 'Light' ? <LightInspector cue={cue as LightCue} /> : <LightTrackingTab cue={cue as LightCue} />
+    ) : (
+      <ProLock
+        variant="inspector"
+        feature="Light cues"
+        blurb="A cue that fades the lighting rig to a look over sACN or Art-Net, tracking what it does not change."
       />
     )
   }

@@ -1,6 +1,7 @@
 import type { Cue } from './cue'
 import type { ShowSettings } from './show'
 import type { ShowHistoryEntry } from './showfile'
+import type { LightingSettings } from './dmx'
 
 export interface AudioSettings {
   /**
@@ -136,6 +137,12 @@ export interface Workspace {
    * bounced key truncates a cue.
    */
   triggerGuard?: TriggerGuardSettings
+  /**
+   * The lighting rig: fixtures, their types, groups, and where each universe goes. Optional:
+   * a show with no lights carries no such section, and a show saved before lighting existed
+   * opens with an empty rig rather than being refused.
+   */
+  lighting?: LightingSettings
   cues: Cue[]
 }
 

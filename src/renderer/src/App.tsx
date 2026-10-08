@@ -30,6 +30,8 @@ import { ScenesView } from './components/scenes/ScenesView'
 import { useSelectedCue, useStore, usePro } from './store'
 import type { GroupCue } from '../../shared/cue'
 import { ProLock } from './components/license/ProLock'
+import { LightingView } from './components/lighting/LightingView'
+import { useLightingBridge } from './hooks/useLightingBridge'
 import './App.css'
 
 // Store-backed notice bar: save and open failures land here, where a packaged build
@@ -61,6 +63,8 @@ export function App() {
   // The other machine on the desk: what it is doing with the show, and what to do with
   // the show it hands over.
   useRedundancy()
+  // The lighting engine is told where the show's universes go whenever that changes.
+  useLightingBridge()
   const settingsTab = useStore(s => s.settingsTab)
   const openSettings = useStore(s => s.openSettings)
   const closeSettings = useStore(s => s.closeSettings)
@@ -163,6 +167,16 @@ export function App() {
               variant="view"
               feature="Scenes"
               blurb="Who is open on stage, scene by scene. Recall one and the desk moves with the show."
+            />
+          )
+        ) : view === 'lighting' ? (
+          pro ? (
+            <LightingView />
+          ) : (
+            <ProLock
+              variant="view"
+              feature="Lighting"
+              blurb="The rig patched, faders to build a look, and sACN or Art-Net out of this machine, run from the cue list."
             />
           )
         ) : (

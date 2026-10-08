@@ -42,7 +42,7 @@
     <section class="panel reveal">
       <h1>Cue types</h1>
       <p class="doc-lede">
-        Twelve types. Every one of them carries the common fields below, and then its own.
+        Fourteen types. Every one of them carries the common fields below, and then its own.
       </p>
     </section>
 
@@ -99,11 +99,11 @@
             </tr>
             <tr>
               <td><strong>Fade</strong></td>
-              <td><strong>Target</strong> (an audio cue), <strong>Property</strong> (volume or pan), <strong>Target value</strong>, <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic) and <strong>Stop when done</strong> — which makes it a fade-out.</td>
+              <td><strong>Target</strong> (an audio cue, or a Light cue), <strong>Property</strong> (volume or pan; a Light cue's is its intensity), <strong>Target value</strong>, <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic) and <strong>Stop when done</strong> — which makes it a fade-out. On a Light cue the target value is a share of the intensity the cue set: 0 is out, 1 is where the cue put it, and stopping it when done releases the cue.</td>
             </tr>
             <tr>
               <td><strong>Stop</strong></td>
-              <td><strong>Target</strong> (a cue, or All cues), <strong>Fade out</strong> with a <strong>duration</strong>, and <strong>Wait for fade</strong>, which holds the show until the fade has finished instead of completing as soon as the target is told to stop.</td>
+              <td><strong>Target</strong> (a cue, or All cues), <strong>Fade out</strong> with a <strong>duration</strong>, and <strong>Wait for fade</strong>, which holds the show until the fade has finished instead of completing as soon as the target is told to stop. A Light cue stopped without a fade-out stays on where its fade had got to; with one, what it holds fades home over the fade-out.</td>
             </tr>
             <tr>
               <td><strong>Devamp</strong></td>
@@ -131,6 +131,30 @@
       <p>
         A group's duration is worked out from its children. Stopping a group stops them
         too.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="light">
+      <h2>Light<span class="pro">Pro</span></h2>
+      <p>A look for the lighting rig, faded in over sACN or Art-Net. The rig itself is set up in the <a href="../guides/lighting.html">Lighting view</a>.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Field</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Fade</td><td>3 s</td><td>How long the look takes to arrive. It is the cue's duration: the run ends, and On end advances, when the fade does. Up to an hour.</td></tr>
+            <tr><td>Curve</td><td>Linear</td><td>Linear, S-curve or logarithmic — the shapes an audio fade takes.</td></tr>
+            <tr><td>Intensity</td><td>Latest takes precedence</td><td><strong>Latest takes precedence</strong>: the cue takes every parameter it sets from whichever cue had it. <strong>Highest takes precedence</strong>: its intensity sits beside every other such cue's, and the light is the brightest of them and of the tracked level. Colour and position are latest takes precedence either way.</td></tr>
+            <tr><td>Look</td><td>empty</td><td>Levels, 0–100%: a fixture's parameter, or a group's — reaching every member that has it. A later line for the same parameter wins. A fixture removed from the rig is shown as gone and sends nothing. What the look does not name tracks: it stays where earlier cues left it.</td></tr>
+            <tr><td>Effects</td><td>none</td><td>A parameter that keeps moving after the fade: sine, triangle, square or saw, between a low and a high, 0.01–25 cycles a second. On a group, <strong>spread</strong> shares a cycle out across the members — 100% is a chase. A later cue that sets the parameter ends it.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        STOP stops the fade where it is and leaves the light on; a Stop cue with a fade-out
+        releases it home; a panic does what the show's <strong>On panic</strong> says — hold,
+        release or black out. The <strong>Tracking</strong> tab lists every parameter with a
+        value at the cue: moved by it, set to what it already was, or tracking from an
+        earlier cue. Without a licence the cue stays in the show and is refused when fired.
       </p>
     </section>
 

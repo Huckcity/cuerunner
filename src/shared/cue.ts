@@ -1,3 +1,5 @@
+import type { IntensityRule, LightEffect, LightLevel } from './dmx'
+
 /** A cue's colour label, or none. */
 export type CueColor = 'none' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink'
 
@@ -8,7 +10,7 @@ export type CueColor = 'none' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' |
  */
 export const CUE_TYPES = [
   'audio', 'midi', 'osc', 'wait', 'fade', 'stop',
-  'group', 'network', 'script', 'scene', 'devamp', 'msc', 'mic'
+  'group', 'network', 'script', 'scene', 'devamp', 'msc', 'mic', 'light'
 ] as const
 
 export type CueType = (typeof CUE_TYPES)[number]
@@ -23,8 +25,11 @@ export type CueType = (typeof CUE_TYPES)[number]
  * live equipment on the show's behalf, where a send the operator's own hand caused is not,
  * whichever socket it uses. The runner refuses these through `isProCueType` when the machine
  * is unlicensed.
+ *
+ * `light` too: a Light cue puts a look on the rig that the lighting engine holds and sends on
+ * the show's behalf for as long as the show runs, the way the desk is held by a scene.
  */
-export const PRO_CUE_TYPES = ['scene', 'mic'] as const satisfies readonly CueType[]
+export const PRO_CUE_TYPES = ['scene', 'mic', 'light'] as const satisfies readonly CueType[]
 
 export type ProCueType = (typeof PRO_CUE_TYPES)[number]
 
@@ -328,6 +333,27 @@ export interface MscCue extends CueBase {
   portName: string
 }
 
+/**
+ * A cue that puts a look on the lighting rig: the parameters it names fade to its values over
+ * its duration, and everything it does not name stays where the cues before it left it —
+ * tracking, the way a lighting console runs a cue list. A later cue that sets the same
+ * parameter takes it (latest takes precedence); intensity may instead combine highest takes
+ * precedence with every other cue that asks for that.
+ *
+ * Stopping a Light cue stops its fade where it is and leaves the light on; a Stop cue with a
+ * fade-out releases it, so what it holds fades home. A Fade cue aimed at one moves its
+ * intensity to a share of what it set.
+ */
+export interface LightCue extends CueBase {
+  type: 'light'
+  /** What the cue changes, and nothing it tracks. */
+  look: LightLevel[]
+  /** Parameters that keep moving once the cue has run — a sine, a chase. */
+  effects: LightEffect[]
+  curve: FadeCurve
+  intensity: IntensityRule
+}
+
 export type Cue =
   | AudioCue
   | MidiCue
@@ -342,3 +368,4 @@ export type Cue =
   | DevampCue
   | MscCue
   | MicCue
+  | LightCue

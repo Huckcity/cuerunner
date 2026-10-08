@@ -47,8 +47,13 @@
       <h2>The workspace file</h2>
       <p>
         A show is one <code>.cuerunner</code> file: JSON, holding the cues in order, the show's
-        setup — the desk, the cast, the scenes, the mic plot, the triggers — and the
-        window's own state such as which cue was selected.
+        setup — the desk, the cast, the scenes, the mic plot, the triggers, the lighting rig —
+        and the window's own state such as which cue was selected. The rig is a
+        <code>lighting</code> section — fixtures, the types they are, groups, each universe's
+        outputs and the consoles heard — written only once a show has one, so a show with no
+        lights saves the bytes it always did. Which network interface the lights leave by,
+        and the sACN identity this machine sends as, are the machine's, in
+        <code>dmx.json</code> beside the licence.
       </p>
       <p>
         <strong>It does not hold the audio.</strong> Each audio cue stores the path to its

@@ -39,6 +39,8 @@ import {
 import { CUE_TYPES, type AudioCue, type Cue, type CueBase } from '../../shared/cue'
 import type { ShowSettings } from '../../shared/show'
 import type { Workspace } from '../../shared/workspace'
+import { builtinFixtureTypes, defaultLightingSettings, type LightingSettings } from '../../shared/dmx'
+import { LIGHTING_SHAPE } from '../../shared/dmxShape'
 
 vi.mock('electron', () => ({
   // Nothing here touches the user-data folder; the serialiser needs no Electron at all.
@@ -79,6 +81,32 @@ function cue(id: string, name: string): AudioCue {
 }
 
 /**
+ * A rig with something in every list, so the walk reaches every field the lighting declares:
+ * a 16-bit moving head (a fine offset that is a number) and a dimmer (one that is `null`), a
+ * group, an output each way and an input.
+ */
+const lighting: LightingSettings = {
+  ...defaultLightingSettings(),
+  types: builtinFixtureTypes().filter(type => type.id === 'builtin:moving-head' || type.id === 'builtin:dimmer'),
+  fixtures: [
+    { id: 'fx-1', name: 'Spot 1', typeId: 'builtin:moving-head', mode: '16-bit, 6 channel', universe: 1, address: 1 },
+    { id: 'fx-2', name: 'House', typeId: 'builtin:dimmer', mode: '1 channel', universe: 1, address: 7 }
+  ],
+  groups: [{ id: 'gr-1', name: 'Everything', fixtureIds: ['fx-1', 'fx-2'] }],
+  outputs: [
+    {
+      id: 'out-1', universe: 1, protocol: 'sacn', transport: 'multicast', address: '',
+      wireUniverse: 1, priority: 100, enabled: true
+    },
+    {
+      id: 'out-2', universe: 1, protocol: 'artnet', transport: 'unicast', address: '10.0.0.40',
+      wireUniverse: 0, priority: 100, enabled: false
+    }
+  ],
+  inputs: [{ id: 'in-1', protocol: 'sacn', wireUniverse: 2, universe: 2, merge: false, enabled: true }]
+}
+
+/**
  * The whole shape, every optional section set: the walk needs a value it can move in every
  * section, including the ones a file need not carry, and `Required` keeps the fixture
  * honest if the `Workspace` type gains a key.
@@ -93,6 +121,7 @@ const fixture: Required<Workspace> = {
   midiSettings: { outputPortName: 'Desk' },
   showSettings: defaultShowSettings(),
   triggerGuard: { windowMs: 300 },
+  lighting,
   cues: [cue('a1', 'Walk-in'), cue('a2', 'Interval')]
 }
 
@@ -144,6 +173,7 @@ const declared: readonly WorkspaceKey[] = [
   'midiSettings',
   'showSettings',
   'triggerGuard',
+  'lighting',
   'cues'
 ]
 
@@ -162,12 +192,14 @@ describe('the saved shape', () => {
 
   it('leaves an unset section out of the file rather than writing an empty one', () => {
     const bare = serialiseWorkspace(
-      { ...fixture, history: undefined, showSettings: undefined, triggerGuard: undefined },
+      { ...fixture, history: undefined, showSettings: undefined, triggerGuard: undefined, lighting: undefined },
       SHOWS
     )
 
     expect(Object.keys(JSON.parse(bare))).toEqual(
-      declared.filter(key => key !== 'history' && key !== 'showSettings' && key !== 'triggerGuard')
+      declared.filter(
+        key => key !== 'history' && key !== 'showSettings' && key !== 'triggerGuard' && key !== 'lighting'
+      )
     )
   })
 
@@ -536,8 +568,30 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     channelId: 'ew-dx:5364000906:0',
     label: 'Aldonza (37)',
     action: 'mute'
+  },
+  light: {
+    ...cueBase('l1'),
+    type: 'light',
+    look: [
+      { target: 'fixture', id: 'fx-1', param: 'pan', value: 0.25 },
+      { target: 'group', id: 'gr-1', param: 'dimmer', value: 1 }
+    ],
+    effects: [
+      { target: 'group', id: 'gr-1', param: 'dimmer', shape: 'sine', rate: 0.5, low: 0.2, high: 1, spread: 1 }
+    ],
+    curve: 'sCurve',
+    intensity: 'ltp'
   }
 }
+
+describe('the lighting shape', () => {
+  it('declares every field a rig carries, with the kind it is written as', () => {
+    // The rig is walked beside its declaration the way a show's settings are: a field the rig
+    // carries and the declaration has not learned fails here, and so does a declared field the
+    // rig has not got.
+    expect(shapeDifferences(lighting, LIGHTING_SHAPE, 'lighting')).toEqual([])
+  })
+})
 
 describe('the cue-field shape', () => {
   it('declares every field a cue of every type carries, with the kind it is written as', () => {

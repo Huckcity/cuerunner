@@ -19,6 +19,7 @@ export function useAutosave(): void {
         midiSettings,
         showSettings,
         triggerGuard,
+        lighting,
         workspaceId,
         workspaceCreatedAt,
         showHistory,
@@ -36,6 +37,7 @@ export function useAutosave(): void {
         midiSettings,
         showSettings,
         triggerGuard,
+        lighting,
         cues
       })
       // The cue GO would fire next goes with the work: a crash mid-show is exactly when

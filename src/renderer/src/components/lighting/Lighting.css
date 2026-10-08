@@ -1,0 +1,314 @@
+/* The lighting view fills the window the way Scenes does: the rig is wide, and nothing sits
+   beside it. */
+.app-main[data-view='lighting'] { grid-template-columns: minmax(0, 1fr); }
+
+.lighting-view {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg-base);
+}
+
+/* Tabs on the left, the two presses that act on the whole rig on the right. */
+.lighting-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+  flex-shrink: 0;
+}
+
+.lighting-tabs {
+  display: flex;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.lighting-tab {
+  height: 26px;
+  padding: 0 var(--space-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--fg-muted);
+  font-family: inherit;
+  font-size: var(--text-base);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.lighting-tab:hover { color: var(--fg-primary); background: var(--bg-hover); }
+
+.lighting-tab[data-active='true'] {
+  color: var(--fg-primary);
+  background: var(--bg-card);
+  border-color: var(--border-input);
+}
+
+.lighting-status {
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+.lighting-status[data-state='degraded'],
+.lighting-status[data-state='failed'] { color: var(--warn-fg); }
+
+.lighting-btn {
+  height: 26px;
+  padding: 0 var(--space-2);
+  background: var(--border);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-body);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: var(--transition-fast);
+}
+
+.lighting-btn:hover:not(:disabled) { background: var(--border-input); color: var(--fg-primary); }
+.lighting-btn:disabled { color: var(--fg-disabled); cursor: default; }
+
+/* Blackout is a state, not a press: while it is on the button says so in the danger colour. */
+.lighting-btn[data-on='true'] {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger-fg);
+}
+
+.lighting-btn-remove:hover:not(:disabled) { color: var(--danger-fg); }
+
+.lighting-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-3) var(--space-4);
+}
+
+.lighting-section-title {
+  margin: var(--space-4) 0 var(--space-2);
+  font-family: var(--font-cond);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-semi);
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+}
+
+.lighting-section-title:first-child { margin-top: 0; }
+
+/* A form across the top of a panel: field rows side by side where the window has room. */
+.lighting-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  column-gap: var(--space-4);
+  max-width: 1100px;
+}
+
+.lighting-form-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.lighting-error {
+  font-size: var(--text-sm);
+  color: var(--danger-fg);
+}
+
+.lighting-note {
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+  margin: 0 0 var(--space-2);
+}
+
+.lighting-warnings {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  list-style: none;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: var(--radius-md);
+  color: var(--warn-fg);
+  font-size: var(--text-sm);
+}
+
+/* Tables are the patch sheet: one row per thing, the controls in the row. */
+.lighting-table {
+  width: 100%;
+  max-width: 1100px;
+  border-collapse: collapse;
+  font-size: var(--text-base);
+}
+
+.lighting-table th {
+  text-align: left;
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-cond);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-semi);
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+  border-bottom: 1px solid var(--border);
+}
+
+.lighting-table td {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--border-soft);
+  color: var(--fg-body);
+  vertical-align: middle;
+}
+
+.lighting-table tr[data-warning='true'] td:first-child { box-shadow: inset 3px 0 0 var(--warn-fg); }
+
+.lighting-table input,
+.lighting-table select {
+  height: 26px;
+  width: 100%;
+  min-width: 0;
+  padding: 0 var(--space-2);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-primary);
+  font-family: inherit;
+  font-size: var(--text-base);
+  outline: none;
+}
+
+.lighting-table input:focus,
+.lighting-table select:focus { border-color: var(--border-focus); }
+
+.lighting-table input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent-blue);
+}
+
+.lighting-table .lighting-narrow { width: 84px; }
+.lighting-table .lighting-actions-cell { width: 1%; white-space: nowrap; }
+.lighting-table .lighting-actions-cell .lighting-btn + .lighting-btn { margin-left: var(--space-1); }
+
+.lighting-mono { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--fg-muted); }
+
+/* The faders: one card per fixture, its parameters as sliders with the value beside them. */
+.lighting-fixtures {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-2);
+}
+
+.lighting-fixture {
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+}
+
+.lighting-fixture-name {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+  color: var(--fg-primary);
+  font-weight: var(--fw-medium);
+}
+
+.lighting-fader {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+
+.lighting-fader input[type='range'] { width: 100%; accent-color: var(--accent-blue); }
+.lighting-fader output { text-align: right; font-family: var(--font-mono); color: var(--fg-body); }
+.lighting-fader[data-held='true'] label { color: var(--accent-blue); }
+
+/* The monitor: every slot of one universe, its number on top and its value under it, read the
+   way a console's channel display reads. The bar under each value is its level. */
+.lighting-cells {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 2px;
+  max-width: 1400px;
+}
+
+.lighting-cell {
+  position: relative;
+  padding: 2px 3px 5px;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  line-height: 1.2;
+}
+
+.lighting-cell-slot { display: block; font-size: var(--text-xs); color: var(--fg-subtle); }
+.lighting-cell-value { display: block; font-size: var(--text-sm); color: var(--fg-primary); }
+.lighting-cell[data-zero='true'] .lighting-cell-value { color: var(--fg-subtle); }
+.lighting-cell-heard { display: block; font-size: var(--text-xs); color: var(--fg-muted); }
+
+.lighting-cell-bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--accent-blue);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+
+.lighting-monitor-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.lighting-monitor-head select {
+  height: 26px;
+  padding: 0 var(--space-2);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-md);
+  color: var(--fg-primary);
+  font-family: inherit;
+}
+
+/* The tracking sheet in the inspector: what this cue moves, sets again, or leaves. */
+.light-look {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+
+.light-look-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px 20px;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--fg-body);
+}
+
+.light-look-row input[type='range'] { width: 100%; accent-color: var(--accent-blue); }
+.light-look-target { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.light-look-row[data-gone='true'] .light-look-target { color: var(--warn-fg); }
+
+.light-tracking-row[data-role='changed'] td:last-child { color: var(--fg-primary); }
+.light-tracking-row[data-role='repeated'] td:last-child { color: var(--warn-fg); }
+.light-tracking-row[data-role='tracked'] td { color: var(--fg-muted); }

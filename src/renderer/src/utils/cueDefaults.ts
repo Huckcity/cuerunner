@@ -1,6 +1,6 @@
 import type {
   AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, DevampCue, MicCue,
-  MscCue, Cue, CueType, AudioCrosspoint
+  MscCue, Cue, CueType, AudioCrosspoint, LightCue
 } from '../../../shared/cue'
 
 // Every field a new cue is born with. createCue builds on these, and the inspector's
@@ -97,6 +97,14 @@ export const MSC_DEFAULTS = {
   // console on a cable is the other answer, and it is one field away.
   destination: 'desk' as const,
   portName: ''
+}
+
+export const LIGHT_DEFAULTS = {
+  // A look takes three seconds to arrive unless it says otherwise: long enough to read as a
+  // fade, short enough that a cue nobody has timed yet does not hold the show.
+  duration: 3000,
+  curve: 'linear' as const,
+  intensity: 'ltp' as const
 }
 
 /**
@@ -238,6 +246,16 @@ export function createCue(type: CueType, number = '1'): Cue {
         label: '',
         action: 'mute'
       } satisfies MicCue
+    case 'light':
+      return {
+        ...base('Light Cue', number),
+        type: 'light',
+        // Nothing until it is recorded or built: a Light cue with an empty look changes
+        // nothing, which is what a cue nobody has written yet should do.
+        look: [],
+        effects: [],
+        ...LIGHT_DEFAULTS
+      } satisfies LightCue
   }
 }
 

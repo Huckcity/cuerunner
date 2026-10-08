@@ -138,6 +138,17 @@ export const PRO_ROWS = [
     }
   },
   {
+    label: 'Lighting',
+    free: {
+      prose: `MSC and OSC cues to a lighting desk that runs the lights itself.`
+    },
+    pro: {
+      identifiers: ['dmx'],
+      cues: ['light'],
+      prose: `sACN and Art-Net out of this machine: a fixture patch with clash warnings and identify, groups, faders to build a look and record it, and Light cues that fade it with tracking — latest or highest takes precedence — plus chases and sine effects. A console on the network can be watched or merged in, and Art-Net nodes found.`
+    }
+  },
+  {
     label: 'The script',
     free: {
       identifiers: ['script:readFile'],
@@ -245,6 +256,27 @@ export const PRO_MARKS = [
     page: 'reference/control.html',
     words: 'Mic cue',
     cues: ['mic']
+  },
+  {
+    page: 'guides/cue-list.html',
+    words: 'Light',
+    cues: ['light']
+  },
+  {
+    page: 'guides/lighting.html',
+    words: 'Lighting from the cue list',
+    identifiers: ['dmx'],
+    cues: ['light']
+  },
+  {
+    page: 'reference/cue-types.html',
+    words: 'Light',
+    cues: ['light']
+  },
+  {
+    page: 'reference/control.html',
+    words: 'Light cue',
+    cues: ['light']
   },
   {
     page: 'reference/formats.html',
