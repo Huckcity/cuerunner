@@ -12,7 +12,7 @@ import type { ElectronApplication, Page } from '@playwright/test'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
-import { addCueFromMoreMenu, closeApp, launchApp, openLogPanel } from './helpers'
+import { addCueFromMoreMenu, closeApp, launchApp, openLogPanel, setGuardWindow } from './helpers'
 
 const PORT = 'cuerunner-feat-midi-file-cue'
 
@@ -92,6 +92,12 @@ test.beforeAll(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-feat-midi-file-cue-'))
   // No licence: the MIDI File cue is the free half of the app.
   ;({ app, page } = await launchApp({ env: { CUERUNNER_TEST_MIDI_LOOPBACK: PORT } }))
+  // The repeat guard off. Its window swallows a GO that comes within 300 ms of the one before,
+  // which is its job — and on a fast runner one case's GO lands that close to the last case's,
+  // so the second GO was the guard working, not the cue failing (it failed that way on macOS,
+  // and fails that way here with the window set to 2000 ms). What these cases are about is the
+  // file on the wire; the guard has its own spec (trigger-guard.spec.ts).
+  await setGuardWindow(page, 0)
 })
 
 test.afterAll(async () => {
@@ -131,6 +137,7 @@ test('a MIDI File cue reads its file back, and plays it to its port by itself', 
   await app.evaluate(() => globalThis.__cuerunnerMidiLoopback?.clear())
   await row.click()
   await page.locator('.btn-go').click()
+  await expect(row).toHaveAttribute('data-state', 'playing')
 
   // Every message, in order, transposed, and nothing on channel 2; then, at the file's end,
   // the pedal lifted on the channel it played on.
@@ -206,12 +213,14 @@ test('a held file goes silent, and STOP lets go of every note the cue struck', a
   // The button rather than Space: the port's select still has the keyboard, and Space there
   // opens the list instead of going.
   await page.locator('.btn-go').click()
+  await expect(row).toHaveAttribute('data-state', 'playing')
   await expect.poll(async () => (await received()).map(message => message.bytes)).toEqual([[0x90, 60, 100]])
 
   // Held: the note is released, and nothing more is sent while it is held.
   await row.click()
   await page.locator('.inspector-tab', { hasText: /^MIDI File$/ }).click()
   await page.locator('.midi-file-hold', { hasText: 'Pause' }).click()
+  await expect(row).toHaveAttribute('data-state', 'paused')
   await expect.poll(async () => (await received()).map(message => message.bytes))
     .toEqual([[0x90, 60, 100], [0x80, 60, 0]])
   await page.waitForTimeout(1500)
@@ -246,4 +255,40 @@ test('a MIDI file dropped on the list becomes a MIDI File cue rather than a refu
   })
   await expect(icons).toHaveCount(before + 1)
   await expect(page.locator('.app-notice')).toHaveCount(0)
+})
+
+test('the show’s PAUSE holds a playing file silent in main, and RESUME plays it on from there', async () => {
+  // The drone's bytes under a name of its own, so its row is told from the drone's.
+  const held = path.join(root, 'Hold.mid')
+  fs.copyFileSync(path.join(root, 'Drone.mid'), held)
+  await app.evaluate(async ({ dialog }, picked) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [picked] })
+  }, held)
+  await addCueFromMoreMenu(page, 'MIDI File')
+  await page.locator('.inspector-tab', { hasText: /^MIDI File$/ }).click()
+  await page.locator('.inspector-btn', { hasText: 'Browse' }).click()
+  await expect(page.locator('.midi-file-summary')).toContainText('2.0s')
+  await field('MIDI Port').locator('select').selectOption(PORT)
+
+  await app.evaluate(() => globalThis.__cuerunnerMidiLoopback?.clear())
+  const row = page.locator('.cue-row', { hasText: 'Hold' })
+  await row.click()
+  await page.locator('.btn-go').click()
+  await expect(row).toHaveAttribute('data-state', 'playing')
+  await expect.poll(async () => (await received()).map(message => message.bytes)).toEqual([[0x90, 60, 100]])
+
+  // The whole show held: the file is held where it plays, its note released, and nothing more
+  // goes out for longer than the file had left to its next note.
+  await page.locator('.btn-pause').click()
+  await expect(row).toHaveAttribute('data-state', 'paused')
+  await expect.poll(async () => (await received()).map(message => message.bytes))
+    .toEqual([[0x90, 60, 100], [0x80, 60, 0]])
+  await page.waitForTimeout(1500)
+  expect(await received()).toHaveLength(2)
+
+  // Let go: it plays on from where it was held, to its second note and its end, and completes.
+  await page.locator('.btn-pause').click()
+  await expect.poll(async () => (await received()).map(message => message.bytes), { timeout: 5000 })
+    .toEqual([[0x90, 60, 100], [0x80, 60, 0], [0x90, 67, 100], [0x80, 67, 0], [0xb0, 64, 0]])
+  await expect(row).not.toHaveAttribute('data-state', /playing|paused/)
 })
