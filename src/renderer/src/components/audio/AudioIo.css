@@ -106,6 +106,13 @@
   color: var(--accent-amber);
 }
 
+/* A slice that plays no times: still on the bar where its music is, struck through. */
+.slice-piece[data-skip='true'] {
+  background: repeating-linear-gradient(135deg, transparent 0 4px, var(--border) 4px 5px);
+  color: var(--fg-muted);
+  text-decoration: line-through;
+}
+
 .slice-list {
   display: flex;
   flex-direction: column;

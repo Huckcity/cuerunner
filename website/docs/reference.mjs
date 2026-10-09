@@ -246,7 +246,7 @@ export const REFERENCE = [
             <tr><td>Output patch</td><td>Device channels</td><td>Plays through one of the show's <strong>output patches</strong> (Settings → Audio) instead of naming device outputs: the routing then addresses the patch's own channels, on the device the patch names, and the patch's fader and mute in the <strong>Mixer</strong> apply. A cue whose patch is deleted plays on the device's channels.</td></tr>
             <tr><td>Loudness</td><td>not measured</td><td><strong>Normalize</strong> measures the file (EBU R128 integrated loudness and true peak) and sets the <strong>Trim</strong> so the cue plays at the show's target (−23 LUFS unless Settings → Audio says otherwise), its true peak held under the ceiling (−1 dBTP) and the trim inside its range. The reading stays on the cue. Select several cues and choose <strong>Normalize loudness</strong> from the right-click menu to do them all as one undo step.</td></tr>
             <tr><td>Audition</td><td>—</td><td><strong>Audition cue</strong> plays the cue as the show would — region, loops, slices, level, fades — and <strong>Whole file</strong> plays the file from its start, both on the show's <strong>audition output</strong> only. Nothing in the show moves: no row lights and nothing advances. Press again to stop. The right-click menu auditions a selection, one cue after another. With no audition output chosen it says so and plays nothing.</td></tr>
-            <tr><td>Slices</td><td>none</td><td>On the <strong>Slices</strong> tab: markers cut the region into slices, and each plays a number of times or is a <strong>Vamp</strong> that loops until a devamp cue moves it on. Playback follows the slices to the sample. With slices the loop count is not used; with none the cue is its region and its loop count, as it always was.</td></tr>
+            <tr><td>Slices</td><td>none</td><td>On the <strong>Slices</strong> tab: markers cut the region into slices, up to 128, and each plays a number of times, <strong>0</strong> to skip it, or is a <strong>Vamp</strong> that loops until a devamp cue moves it on. Playback follows the slices to the sample: a skipped slice is jumped over from the end of the slice before, and a skipped last slice ends the cue where it begins. With slices the loop count is not used; with none the cue is its region and its loop count, as it always was.</td></tr>
           </tbody>
         </table>
       </div>
@@ -272,7 +272,7 @@ export const REFERENCE = [
             </tr>
             <tr>
               <td><strong>Devamp</strong></td>
-              <td><strong>Target</strong> — a looping audio or video cue. It lets go of the lap it is on and plays out to the end of its file; a video's picture with its sound. A sliced cue finishes the pass of the slice it is in and goes on into the next slice. <strong>Then</strong>: <strong>Play on into the next slice</strong>, or <strong>Stop at the end of the slice</strong> — which also ends a plain loop at the end of its lap.</td>
+              <td><strong>Target</strong> — a looping audio or video cue. It lets go of the lap it is on and plays out to the end of its file; a video's picture with its sound. A sliced cue finishes the pass of the slice it is in and goes on into the next slice it plays, past any set to 0. <strong>Then</strong>: <strong>Play on into the next slice</strong>, or <strong>Stop at the end of the slice</strong> — which also ends a plain loop at the end of its lap.</td>
             </tr>
             <tr>
               <td><strong>Control</strong></td>
@@ -1222,10 +1222,15 @@ await rig.blackout()</code></div>
       <p>
         <strong>Import QLab Workspace&hellip;</strong> reads a <code>.qlab5</code> or
         <code>.qlab4</code> workspace, a QLab 5 workspace saved as a folder (the property list
-        inside it), and a <code>.cues</code> file of cues with no list around them. A workspace
-        is an NSKeyedArchiver archive in a binary property list, with its cue lists stored as a
-        second archive inside the first; both are Apple's container formats, read by
-        Cuerunner's own reader. A workspace past <strong>64 MB</strong> is refused before it is
+        inside it), a QLab 5 backup (<code>.qlab5backup</code>, the same archive; in its
+        <em>backups</em> folder its audio is looked for from the folder above, where the
+        workspace was), and a <code>.cues</code> file of cues with no list around them. A
+        workspace is an NSKeyedArchiver archive in a binary property list, with its cue lists
+        stored as a second archive inside the first; both are Apple's container formats, read
+        by Cuerunner's own reader. QLab 5 archives each cue list as a Group cue of mode 0 (a
+        cart, mode 5) under a root group, and each becomes a cue list rather than a group.
+        An audio cue's slices are its <code>AudioSlice</code> markers, each the end of a slice,
+        and its <code>lastSlice</code>; a marker past 127 is not carried. A workspace past <strong>64 MB</strong> is refused before it is
         read, and so is one holding more than <strong>10,000</strong> cues.
       </p>
       <p>
@@ -1233,7 +1238,9 @@ await rig.blackout()</code></div>
         (<code>53000</code> by default), SLIP-framed as QLab's OSC over TCP is, and sends
         <code>/workspaces</code>, <code>/workspace/{id}/connect</code> with the passcode,
         <code>/workspace/{id}/cueLists</code>, and <code>/workspace/{id}/cue_id/{id}/valuesForKeys</code>
-        once for each cue. One message is in flight at a time. The connection has 3 seconds
+        once for each cue — twice for an audio or devamp cue, whose slice markers and devamp
+        settings are asked for on their own so a QLab that does not know them still gives the
+        rest. One message is in flight at a time. The connection has 3 seconds
         to open and every reply 5 seconds to arrive; a reply larger than 16 MB, or a
         conversation past 64 MB, ends the import.
       </p>
@@ -1241,7 +1248,10 @@ await rig.blackout()</code></div>
         The result is a new show with no file, checked by the same reading every
         <code>.cuerunner</code> file goes through. Audio paths are absolute: the QLab
         workspace's folder joined to the path QLab recorded relative to it, or QLab's last
-        known absolute path where there is none. The mapping is in
+        known absolute path where there is none. <strong>Find in Folder&hellip;</strong> reads
+        each folder it looks in to at most 10,000 entries, once, for a file whose name differs
+        only by <code>' ’ : / ? " &lt; &gt; | * \\</code> written as <code>_</code> or by its
+        Unicode form, and takes it only when exactly one does. The mapping is in
         <a href="../guides/qlab.html#mapping">Coming from QLab</a>.
       </p>
       <div class="table-wrap">

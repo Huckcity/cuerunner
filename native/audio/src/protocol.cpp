@@ -136,7 +136,7 @@ const WireField kCrosspointFields[] = {
 };
 
 // One slice of a file, as `start.options.slices` carries it: a region in file ms and how
-// many times it plays (-1 until a release moves the voice on).
+// many times it plays (-1 until a release moves the voice on, 0 not at all).
 const WireField kSliceFields[] = {
     wireNumber("startTime", "0"),
     wireNumber("endTime", "0"),

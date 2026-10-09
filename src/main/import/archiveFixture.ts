@@ -249,17 +249,29 @@ export function qlabCue(className: string, properties: { [key: string]: ArchiveI
 /**
  * A whole QLab workspace file: the outer archive with the workspace's name and settings,
  * and the cue lists as a second archive stored as data inside it — the way QLab saves one.
+ *
+ * QLab 5 keeps the lists as Group cues — mode 0 a list, mode 5 a cart — under a root group
+ * whose id is "[root group of cue lists]": that is what a QLab 5.4 workspace was seen to hold,
+ * and the default. `layout: 'classes'` writes each list as a class of its own instead, the
+ * shape the reader also takes from other writers.
  */
-export function qlabWorkspace(options: { name?: string; lists: FixtureList[]; settings?: Dict }): Buffer {
-  const cueTree = writeKeyedArchive({
-    $class: 'QLabWorkspaceCueTree',
-    cues: options.lists.map(list => ({
-      $class: list.cart ? 'CueCart' : 'CueList',
-      name: list.name,
-      uniqueID: list.uniqueID ?? `LIST-${list.name.replace(/\W/g, '')}`,
-      cues: list.cues
-    }))
-  })
+export function qlabWorkspace(options: { name?: string; lists: FixtureList[]; settings?: Dict; layout?: 'qlab5' | 'classes' }): Buffer {
+  const listId = (list: FixtureList): string => list.uniqueID ?? `LIST-${list.name.replace(/\W/g, '')}`
+  const cueTree = writeKeyedArchive(options.layout === 'classes'
+    ? {
+        $class: 'QLabWorkspaceCueTree',
+        cues: options.lists.map(list => ({ $class: list.cart ? 'CueCart' : 'CueList', name: list.name, uniqueID: listId(list), cues: list.cues }))
+      }
+    : {
+        $class: 'GroupCue',
+        uniqueID: '[root group of cue lists]',
+        name: '',
+        groupMode: 3,
+        cart: new Dict({}),
+        cues: options.lists.map(list => ({
+          $class: 'GroupCue', name: list.name, uniqueID: listId(list), groupMode: list.cart ? 5 : 0, cart: new Dict({}), cues: list.cues
+        }))
+      })
   return writeKeyedArchive({
     $class: 'QLabWorkspaceDocument',
     workspaceName: options.name ?? 'Fixture Show',
@@ -271,6 +283,48 @@ export function qlabWorkspace(options: { name?: string; lists: FixtureList[]; se
 /** A QLab 5 media target: the path relative to the workspace, and where QLab last saw it. */
 export function alias(relativePath: string, lastKnownPath = `/Users/sm/Press Night/${relativePath}`): ArchiveObject {
   return { $class: 'F53Alias', relativePath, lastKnownPath }
+}
+
+/** One slice marker as QLab 5 archives it: where the slice *ends*, seconds into the file, and how it plays. */
+export function audioSlice(time: number, playCount: number, infiniteLoop = false): ArchiveObject {
+  return { $class: 'AudioSlice', time: new Real(time), playCount, infiniteLoop }
+}
+
+/**
+ * A rehearsal track the way a real QLab 5 show cuts one: a count-in that vamps, a bar that is
+ * skipped after it, a vamp later on with the bar after it skipped too, and the tail. Its file is
+ * `audio/track.wav`, eight seconds; the devamps are cue 1.1 and 1.2, a memo between them.
+ *
+ *   0–1 s plays once · 1–2 s vamps · 2–3 s skipped (0) · 3–5 s once · 5–6 s vamps · 6–7 s skipped · 7–8 s once
+ */
+export function rehearsalTrackWorkspace(): Buffer {
+  const cue = qlabCue
+  return qlabWorkspace({
+    name: 'Rehearsal Tracks',
+    lists: [{
+      name: 'Main Cue List',
+      uniqueID: 'LIST-RT',
+      cues: [
+        cue('AudioCue', {
+          uniqueID: 'RT1', number: '1', name: '', fileTarget: alias('audio/track.wav'),
+          startTime: new Real(0), endTime: new Real(8), playCount: 1, infiniteLoop: false,
+          slices: [
+            audioSlice(1, 1), audioSlice(2, 4, true), audioSlice(3, 0), audioSlice(5, 1), audioSlice(6, 1, true), audioSlice(7, 0)
+          ],
+          lastSlice: { $class: 'AudioSlice', time: new Real(0), playCount: 1, infiniteLoop: false }
+        }),
+        cue('DevampCue', {
+          uniqueID: 'DV1', number: '1.1', name: 'Devamp bar 1', cueTargetUniqueID: 'RT1',
+          devampType: 1, stopTargetWhenDone: false, fireNextCueAtMomentLoopEnds: false
+        }),
+        cue('MemoCue', { uniqueID: 'MM1', number: '', name: 'Auto segue into the bus', notes: 'Watch the MD' }),
+        cue('DevampCue', {
+          uniqueID: 'DV2', number: '1.2', name: 'Devamp bar 9', cueTargetUniqueID: 'RT1',
+          devampType: 1, stopTargetWhenDone: false, fireNextCueAtMomentLoopEnds: false
+        })
+      ]
+    }]
+  })
 }
 
 /** An audio cue's level matrix with its master and, where given, its first two outputs. */

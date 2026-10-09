@@ -17,8 +17,10 @@ import nodePath, { type PlatformPath } from 'node:path'
 import type {
   AudioCue, Cue, CueBase, CueColor, CueType, FadeCue, GroupCue, GroupMode, MidiCue,
   MidiMessageKind, MscCommand, MscCue, MscFormat, OscArg, OscCue, StopCue, DevampCue, WaitCue,
-  ControlAction, ControlCue, OscPatch
+  ControlAction, ControlCue, OscPatch, MemoCue
 } from '../../shared/cue'
+import { AUDIO_MAX_SLICES } from '../../shared/audio'
+import { SLICE_MAX_PLAYS, SLICE_SKIP, SLICE_VAMP, slicesInUse, type CueSlices } from '../../shared/slices'
 import type { QLabImportNote, QLabTypeCount } from '../../shared/ipc/qlab'
 import { QLAB_TYPE_LABELS, type QLabCue, type QLabKind, type QLabShow } from './qlabShow'
 import { canonicalCueList, MAIN_CUE_LIST_ID, MAIN_CUE_LIST_NAME, type CueListInfo } from '../../shared/cueLists'
@@ -181,6 +183,10 @@ interface Context {
   types: Map<string, QLabTypeCount>
   /** QLab's network patches by name, each made once, as the show's OSC patches. */
   patches: Map<string, OscPatch>
+  /** The audio cues with slice markers, by their Cuerunner id: what a devamp's mapping reads. */
+  sliced: Set<string>
+  /** How many audio cues have a slice QLab set to play no times: one line in the report says what that became. */
+  skipping: number
 }
 
 /** Converts a QLab show into a Cuerunner cue list, with everything the report says about it. */
@@ -194,7 +200,9 @@ export function mapQLabShow(show: QLabShow, newId: IdSource): MappedShow {
     out: [],
     notes: [],
     types: new Map(),
-    patches: new Map()
+    patches: new Map(),
+    sliced: new Set(),
+    skipping: 0
   }
 
   // Ids first, across every list, so a fade can target a cue that comes after it or sits
@@ -210,6 +218,7 @@ export function mapQLabShow(show: QLabShow, newId: IdSource): MappedShow {
     if (own !== '') context.byUniqueId.set(own, id)
     if (cue.number !== '' && !context.byNumber.has(cue.number)) context.byNumber.set(cue.number, id)
     context.kindOf.set(id, cue.kind)
+    if (cue.kind === 'audio' && (cue.slices?.length ?? 0) > 0) context.sliced.add(id)
     cue.children?.forEach(assign)
   }
   show.lists.forEach(list => list.cues.forEach(assign))
@@ -246,6 +255,15 @@ export function mapQLabShow(show: QLabShow, newId: IdSource): MappedShow {
     for (let at = from; at < context.out.length; at++) {
       if (context.out[at].parentId === null) context.out[at] = { ...context.out[at], listId: id }
     }
+  }
+
+  if (context.skipping > 0) {
+    context.notes.push({
+      cueId: '', number: '', name: `${context.skipping} audio ${context.skipping === 1 ? 'cue' : 'cues'}`, qlabType: 'Audio',
+      kind: 'approximated',
+      detail: 'QLab set some of their slices to play 0 times; here those slices are skipped, the music going from the slice ' +
+        'before straight into the slice after. QLab does not document a count of 0 — this is read from what workspaces hold — so listen through each one'
+    })
   }
 
   return {
@@ -372,10 +390,16 @@ function mapCue(cue: QLabCue, parentId: string | null, ids: Map<QLabCue, string>
     case 'goto':
     case 'arm':
     case 'disarm': mapped = mapControl(cue, base, context); break
-    case 'wait':
-    case 'memo': {
+    case 'wait': {
       count(context, cue, 'wait')
-      mapped = { ...base, duration: cue.kind === 'wait' ? ms(cue.duration) : 0, type: 'wait' }
+      mapped = { ...base, duration: ms(cue.duration), type: 'wait' }
+      break
+    }
+    case 'memo': {
+      // A note in the stack, its words the cue's own name and notes, as QLab's memo is.
+      count(context, cue, 'memo')
+      const memo: MemoCue = { ...base, type: 'memo' }
+      mapped = memo
       break
     }
     case 'midi': mapped = mapMidi(cue, base, context) ?? placeholder(midiGap(cue), midiLines(cue)); break
@@ -446,6 +470,7 @@ function mapAudio(cue: QLabCue, base: CueBase, context: Context): AudioCue {
     trim: 1,
     trimSilence: false
   }
+  mapSlices(cue, audio, context)
   if (master !== null && master > 1) {
     note(context, audio, cue, 'approximated',
       `QLab plays it at ${decibels(master)}; Cuerunner’s volume stops at unity, so it plays at 0 dB`)
@@ -455,6 +480,83 @@ function mapAudio(cue: QLabCue, base: CueBase, context: Context): AudioCue {
   }
   if (filePath === '') note(context, audio, cue, 'approximated', 'QLab did not say which file it plays: pick one in the inspector')
   return audio
+}
+
+/** A time into the file, seconds as QLab writes it, to file ms — kept to the microsecond, so a marker stays on its sample. */
+function fileMs(seconds: number): number {
+  return Math.min(Math.round(seconds * 1_000_000) / 1000, MS_LIMIT)
+}
+
+/** A QLab slice's count as Cuerunner's: a vamp whatever its count says when it loops for ever, otherwise its passes, 0 skipping it. */
+function sliceCount(slice: { playCount: number; infiniteLoop: boolean }): number {
+  if (slice.infiniteLoop) return SLICE_VAMP
+  if (!Number.isFinite(slice.playCount) || slice.playCount < 0) return SLICE_VAMP
+  return Math.min(SLICE_MAX_PLAYS, Math.round(slice.playCount))
+}
+
+/**
+ * An audio cue's slices. QLab keeps a marker per slice at the slice's *end* — "time corresponds
+ * to the end time of the slice", in its OSC dictionary — with that slice's count, and the piece
+ * after the last marker in `lastSlice`. Cuerunner keeps the markers where pieces meet and one
+ * count per piece, so the markers carry straight across, each count stays with the music it
+ * was set on, and `lastSlice` is the last piece's.
+ *
+ * A slice that loops for ever is a vamp whatever its count says (QLab keeps the count it had
+ * before the loop was ticked). A count of 0 is a skip: QLab's interface offers 1 or more, but
+ * workspaces hold 0, and what the shows around them do says the slice is passed over — two
+ * copies of one cue that differ only by a last slice of 0 or 1, a lone bar of 0 between two of
+ * 1, and a song whose bars only land where its devamps say if the 0 after the count-in is not
+ * played. That is read from QLab's data, not from a QLab document, and the report says so.
+ *
+ * A cue with no markers is its one region: `lastSlice` is the whole cue, and its loop is the
+ * cue's own. A count of 0 there would be a cue that plays nothing, which no show has been seen
+ * to mean — a cue copied from a sliced one keeps its 0 when its markers go — so it plays once.
+ */
+function mapSlices(cue: QLabCue, audio: AudioCue, context: Context): void {
+  const raw = (cue.slices ?? []).filter(slice => Number.isFinite(slice.time) && slice.time > 0)
+  const last = cue.lastSlice ?? { playCount: 1, infiniteLoop: false }
+  if (raw.length === 0) {
+    const loops = !cue.infiniteLoop && (cue.playCount ?? 1) === 1
+    if (loops && last.infiniteLoop) audio.loopCount = -1
+    else if (loops && last.playCount > 1) audio.loopCount = Math.min(Math.round(last.playCount), 10_000) - 1
+    else if (!last.infiniteLoop && last.playCount === 0) {
+      note(context, audio, cue, 'approximated', 'QLab set its one slice to play 0 times; with no markers it plays once here')
+    }
+    return
+  }
+
+  // In the order they cut the file, one marker at each time: two at one moment bound nothing.
+  const sorted = [...raw].sort((a, b) => a.time - b.time)
+  const markers: number[] = []
+  const playCounts: number[] = []
+  for (const slice of sorted) {
+    const at = fileMs(slice.time)
+    if (markers.length > 0 && at <= markers[markers.length - 1]) continue
+    markers.push(at)
+    playCounts.push(sliceCount(slice))
+  }
+  playCounts.push(sliceCount(last))
+
+  // The engine carries a fixed number of slices: past it, the rest of the file plays through.
+  const room = AUDIO_MAX_SLICES - 1
+  if (markers.length > room) {
+    const from = markers[room - 1]
+    note(context, audio, cue, 'approximated',
+      `QLab cuts it into ${markers.length + 1} slices and Cuerunner carries ${AUDIO_MAX_SLICES}: from ${seconds(from)} it plays straight to the end`)
+    markers.length = room
+    playCounts.length = room
+    playCounts.push(1)
+  }
+
+  const slices: CueSlices = { markers, playCounts }
+  if (!slicesInUse(slices)) return
+  audio.slices = slices
+  // With slices, the counts are per slice and the cue's own loop count is not read.
+  audio.loopCount = 0
+  if (cue.infiniteLoop || (cue.playCount ?? 1) !== 1) {
+    note(context, audio, cue, 'approximated', 'QLab also loops the whole cue; with slices Cuerunner plays the slices’ own counts, once through')
+  }
+  if (playCounts.includes(SLICE_SKIP)) context.skipping++
 }
 
 function mapFade(cue: QLabCue, base: CueBase, context: Context): FadeCue | null {
@@ -502,12 +604,7 @@ function targetNotes(cue: QLabCue, mapped: Cue, targetCueId: string, context: Co
 
 function mapTargeted(cue: QLabCue, base: CueBase, context: Context): StopCue | DevampCue {
   const targetCueId = resolveTarget(cue, context) ?? ''
-  if (cue.kind === 'devamp') {
-    count(context, cue, 'devamp')
-    const devamp: DevampCue = { ...base, type: 'devamp', targetCueId }
-    targetNotes(cue, devamp, targetCueId, context, ['audio'])
-    return devamp
-  }
+  if (cue.kind === 'devamp') return mapDevamp(cue, base, targetCueId, context)
   count(context, cue, 'stop')
   const stop: StopCue = {
     ...base,
@@ -520,6 +617,42 @@ function mapTargeted(cue: QLabCue, base: CueBase, context: Context): StopCue | D
   }
   targetNotes(cue, stop, targetCueId, context, Object.keys(QLAB_TYPE_LABELS) as QLabKind[])
   return stop
+}
+
+/** QLab 5's devamp types: the slice that is looping, or the cue's own loop with its slices ignored. */
+const DEVAMP_SLICE = 1
+const DEVAMP_CUE = 2
+
+/**
+ * A Devamp cue. QLab 5's devamp type 1, "devamp currently looping slice", is what Cuerunner's
+ * devamp does: the vamping slice finishes the pass it is on and the cue goes on into the next
+ * slice — past any slice set to play 0 times. Type 2, "devamp looping cue", lets the cue's own
+ * loop go and ignores its slices; on a cue without slices that is the same release.
+ *
+ * QLab's "start next cue when target reaches the end of the current slice" fires the cue after
+ * the devamp at the moment the slice ends; Cuerunner's devamp has no such moment of its own, so
+ * the report says so. Its "stop target" checkbox works only with that one ticked, and with both
+ * the target stops at the end of the slice, which is Cuerunner's Stop at the end of the slice.
+ */
+function mapDevamp(cue: QLabCue, base: CueBase, targetCueId: string, context: Context): DevampCue {
+  count(context, cue, 'devamp')
+  const startsNext = cue.startNextAtSliceEnd === true
+  const stops = startsNext && cue.stopTargetWhenDone === true
+  const devamp: DevampCue = { ...base, type: 'devamp', targetCueId, ...(stops ? { devampMode: 'stop' as const } : {}) }
+  targetNotes(cue, devamp, targetCueId, context, ['audio'])
+  const type = cue.devampType ?? DEVAMP_SLICE
+  if (type === DEVAMP_CUE && context.sliced.has(targetCueId)) {
+    note(context, devamp, cue, 'approximated',
+      'QLab devamps the target’s own loop and ignores its slices; here the slice it is in finishes its pass and the cue goes on to the next slice')
+  } else if (type !== DEVAMP_SLICE && type !== DEVAMP_CUE) {
+    note(context, devamp, cue, 'approximated', `QLab’s devamp type ${type} is not one the import knows; it devamps the slice that is looping`)
+  }
+  if (startsNext) {
+    note(context, devamp, cue, 'approximated',
+      `QLab starts the next cue the moment the target reaches the end of its slice${stops ? ' and stops it there' : ''}; ` +
+      `here ${stops ? 'the target stops there, and ' : ''}the next cue waits for its own GO`)
+  }
+  return devamp
 }
 
 /** QLab's control cue types, as the one Control cue's verbs. */

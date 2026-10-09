@@ -32,6 +32,8 @@ import { TIMECODE_SHOW_SHAPE } from '../../shared/timecodeShape'
 import { CUE_LISTS_SHAPE } from '../../shared/cueListsShape'
 import { cueListsRefusal, heldCueLists, MAIN_CUE_LIST_ID, type CueListInfo } from '../../shared/cueLists'
 import { OSC_PATCH_SHAPE, oscPatchesRefusal } from '../../shared/oscPatches'
+import { slicesRefusal } from '../../shared/slices'
+import { listFolder, renamedFile, type ListFolder } from './mediaNames'
 import { timecodeShowRefusal, type TimecodeShowSettings } from '../../shared/timecode'
 import { hasCueList, isUnnamedShow, normalizeTriggerGuard, UNTITLED_SHOW } from '../../shared/workspace'
 import {
@@ -621,6 +623,14 @@ function refuseForeignCues(cues: readonly Cue[], source: string): void {
       : undefined
     if (declared === undefined) continue
     refuseForeignFields(cue, declared, '', -1, source, CUE_VOICE, cue)
+    // Slices are held to what the declaration cannot say of two lists of numbers: one count
+    // per piece, each one this build plays, markers in order, and no more than a start carries.
+    if (cue.type === 'audio') {
+      const refusal = slicesRefusal((cue as AudioCue).slices)
+      if (refusal !== null) {
+        throw new Refusal(`${refusalOpening(CUE_VOICE, cue)} ${refusal} — ${source} was probably saved by another build`)
+      }
+    }
   }
 }
 
@@ -1207,15 +1217,18 @@ function splitAbsolute(absolutePath: string): SplitPath {
 }
 
 /**
- * What one picked file relinks. A cue is relinked only when the mapped path exists, and
- * the mapping is never used to search a folder for another file with the same name —
- * with several candidates there is no way to know which one the operator meant.
+ * What one picked file relinks. A cue is relinked only when the mapped path exists, or when
+ * its folder holds exactly one file under the name a cloud drive or a zip tool would have
+ * renamed it to (`mediaNames.ts`); the mapping is never used to search a folder for another
+ * file with the same name — with several candidates there is no way to know which one the
+ * operator meant.
  */
 export function planMediaRelink(
   missingMedia: MissingMedia[],
   cueId: string,
   chosenFile: string,
-  exists: ExistsCheck = isFile
+  exists: ExistsCheck = isFile,
+  list: ListFolder = listFolder
 ): Map<string, string> {
   const plan = new Map<string, string>()
   const primary = missingMedia.find(entry => entry.cueId === cueId)
@@ -1241,6 +1254,7 @@ export function planMediaRelink(
     common++
   }
 
+  const listings = new Map<string, string[] | null>()
   const oldPrefix = target.segments.slice(0, target.segments.length - common)
   const newPrefix = arrived.segments.slice(0, arrived.segments.length - common)
   // The same file picked from where it already was: nothing moved, so nothing is
@@ -1255,7 +1269,12 @@ export function planMediaRelink(
     if (!oldPrefix.every((segment, i) => comparable(missingFile.segments[i]) === comparable(segment))) continue
 
     const candidate = arrived.root + [...newPrefix, ...missingFile.segments.slice(oldPrefix.length)].join(sep)
-    if (exists(candidate)) plan.set(entry.cueId, candidate)
+    if (exists(candidate)) {
+      plan.set(entry.cueId, candidate)
+      continue
+    }
+    const renamed = renamedFile(candidate, list, listings)
+    if (renamed !== null && 'path' in renamed && exists(renamed.path)) plan.set(entry.cueId, renamed.path)
   }
   return plan
 }

@@ -455,6 +455,31 @@ describe('the shape check', () => {
     )
   })
 
+  it('reads slices with skipped pieces and up to the engine’s count, and refuses what no build writes', () => {
+    // A skipped piece (0) is a count this build writes — a QLab show's cut bars come across as
+    // them — and so is a vamp. A count per piece is the shape: one missing, a count the engine
+    // would refuse at the start, markers out of order, or more markers than a start can carry
+    // reach the window as a sentence here rather than as a cue that fails on GO.
+    const named = { number: '1', name: 'Welcome' }
+    const sliced = (slices: unknown) => audio('a1', { ...named, slices } as unknown as Partial<AudioCue>)
+    const markers = (count: number) => Array.from({ length: count }, (_, i) => (i + 1) * 100)
+
+    expect(migrateWorkspace(workspaceWith([sliced({ markers: [52, 1477, 24331], playCounts: [0, -1, 0, 1] })]), SHOW).cues[0])
+      .toMatchObject({ slices: { markers: [52, 1477, 24331], playCounts: [0, -1, 0, 1] } })
+    expect(() => migrateWorkspace(workspaceWith([sliced({ markers: markers(127), playCounts: Array(128).fill(1) })]), SHOW))
+      .not.toThrow()
+
+    const refusal = (slices: unknown) => () => migrateWorkspace(workspaceWith([sliced(slices)]), SHOW)
+    expect(refusal({ markers: markers(128), playCounts: Array(129).fill(1) })).toThrow(
+      `that show’s cue 1 Welcome (audio) has 128 slice markers, and a cue has at most 127 — ${SHOW} was probably saved by another build`
+    )
+    expect(refusal({ markers: [1000], playCounts: [1] })).toThrow('a slice play count missing or to spare')
+    expect(refusal({ markers: [1000], playCounts: [1, -2] })).toThrow('a slice play count of -2')
+    expect(refusal({ markers: [1000], playCounts: [1, 1.5] })).toThrow('a slice play count of 1.5')
+    expect(refusal({ markers: [2000, 1000], playCounts: [1, 1, 1] })).toThrow('slice markers out of order')
+    expect(refusal({ markers: [2000, 1000], playCounts: [1, 1, 1] })).toThrow(Refusal)
+  })
+
   it('refuses a cue value whose type allows several kinds and carries none of them', () => {
     // One field of the saved form has no single kind: an OSC argument's value is a number, a
     // string or a boolean, and the declaration says so with the kinds it allows. A value of

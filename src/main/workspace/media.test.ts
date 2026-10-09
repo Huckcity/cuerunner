@@ -666,6 +666,30 @@ describe('planMediaRelink', () => {
     expect([...plan.entries()]).toEqual([['a', chosen]])
   })
 
+  it('relinks a file the same move renamed the way a cloud drive does, when only one file could be it', () => {
+    // Downloaded through Google Drive: every ' in a name became _.
+    const newFolder = join(dir, 'Downloads', 'audio')
+    const chosen = write(newFolder, '(rt) 01 WELCOME TO THE ROCK.mp3')
+    write(newFolder, '(rt) 07B IT_S SURE A NICE VIEW HERE.mp3')
+    write(newFolder, '(rt) 14.2 SOMETHING_S MISSING.mp3')
+    write(newFolder, '(rt) 14.2 SOMETHING’S MISSING.mp3')
+    const oldFolder = join(dir, 'Mac', 'audio')
+
+    const plan = planMediaRelink(
+      missing(
+        ['a', join(oldFolder, '(rt) 01 WELCOME TO THE ROCK.mp3')],
+        ['b', join(oldFolder, "(rt) 07B IT'S SURE A NICE VIEW HERE.mp3")],
+        ['c', join(oldFolder, "(rt) 14.2 SOMETHING'S MISSING.mp3")]
+      ),
+      'a',
+      chosen
+    )
+
+    expect(plan.get('b')).toBe(join(newFolder, '(rt) 07B IT_S SURE A NICE VIEW HERE.mp3'))
+    // Two files could be the third: neither is chosen.
+    expect(plan.has('c')).toBe(false)
+  })
+
   it('relinks nothing when the picked file is not there', () => {
     const plan = planMediaRelink(
       missing(['a', join(dir, 'old', 'one', 'a.wav')]),

@@ -110,6 +110,16 @@ export interface QLabNetwork {
   patch: string
 }
 
+/** One QLab slice marker: where the slice ends, and how it plays. */
+export interface QLabSlice {
+  /** Seconds into the file: the end of this slice and the start of the next. */
+  time: number
+  /** Passes. QLab's own interface offers 1 or more; a workspace also holds 0 (see qlabMap.ts). */
+  playCount: number
+  /** Loops until a devamp moves it on, whatever `playCount` says. */
+  infiniteLoop: boolean
+}
+
 export interface QLabCue {
   kind: QLabKind
   /** The type as QLab said it, for a cue whose kind is `unknown`. */
@@ -136,12 +146,26 @@ export interface QLabCue {
   rate?: number
   /** An audio cue's levels: the master, and the first two outputs where the cue sets them. */
   levels?: { master: number | null; left: number | null; right: number | null }
+  /**
+   * An audio cue's slice markers, as QLab keeps them: each `time` is where a slice *ends*, in
+   * seconds into the file, with how many times the slice up to it plays — QLab's own OSC
+   * dictionary says "time corresponds to the end time of the slice". Absent where QLab said
+   * nothing; an empty list is a cue with no markers.
+   */
+  slices?: QLabSlice[]
+  /** The piece after the last marker, up to the end time: its count, and whether it loops for ever. */
+  lastSlice?: { playCount: number; infiniteLoop: boolean }
+  /** A Devamp cue's type: 1 devamps the slice that is looping, 2 the looping cue, ignoring its slices. */
+  devampType?: number
+  /** A Devamp cue's "start next cue when the target reaches the end of the current slice". */
+  startNextAtSliceEnd?: boolean
   /** What a fade fades to: the master level, and the pan its first two outputs make. */
   fadeTo?: { master: number | null; pan: number | null }
+  /** A fade's "stop target when done"; a devamp's "stop target when it reaches the end of the current slice". */
   stopTargetWhenDone?: boolean
   /** A Load cue's time into its target, seconds, where QLab said it. */
   loadAt?: number
-  /** A group's mode: 1 start first and enter, 2 start first, 3 timeline, 4 random, 6 playlist. */
+  /** A group's mode: 1 start first and enter, 2 start first, 3 timeline, 4 random, 6 playlist (0 is a cue list, 5 a cart). */
   groupMode?: number
   children?: QLabCue[]
   midi?: QLabMidi

@@ -113,8 +113,8 @@ bool validStartExtras(const StartOptions& options, EngineError& error) {
       error = {"invalid", "slices must be in the order they play"};
       return false;
     }
-    if (slice.playCount < -1 || slice.playCount == 0) {
-      error = {"invalid", "a slice plays once or more, or -1 until it is released"};
+    if (slice.playCount < -1) {
+      error = {"invalid", "a slice plays 0 times (skipped) or more, or -1 until it is released"};
       return false;
     }
   }

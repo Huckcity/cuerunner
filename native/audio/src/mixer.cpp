@@ -378,10 +378,21 @@ Voice* Mixer::startVoice(const Command& cmd) {
 
   // Slices replace the one region and its loop count: the voice starts in the slice that
   // holds its start (a seek can start it part-way through the cue) and plays them in order.
+  //
+  // A slice that plays no times is left out here, once, rather than tested at every edge: the
+  // slice before it then ends where a slice that does not start there begins, and the move
+  // between them is the jump `advanceSlices` already makes for slices that do not touch — the
+  // next frame is the first frame after the skip. Skipped slices at the end leave the last kept
+  // one the voice's last, so the voice ends where the skip begins.
   if (options.sliceCount > 0 && voice->inputFeed < 0) {
     int kept = 0;
+    int skipped = 0;
     for (int i = 0; i < options.sliceCount && i < kMaxSlices; i++) {
       const SliceSpec& spec = options.slices[i];
+      if (spec.playCount == 0) {
+        skipped++;
+        continue;
+      }
       double start = spec.startMs * static_cast<double>(voice->sampleRate) / 1000.0;
       double end = spec.endMs * static_cast<double>(voice->sampleRate) / 1000.0;
       start = std::max(0.0, std::min(start, sourceEnd));
@@ -390,13 +401,20 @@ Voice* Mixer::startVoice(const Command& cmd) {
       VoiceSlice* slices = slicesOf(*voice);
       slices[kept].startFrame = start;
       slices[kept].endFrame = end;
-      slices[kept].playCount = spec.playCount < 0 ? -1 : std::max(1, spec.playCount);
+      slices[kept].playCount = spec.playCount < 0 ? -1 : spec.playCount;
       kept++;
     }
     voice->sliceCount = kept;
-    if (kept > 0) {
+    const VoiceSlice* slices = slicesOf(*voice);
+    if (skipped > 0 && (kept == 0 || slices[kept - 1].endFrame <= segmentStart)) {
+      // Every slice from where it starts is skipped: there is nothing to play, and the empty
+      // region ends the voice as it begins, complete — not the whole region played instead.
+      voice->sliceCount = 0;
+      voice->segmentStartFrame = segmentStart;
+      voice->segmentEndFrame = segmentStart;
+      voice->position = segmentStart;
+    } else if (kept > 0) {
       int index = 0;
-      const VoiceSlice* slices = slicesOf(*voice);
       while (index < kept - 1 && slices[index].endFrame <= segmentStart) index++;
       voice->sliceIndex = index;
       voice->segmentStartFrame = slices[index].startFrame;
@@ -1183,7 +1201,8 @@ void Mixer::render(float* out, int frames, int channels) {
  * A sliced voice has run past the end of its slice. The slice plays again while it has
  * passes left (for ever, for a vamp) unless a release asked it to make this pass its last;
  * then the voice goes on into the next slice — straight on, sample for sample, when the next
- * slice starts where this one ended — or ends, at the last slice or when the release said so.
+ * slice starts where this one ended, and with the frames past the edge carried into it when
+ * skipped slices lie between — or ends, at the last slice or when the release said so.
  */
 void Mixer::advanceSlices(Voice& voice, int64_t frame) {
   // A slice shorter than one step could otherwise be passed over many times in one frame;

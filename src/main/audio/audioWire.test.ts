@@ -12,14 +12,14 @@
  */
 import { execFileSync } from 'node:child_process'
 import { EventEmitter } from 'node:events'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createServer, type Server, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { PassThrough } from 'node:stream'
 import type { ChildProcess } from 'node:child_process'
 import { describe, expect, it, vi } from 'vitest'
-import { AUDIO_LIMITS, AUDIO_PROTOCOL_VERSION, AUDIO_WIRE } from '../../shared/audio'
+import { AUDIO_LIMITS, AUDIO_MAX_SLICES, AUDIO_PROTOCOL_VERSION, AUDIO_WIRE } from '../../shared/audio'
 import type { AudioEngineEvent } from '../../shared/audio'
 import { drainMainErrors } from '../errors'
 import { AudioEngineError, NativeAudioEngine, type SpawnAudioEngine } from './AudioEngine'
@@ -69,6 +69,17 @@ function restoreEnv(name: string, value: string | undefined): void {
   if (value === undefined) delete process.env[name]
   else process.env[name] = value
 }
+
+describe('the slices a start carries', () => {
+  it('are as many as the engine’s fixed arrays hold, so nothing the window allows is refused at GO', () => {
+    // An engine size rather than a declared bound, so `--protocol` does not print it: the
+    // header that sizes the arrays is read instead.
+    const header = readFileSync(join(repoRoot, 'native', 'audio', 'src', 'wsaudio.h'), 'utf-8')
+    expect(Number(/constexpr int kMaxSlices = (\d+);/.exec(header)?.[1])).toBe(AUDIO_MAX_SLICES)
+    // A real rehearsal-track show cut one cue at 41 slices.
+    expect(AUDIO_MAX_SLICES).toBeGreaterThanOrEqual(128)
+  })
+})
 
 describe('the wire declaration', () => {
   it('is the one the built engine carries', () => {

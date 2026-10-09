@@ -239,7 +239,10 @@ export const GUIDES = [
         <strong>Cuerunner &#9662; &rarr; Import QLab Workspace&hellip; &rarr; Choose Workspace
         File&hellip;</strong>, and pick the <code>.qlab5</code>. A <code>.qlab4</code> and a
         <code>.cues</code> file work the same way. A workspace saved as a folder can be picked
-        by the file inside it.
+        by the file inside it. So can one of QLab 5's own backups, a
+        <code>.qlab5backup</code> from the <em>backups</em> folder beside the workspace, when
+        the workspace itself is lost: its audio is found from the workspace's folder, as it
+        would have been.
       </p>
       <p>
         The show opens as a <strong>new show with no file of its own</strong>. Nothing is
@@ -303,6 +306,15 @@ export const GUIDES = [
         in different folders are never mistaken for each other. The bar across the top of
         the window relinks one file at a time, as it does for any show.
       </p>
+      <p>
+        A show that went through Google Drive, a zip or a Windows copy often comes back with
+        some characters in its file names replaced: <code>IT'S SURE A NICE VIEW HERE.mp3</code>
+        arrives as <code>IT_S SURE A NICE VIEW HERE.mp3</code>. Where a file is not there
+        under its own name, Find in Folder takes the one file in that folder whose name
+        differs only by <code>' ’ : / ? " &lt; &gt; | *</code> becoming <code>_</code>, or by how
+        an accent is encoded. When two files could both be it, it picks neither: the report
+        names them, and you relink that cue from its own bar.
+      </p>
     </section>
 
     <section class="panel reveal delay-2" id="mapping">
@@ -312,17 +324,45 @@ export const GUIDES = [
           <thead><tr><th>QLab</th><th>Cuerunner</th></tr></thead>
           <tbody>
             <tr><td>Every cue</td><td>Number, name, colour (QLab's extra colours land in the nearest of the eight), notes, armed, pre-wait, continue mode, and QLab's own cue id.</td></tr>
-            <tr><td>Audio</td><td>Audio: the file, start and end, loops (an infinite loop is a vamp, released by a devamp), rate, master level and the pan its first two outputs make.</td></tr>
+            <tr><td>Audio</td><td>Audio: the file, start and end, loops (an infinite loop is a vamp, released by a devamp), rate, master level and the pan its first two outputs make. Its slices come across as slices, on the same music: each marker where QLab put it, each slice's play count, and a slice set to loop for ever is a vamp. See <a href="#slices">slices</a>.</td></tr>
             <tr><td>Fade</td><td>Fade: its target, its length, level or pan, and <em>stop target when done</em>. The curve is an S-curve, QLab's own default.</td></tr>
-            <tr><td>Stop, Devamp</td><td>Stop and Devamp, on the same target.</td></tr>
+            <tr><td>Stop</td><td>Stop, on the same target.</td></tr>
+            <tr><td>Devamp</td><td>Devamp, on the same target. <em>Devamp currently looping slice</em> is what Cuerunner's devamp does: the vamp finishes the pass it is on and the music goes on into the next slice. <em>Devamp looping cue</em> is the same on a cue without slices; on one with slices the report says it moves on a slice. <em>Start next cue when target reaches the end of the current slice</em> has no Cuerunner equivalent and is reported; with <em>stop target</em> also ticked, the devamp stops its target at the end of the slice.</td></tr>
             <tr><td>Group</td><td><em>Timeline</em> is Timeline, each child at its pre-wait. <em>Start random child</em> is Random. <em>Playlist</em> is Sequence. <em>Start first child and go to next cue</em> is a Timeline when its children auto-continue into each other and a Sequence when they auto-follow. <em>Start first child and enter into group</em> is Playlist: one child per GO.</td></tr>
-            <tr><td>Wait, Memo</td><td>Wait. A memo is a wait of no length, its notes kept.</td></tr>
+            <tr><td>Wait</td><td>Wait, of the same length.</td></tr>
+            <tr><td>Memo</td><td>Memo, its name and notes kept.</td></tr>
             <tr><td>MIDI</td><td>MIDI for note on, note off, control change, program change and SysEx, on the port the workspace's patch names; Show Control for MIDI Show Control's Go, Stop, Resume, Load and Reset.</td></tr>
             <tr><td>Network (QLab 4: OSC)</td><td>OSC, to the host and port of the workspace's network patch, its arguments typed as QLab types them.</td></tr>
-            <tr><td>Second cue list, cart</td><td>Every QLab list is a cue list here, a tab of its own with its own GO, and keeps QLab's id, so a remote that sent <code>/cue_id/{list}/go</code> to QLab sends it here. The first list that is not a cart is the main list. A cart is a cart list, its tiles in the order the cart held them rather than at their grid places.</td></tr>
+            <tr><td>Cue list, second cue list, cart</td><td>Every QLab list is a cue list here, a tab of its own with its own GO, and keeps QLab's id, so a remote that sent <code>/cue_id/{list}/go</code> to QLab sends it here. Its cues are the list's running order, not a group inside it. The first list that is not a cart is the main list. A cart is a cart list, its tiles in the order the cart held them rather than at their grid places.</td></tr>
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section class="panel reveal delay-2" id="slices">
+      <h2>Slices and vamps</h2>
+      <p>
+        A rehearsal track cut into slices in QLab plays the same here. QLab keeps a marker at
+        the <em>end</em> of each slice with that slice's play count, and the piece after the
+        last marker on its own; each count stays on the music it was set on. A slice set to
+        loop for ever is a vamp, whatever count it shows, and the devamp aimed at the cue lets
+        it finish its pass and moves on into the next slice.
+      </p>
+      <p>
+        QLab workspaces also hold slices set to play <strong>0</strong> times, which QLab's
+        own documentation does not describe. Cuerunner skips them: the music goes from the
+        slice before straight into the slice after, to the sample, and a last slice of 0 ends
+        the cue where it begins. That reading comes from the shows themselves — a bar of 0
+        between two of 1, two copies of a cue that differ only by a last slice of 0 or 1, and a
+        song whose devamps land on the bars they are named for only if the 0 after its
+        count-in is not played — not from a QLab specification, so the report says so: listen
+        through each sliced cue before the show. A cue with no markers and a single slice of 0
+        plays once.
+      </p>
+      <p>
+        A cue carries up to 128 slices. One QLab cut into more plays its first 127 markers and
+        then straight through to the end, and the report says from where.
+      </p>
     </section>
 
     <section class="panel reveal delay-3" id="timing">
@@ -638,6 +678,9 @@ export const GUIDES = [
         <strong>Vamp</strong>. The cue plays the intro once, vamps the groove until the devamp,
         plays the bridge twice and holds on the next vamp — each change landing on its sample.
         A devamp set to <strong>Stop at the end of the slice</strong> ends the cue there instead.
+        A slice set to play <strong>0</strong> times is skipped — a cut bar, or the bar a
+        recording repeats after a vamp — and the music goes from the slice before straight into
+        the slice after; a last slice of 0 ends the cue where it begins.
       </p>
     </section>
 

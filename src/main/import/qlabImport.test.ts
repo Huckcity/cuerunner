@@ -92,6 +92,14 @@ describe('the file dialog', () => {
     vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] })
     expect(await importQLabFile(win)).toBeNull()
   })
+
+  it('offers QLab 5’s own backups beside its workspaces', async () => {
+    vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] })
+    await importQLabFile(win)
+    const call = vi.mocked(dialog.showOpenDialog).mock.calls[0] as unknown[]
+    const options = call[call.length - 1] as { filters: Array<{ extensions: string[] }> }
+    expect(options.filters[0].extensions).toEqual(['qlab5', 'qlab4', 'qlab3', 'qlab5backup', 'cues'])
+  })
 })
 
 describe('finding missing audio in a folder', () => {
@@ -119,6 +127,59 @@ describe('finding missing audio in a folder', () => {
     const door = found.workspace.cues.find(cue => cue.id === 'A-FX1') as AudioCue & { media?: unknown }
     expect(door.filePath).toBe(join(stick, 'audio', 'door.wav'))
     expect(door.media).toEqual({ path: join(stick, 'audio', 'door.wav'), originalPath: join(stick, 'audio', 'door.wav') })
+  })
+
+  it('finds a file a cloud drive renamed, and names the files when two could be it', () => {
+    // A real show's audio came back from Google Drive with each ' turned into _: four of its
+    // forty-five files were missing under the names QLab kept.
+    const media = join(dir, 'audio')
+    mkdirSync(media)
+    const names = [
+      "(rt) 07B IT'S SURE A NICE VIEW HERE.mp3",
+      "(rt) 07C WORLD'S LARGEST REFRIGERATOR.mp3",
+      "(rt) 13.2-14.1 38 PLANES REPRISE-SOMEWHERE - SOMETHING'S MISSING.mp3",
+      "(rt) 14.2 SOMETHING'S MISSING.mp3"
+    ]
+    for (const name of names) writeFileSync(join(media, name.replace(/'/g, '_')), 'ID3')
+    // The last one is there twice, under two characters a ' can become.
+    writeFileSync(join(media, '(rt) 14.2 SOMETHING’S MISSING.mp3'), 'ID3')
+    const elsewhere = '/Users/sm/Desktop/CFA RTs/audio'
+    const cues = names.map((name, index) => ({
+      id: `A${index}`, number: String(index + 1), name, colorLabel: 'none', parentId: null, preWait: 0, postWait: 0,
+      timelineOffset: 0, duration: 0, advance: 'none', isArmed: true, notes: '', type: 'audio',
+      filePath: `${elsewhere}/${name}`, startTime: 0, endTime: null, fadeInDuration: 0, volume: 1, pan: 0, outputs: null,
+      loopCount: 0, playbackRate: 1, trim: 1
+    })) as AudioCue[]
+    const workspace = { version: 1 as const, id: 'w', name: 'CFA RTs', createdAt: '', audioSettings: { outputDeviceId: 'default' }, midiSettings: { outputPortName: '' }, cues }
+
+    const found = relinkFromFolder(workspace, null, media)
+    expect(found.found).toBe(3)
+    expect(found.workspace.cues.slice(0, 3).map(cue => (cue as AudioCue).filePath)).toEqual(
+      names.slice(0, 3).map(name => join(media, name.replace(/'/g, '_')))
+    )
+    expect(found.missingMedia.map(entry => entry.cueId)).toEqual(['A3'])
+    expect(found.ambiguous).toEqual([{
+      cueId: 'A3',
+      candidates: [join(media, '(rt) 14.2 SOMETHING_S MISSING.mp3'), join(media, '(rt) 14.2 SOMETHING’S MISSING.mp3')].sort()
+    }])
+  })
+
+  it('takes a file under its own name before one under a renamed name', () => {
+    const media = join(dir, 'audio')
+    mkdirSync(media)
+    writeFileSync(join(media, "IT'S.mp3"), 'ID3')
+    writeFileSync(join(media, 'IT_S.mp3'), 'ID3')
+    const cue = {
+      id: 'A', number: '1', name: 'x', colorLabel: 'none', parentId: null, preWait: 0, postWait: 0, timelineOffset: 0, duration: 0,
+      advance: 'none', isArmed: true, notes: '', type: 'audio', filePath: "/gone/IT'S.mp3", startTime: 0, endTime: null,
+      fadeInDuration: 0, volume: 1, pan: 0, outputs: null, loopCount: 0, playbackRate: 1, trim: 1
+    } as AudioCue
+    const found = relinkFromFolder(
+      { version: 1, id: 'w', name: 'x', createdAt: '', audioSettings: { outputDeviceId: 'default' }, midiSettings: { outputPortName: '' }, cues: [cue] },
+      null, media
+    )
+    expect((found.workspace.cues[0] as AudioCue).filePath).toBe(join(media, "IT'S.mp3"))
+    expect(found.ambiguous).toEqual([])
   })
 
   it('asks for the folder, and answers a cancel with nothing', async () => {

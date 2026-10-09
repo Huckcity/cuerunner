@@ -1,10 +1,14 @@
 // A cue's file cut into slices: markers in the region it plays, and how many times each
-// piece between them plays — once, n times, or until a devamp moves it on (a vamp).
+// piece between them plays — once, n times, not at all (skipped), or until a devamp moves it
+// on (a vamp).
 //
 // The markers are file times, so a slice stays on the music it was cut at whatever the
 // region does; a marker outside the region is kept but not played, and moves back in when the
 // region does. The pieces are the region cut at the markers that fall inside it, in order,
 // and the engine plays them sample for sample (native/audio/src/mixer.cpp: advanceSlices).
+// A piece that plays no times is passed over: the piece before it runs straight into the one
+// after, to the sample, and a skipped last piece ends the cue where it begins — a cut bar, or
+// the tail a rehearsal track leaves off. It is how QLab 5's own slices come across.
 //
 // A cue with slices ignores its loop count — the counts are per slice — and a cue without
 // any is the one region and its loop count it always was, which is what keeps a show written
@@ -14,21 +18,23 @@ import { AUDIO_MAX_SLICES, type AudioSlice } from './audio'
 
 /** A slice's play count that means "until released": a vamp. */
 export const SLICE_VAMP = -1
+/** A slice's play count that means "not at all": the piece is skipped. */
+export const SLICE_SKIP = 0
 /** The most passes a slice takes as a number; more is a vamp in all but name. */
 export const SLICE_MAX_PLAYS = 999
 
 export interface CueSlices {
   /** File ms, ascending: where one slice ends and the next begins. */
   markers: number[]
-  /** One per piece — `markers.length + 1` of them — each 1 or more, or `SLICE_VAMP`. */
+  /** One per piece — `markers.length + 1` of them — each 0 (skipped) or more, or `SLICE_VAMP`. */
   playCounts: number[]
 }
 
-/** A count as a slice may carry it: a vamp, or a whole number of passes from 1. */
+/** A count as a slice may carry it: a vamp, or a whole number of passes from 0, which skips it. */
 export function normalizePlayCount(count: unknown): number {
   if (typeof count !== 'number' || !Number.isFinite(count)) return 1
   if (count < 0) return SLICE_VAMP
-  return Math.min(SLICE_MAX_PLAYS, Math.max(1, Math.round(count)))
+  return Math.min(SLICE_MAX_PLAYS, Math.max(SLICE_SKIP, Math.round(count)))
 }
 
 /**
@@ -46,6 +52,33 @@ export function normalizeSlices(value: unknown): CueSlices | null {
   const playCounts: number[] = []
   for (let i = 0; i <= markers.length; i++) playCounts.push(normalizePlayCount(record.playCounts[i]))
   return { markers, playCounts }
+}
+
+/**
+ * Why slices a file carries are not ones this build writes, or null when they are: the load
+ * funnel refuses them rather than reading something nobody wrote. Bounded by the engine's
+ * slice count, so a file cannot ask for more than a start can carry.
+ */
+export function slicesRefusal(value: unknown): string | null {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'object' || Array.isArray(value)) return 'slices that are not markers and counts'
+  const { markers, playCounts } = value as Record<string, unknown>
+  if (!Array.isArray(markers) || !Array.isArray(playCounts)) return 'slices that are not markers and counts'
+  if (markers.length > AUDIO_MAX_SLICES - 1) {
+    return `${markers.length} slice markers, and a cue has at most ${AUDIO_MAX_SLICES - 1}`
+  }
+  for (let i = 0; i < markers.length; i++) {
+    const marker = markers[i]
+    if (typeof marker !== 'number' || !Number.isFinite(marker) || marker < 0) return 'a slice marker that is not a time in the file'
+    if (i > 0 && marker <= (markers[i - 1] as number)) return 'slice markers out of order'
+  }
+  if (playCounts.length !== markers.length + 1) return 'a slice play count missing or to spare'
+  for (const count of playCounts) {
+    if (typeof count !== 'number' || !Number.isInteger(count) || count < SLICE_VAMP || count > SLICE_MAX_PLAYS) {
+      return `a slice play count of ${String(count)}`
+    }
+  }
+  return null
 }
 
 /** Whether a cue's slices ask for anything: a marker, or a piece that does not play once. */
@@ -79,7 +112,7 @@ export function slicePieces(slices: CueSlices, startMs: number, endMs: number): 
   return pieces
 }
 
-/** How long the pieces play for, ms, at `rate` — or null while any of them vamps. */
+/** How long the pieces play for, ms, at `rate` — or null while any of them vamps. A skipped piece adds nothing. */
 export function slicedLengthMs(pieces: AudioSlice[], rate = 1): number | null {
   let total = 0
   for (const piece of pieces) {
@@ -126,7 +159,8 @@ export function setPlayCount(slices: CueSlices, index: number, count: number): C
   return { markers: slices.markers, playCounts }
 }
 
-/** A count as the window writes it: "∞" for a vamp, "×n" otherwise. */
+/** A count as the window writes it: "∞" for a vamp, "skip" for a piece that is passed over, "×n" otherwise. */
 export function playCountLabel(count: number): string {
-  return count < 0 ? '∞' : `×${count}`
+  if (count < 0) return '∞'
+  return count === SLICE_SKIP ? 'skip' : `×${count}`
 }

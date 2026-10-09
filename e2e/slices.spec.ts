@@ -62,3 +62,39 @@ test('a slice made a vamp holds the cue past its file until a devamp ends it at 
   await expect(groove).toHaveAttribute('data-running', 'false', { timeout: 4000 })
   await expect.poll(() => Math.max(...capturedChannelPeaks(capturePath, 200)), { timeout: 4000 }).toBe(0)
 })
+
+test('a slice set to play 0 times is struck on the bar and skipped when the cue plays', async ({}, testInfo) => {
+  test.setTimeout(90_000)
+  fs.mkdirSync(testInfo.outputDir, { recursive: true })
+  const song = path.join(testInfo.outputDir, 'song.wav')
+  writeSineWav(song, { seconds: 3, levelDb: -6 })
+  ;({ app, page, root } = await openShow(testInfo, 'Skipped', {
+    cues: [audioCue('a1', '1', 'Count-in', song, { duration: 3000 })]
+  }))
+
+  const cue = page.locator('.cue-row', { hasText: 'Count-in' })
+  await cue.click()
+  await page.locator('.inspector-tab', { hasText: 'Slices' }).click()
+  await page.locator('.slice-new-marker').fill('1')
+  await page.locator('.slice-add').click()
+  await expect(page.locator('.slice-row')).toHaveCount(2)
+  // The first second is a count-in this run leaves out.
+  await page.locator('.slice-row[data-slice="1"] .slice-count').fill('0')
+  await expect(page.locator('.slice-piece')).toHaveText(['skip', '×1'])
+  await expect(page.locator('.slice-piece[data-skip="true"]')).toHaveCount(1)
+  await expect(page.locator('.slices-summary')).toContainText('Plays for 2.0s')
+
+  await cue.click()
+  await page.keyboard.press('Space')
+  await expect(cue).toHaveAttribute('data-running', 'true')
+  // The engine starts at the slice after the skipped one: nothing before 1 s is played.
+  const position = () => page.evaluate(async () => {
+    const bridge = (window as unknown as {
+      cuerunner: { audio: { progress: (id: string) => Promise<{ elapsedMs: number } | null> } }
+    }).cuerunner
+    return (await bridge.audio.progress('a1'))?.elapsedMs ?? null
+  })
+  await expect.poll(position, { timeout: 4000 }).not.toBeNull()
+  expect(await position()).toBeGreaterThanOrEqual(1000)
+  await expect(cue).toHaveAttribute('data-running', 'false', { timeout: 5000 })
+})

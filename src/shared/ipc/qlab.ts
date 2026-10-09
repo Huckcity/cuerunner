@@ -118,6 +118,11 @@ export interface QLabFoundMedia {
   workspace: Workspace
   missingMedia: MissingMedia[]
   found: number
+  /**
+   * Missing cues the folder holds more than one renamed file for — `IT_S.mp3` and `IT_S.mp3`'s
+   * twin under another replaced character — each left missing, with the files it could be.
+   */
+  ambiguous: Array<{ cueId: string; candidates: string[] }>
 }
 
 export type QLabFindMediaResult =
@@ -134,7 +139,8 @@ export interface QLabBridge {
   importLive(payload: QLabLivePayload): Promise<QLabImportResult>
   /**
    * Asks for a folder and looks in it for every missing audio file, by the path the show
-   * names it by and then by its file name. A cancel is a `null` inside the `ok` arm.
+   * names it by and then by its file name — as it is, or as a cloud drive or zip tool renamed
+   * it, where only one file could be it. A cancel is a `null` inside the `ok` arm.
    */
   findMedia(workspace: Workspace, workspacePath: string | null): Promise<QLabFindMediaResult>
 }

@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { MAX_QLAB_FILE_BYTES, parseQLabWorkspace, readQLabWorkspace } from './qlabFile'
 import {
-  Dict, Real, alias, pressNightWorkspace, qlabCue, qlabWorkspace, writeBinaryPlist, writeKeyedArchive
+  Dict, Real, alias, audioSlice, pressNightWorkspace, qlabCue, qlabWorkspace, rehearsalTrackWorkspace, writeBinaryPlist,
+  writeKeyedArchive
 } from './archiveFixture'
 import type { QLabCue } from './qlabShow'
 
@@ -119,6 +120,62 @@ describe('reading a QLab workspace file', () => {
     expect(master).toBeCloseTo(0.501, 3)
   })
 
+  it('reads QLab 5’s lists, which are Group cues under a root group, as lists rather than as a group in one', () => {
+    // QLab 5.4 archives every list as a GroupCue: mode 0 a list, mode 5 a cart. Read as cues,
+    // the whole show came across as one group wrapping the running order.
+    const bytes = qlabWorkspace({
+      lists: [
+        { name: 'Main Cue List', uniqueID: 'L1', cues: [qlabCue('GroupCue', { uniqueID: 'G', number: '1', groupMode: 3, cues: [] })] },
+        { name: 'Stings', uniqueID: 'C1', cart: true, cues: [qlabCue('AudioCue', { number: 'S1' })] }
+      ]
+    })
+    const read = parseQLabWorkspace(bytes, 'Five.qlab5')
+    expect(read.lists.map(list => [list.name, list.uniqueID, list.cart, list.cues.length])).toEqual([
+      ['Main Cue List', 'L1', false, 1], ['Stings', 'C1', true, 1]
+    ])
+    // A group inside a list stays a group, whatever mode it has.
+    expect(read.lists[0].cues[0]).toMatchObject({ kind: 'group', groupMode: 3 })
+    // The older layout, a class per list, still reads the same.
+    const classes = parseQLabWorkspace(qlabWorkspace({ layout: 'classes', lists: [{ name: 'Main', cues: [] }, { name: 'FX', cart: true, cues: [] }] }), 'x.qlab4')
+    expect(classes.lists.map(list => [list.name, list.cart])).toEqual([['Main', false], ['FX', true]])
+  })
+
+  it('reads an audio cue’s slice markers, its last slice, and a devamp’s settings', () => {
+    const read = parseQLabWorkspace(rehearsalTrackWorkspace(), 'Rehearsal Tracks.qlab5').lists[0].cues
+    expect(read[0]).toMatchObject({
+      kind: 'audio', startTime: 0, endTime: 8,
+      slices: [
+        { time: 1, playCount: 1, infiniteLoop: false }, { time: 2, playCount: 4, infiniteLoop: true },
+        { time: 3, playCount: 0, infiniteLoop: false }, { time: 5, playCount: 1, infiniteLoop: false },
+        { time: 6, playCount: 1, infiniteLoop: true }, { time: 7, playCount: 0, infiniteLoop: false }
+      ],
+      lastSlice: { playCount: 1, infiniteLoop: false }
+    })
+    expect(read[1]).toMatchObject({
+      kind: 'devamp', target: { uniqueID: 'RT1', number: '' }, devampType: 1, startNextAtSliceEnd: false, stopTargetWhenDone: false
+    })
+    expect(read[2]).toMatchObject({ kind: 'memo', name: 'Auto segue into the bus', notes: 'Watch the MD' })
+  })
+
+  it('reads a cue with no slices as having none, and a devamp’s checkboxes under QLab’s OSC names too', () => {
+    const bytes = qlabWorkspace({
+      lists: [{
+        name: 'Main',
+        cues: [
+          qlabCue('AudioCue', { number: '1', slices: [] }),
+          qlabCue('AudioCue', { number: '2', slices: [audioSlice(1, 2), 'not a slice', { $class: 'AudioSlice', playCount: 1 }] }),
+          qlabCue('DevampCue', { number: '3', devampType: 2, startNextCueWhenSliceEnds: true, stopTargetWhenSliceEnds: true })
+        ]
+      }]
+    })
+    const [none, partial, devamp] = parseQLabWorkspace(bytes, 'x.qlab5').lists[0].cues
+    expect(none.slices).toEqual([])
+    expect(none.lastSlice).toBeUndefined()
+    // What is not a marker is not read as one.
+    expect(partial.slices).toEqual([{ time: 1, playCount: 2, infiniteLoop: false }])
+    expect(devamp).toMatchObject({ devampType: 2, startNextAtSliceEnd: true, stopTargetWhenDone: true })
+  })
+
   it('names the class of a cue type it does not know, rather than dropping it', () => {
     const bytes = qlabWorkspace({ lists: [{ name: 'Main', cues: [qlabCue('HologramCue', { number: '1' })] }] })
     expect(parseQLabWorkspace(bytes, 'Future.qlab6').lists[0].cues[0]).toMatchObject({ kind: 'unknown', typeName: 'Hologram' })
@@ -177,6 +234,20 @@ describe('where a workspace is read from', () => {
     const read = await readQLabWorkspace(file)
     expect(read.baseDir).toBe(dir)
     expect(read.name).toBe('Press Night')
+  })
+
+  it('a QLab backup in its backups folder: its media relative to the workspace’s folder, above it', async () => {
+    const backups = join(dir, 'Press Night backups')
+    mkdirSync(backups)
+    const file = join(backups, 'Press Night (Backup 2025-10-18_1921).qlab5backup')
+    writeFileSync(file, pressNightWorkspace())
+    const read = await readQLabWorkspace(file)
+    expect(read.baseDir).toBe(dir)
+    expect(read.name).toBe('Press Night')
+    // Moved out of it, a backup is a workspace like any other.
+    const moved = join(dir, 'Press Night.qlab5backup')
+    writeFileSync(moved, pressNightWorkspace())
+    expect((await readQLabWorkspace(moved)).baseDir).toBe(dir)
   })
 
   it('a package folder: the workspace inside it, and media relative to the package', async () => {

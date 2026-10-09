@@ -24,14 +24,18 @@ import { PlistError, isBinaryPlist, isBytes } from './bplist'
 import { isArchivedObject, isRecord, unarchive, type Archived, type ArchivedDict } from './keyedArchive'
 import {
   MAX_IMPORTED_CUES, qlabKind,
-  type QLabCue, type QLabKind, type QLabList, type QLabMedia, type QLabMidi, type QLabNetwork, type QLabShow
+  type QLabCue, type QLabKind, type QLabList, type QLabMedia, type QLabMidi, type QLabNetwork, type QLabShow, type QLabSlice
 } from './qlabShow'
 
 /** The largest workspace file this import reads. A workspace is far smaller; a show file is 64 MiB at most too. */
 export const MAX_QLAB_FILE_BYTES = 64 * 1024 * 1024
 
-/** The extensions the import offers in its dialog. */
-export const QLAB_EXTENSIONS = ['qlab5', 'qlab4', 'qlab3', 'cues'] as const
+/**
+ * The extensions the import offers in its dialog. A `.qlab5backup` is one of the autosaves
+ * QLab 5 keeps in a "<show> backups" folder beside the workspace: the same archive, read the
+ * same way, which is what an operator has when the workspace itself is lost or damaged.
+ */
+export const QLAB_EXTENSIONS = ['qlab5', 'qlab4', 'qlab3', 'qlab5backup', 'cues'] as const
 
 /** How many entries of a package folder are looked at for the workspace inside it. */
 const MAX_PACKAGE_ENTRIES = 512
@@ -64,8 +68,19 @@ export async function readQLabWorkspace(filePath: string): Promise<QLabShow> {
   return {
     ...show,
     name: show.name || basename(filePath, extname(filePath)),
-    baseDir: info.isDirectory() ? filePath : dirname(filePath)
+    baseDir: info.isDirectory() ? filePath : mediaFolder(filePath)
   }
+}
+
+/**
+ * The folder a workspace file's relative media paths are relative to: its own — except a
+ * backup still in the "<show> backups" folder QLab wrote it to, whose paths are the
+ * workspace's, relative to the folder above.
+ */
+function mediaFolder(filePath: string): string {
+  const folder = dirname(filePath)
+  if (/backup$/i.test(extname(filePath)) && / backups$/i.test(basename(folder))) return dirname(folder)
+  return folder
 }
 
 /** The bytes of a workspace file, refused before they are read when there are too many. */
@@ -182,22 +197,38 @@ function className(value: Archived | undefined): string {
   return isArchivedObject(value) ? value.$class : ''
 }
 
+/**
+ * A group's mode that makes it a cue list or a cart rather than a group in one. QLab 5 keeps
+ * its lists as Group cues: a list is mode 0 and a cart mode 5, the two modes its OSC
+ * dictionary calls read-only, under a root group whose own id is "[root group of cue lists]".
+ */
+const LIST_MODE = 0
+const CART_MODE = 5
+
+function isListGroup(value: ArchivedDict): boolean {
+  if (qlabKind(className(value)) !== 'group') return false
+  const mode = number(value['groupMode']) ?? number(value['mode'])
+  return mode === LIST_MODE || mode === CART_MODE
+}
+
 /** Whether an archived object is a cue list or a cart rather than a cue. */
 function isList(value: Archived): boolean {
   if (!isRecord(value)) return false
   const named = className(value)
   if (/CueList|Cart/i.test(named)) return true
+  if (isListGroup(value)) return true
   return named === '' && Array.isArray(value['cues'])
 }
 
 function isCart(value: ArchivedDict): boolean {
+  if (isListGroup(value)) return (number(value['groupMode']) ?? number(value['mode'])) === CART_MODE
   return /Cart/i.test(className(value)) || value['cart'] === true || value['isCart'] === true
 }
 
 /**
  * The cue lists, wherever this file keeps them: the nested archive a workspace stores under
- * `cueLists`, a list of lists, or — in a `.cues` file — cues with no list around them, which
- * are read as one list.
+ * `cueLists` — in QLab 5 a root group whose children are the lists — a list of lists, or, in a
+ * `.cues` file, cues with no list around them, which are read as one list.
  */
 function findLists(outer: Archived, name: string): FoundList[] | null {
   const top = record(outer)
@@ -304,6 +335,22 @@ function fileMedia(target: Archived | undefined): QLabMedia | undefined {
   }
   if (relative === '' && absolute === '') return undefined
   return { relative, absolute }
+}
+
+/** The most slice markers read off one cue: past the engine's count, the rest are not looked at. */
+const MAX_READ_SLICES = 1024
+
+/** A cue's slice markers, as QLab archives them (`AudioSlice`: time, playCount, infiniteLoop). */
+function fileSlices(value: Archived | undefined): QLabSlice[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const slices: QLabSlice[] = []
+  for (const item of value.slice(0, MAX_READ_SLICES)) {
+    if (!isRecord(item)) continue
+    const time = number(item['time'])
+    if (time === undefined) continue
+    slices.push({ time, playCount: number(item['playCount']) ?? 1, infiniteLoop: flag(item['infiniteLoop'], false) })
+  }
+  return slices
 }
 
 function hexBytes(value: Archived | undefined): number[] | undefined {
@@ -416,6 +463,10 @@ function fileCue(value: Archived, patches: Patches, counter: { cues: number }, n
       out.endTime = number(cue['endTime'])
       out.playCount = number(cue['playCount'])
       out.infiniteLoop = flag(cue['infiniteLoop'], false)
+      const slices = fileSlices(cue['slices'])
+      if (slices !== undefined) out.slices = slices
+      const last = record(cue['lastSlice'])
+      if (last !== null) out.lastSlice = { playCount: number(last['playCount']) ?? 1, infiniteLoop: flag(last['infiniteLoop'], false) }
       out.rate = number(cue['rate']) ?? number(cue['playbackRate'])
       const entries = matrixEntries(cue['levels'], 'level')
       if (entries.length > 0) {
@@ -443,7 +494,13 @@ function fileCue(value: Archived, patches: Patches, counter: { cues: number }, n
       break
     }
     case 'devamp':
-      out.stopTargetWhenDone = flag(cue['stopTargetWhenDone'], false)
+      // QLab 5's archive names the inspector's two checkboxes after QLab 4's: "start next cue
+      // when target reaches the end of the current slice" and "stop target when it reaches the
+      // end of the current slice". Its OSC names are `startNextCueWhenSliceEnds` and
+      // `stopTargetWhenSliceEnds`, read the same way.
+      out.stopTargetWhenDone = flag(cue['stopTargetWhenDone'] ?? cue['stopTargetWhenSliceEnds'], false)
+      out.startNextAtSliceEnd = flag(cue['fireNextCueAtMomentLoopEnds'] ?? cue['startNextCueWhenSliceEnds'], false)
+      out.devampType = number(cue['devampType'])
       break
     case 'group': {
       out.groupMode = number(cue['groupMode']) ?? number(cue['mode'])

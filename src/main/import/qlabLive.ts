@@ -37,6 +37,16 @@ const DEFAULTS: Required<LiveOptions> = {
   maxTotalBytes: 64 * 1024 * 1024
 }
 
+/**
+ * Keys asked in a question of their own: an older QLab that does not know them may refuse a
+ * whole `valuesForKeys`, and they must not cost a cue the file and timing the first one reads.
+ * The slice markers are QLab 5's `sliceMarkers`, each `{ time, playCount }` with -1 for a loop.
+ */
+const LATER_KEYS: Partial<Record<QLabKind, string[]>> = {
+  audio: ['sliceMarkers', 'lastSlicePlayCount', 'lastSliceInfiniteLoop'],
+  devamp: ['devampType', 'startNextCueWhenSliceEnds', 'stopTargetWhenSliceEnds']
+}
+
 /** What every cue is asked for, whatever its type. */
 const COMMON_KEYS = ['notes', 'preWait', 'postWait', 'duration', 'continueMode', 'colorName', 'armed']
 
@@ -325,6 +335,11 @@ async function liveCues(
         reply = await session.request(address, [JSON.stringify(COMMON_KEYS)])
       }
       values = reply.status === 'ok' ? record(reply.data) ?? {} : {}
+      const later = LATER_KEYS[kind]
+      if (later !== undefined) {
+        const extra = await session.request(address, [JSON.stringify(later)])
+        if (extra.status === 'ok') values = { ...values, ...(record(extra.data) ?? {}) }
+      }
     }
     const children = Array.isArray(listed['cues']) ? await liveCues(listed['cues'], session, prefix, counter) : undefined
     out.push(liveCue(kind, typeName, listed, values, children))
@@ -373,6 +388,7 @@ export function liveCue(
       cue.infiniteLoop = flag(value('infiniteLoop'), false)
       cue.rate = number(value('rate'))
       if (sliders) cue.levels = { master: fromDecibels(sliders[0]), left: fromDecibels(sliders[1]), right: fromDecibels(sliders[2]) }
+      readLiveSlices(cue, value)
       break
     case 'fade': {
       const master = sliders ? fromDecibels(sliders[0]) : null
@@ -384,7 +400,9 @@ export function liveCue(
       break
     }
     case 'devamp':
-      cue.stopTargetWhenDone = flag(value('stopTargetWhenDone'), false)
+      cue.stopTargetWhenDone = flag(value('stopTargetWhenSliceEnds') ?? value('stopTargetWhenDone'), false)
+      cue.startNextAtSliceEnd = flag(value('startNextCueWhenSliceEnds'), false)
+      cue.devampType = number(value('devampType'))
       break
     case 'group':
       cue.groupMode = number(value('mode'))
@@ -438,4 +456,31 @@ export function liveCue(
   }
   if (kind !== 'group' && children && children.length > 0) cue.children = undefined
   return cue
+}
+
+/** The most slice markers read off one cue's answer. */
+const MAX_LIVE_SLICES = 1024
+
+/**
+ * An audio cue's slices as QLab's OSC says them: `sliceMarkers`, each the end of a slice with
+ * its count (-1 a loop), and the last slice's count and loop on their own keys — into the
+ * record the file reader makes from the archive.
+ */
+function readLiveSlices(cue: QLabCue, value: (key: string) => unknown): void {
+  const markers = value('sliceMarkers')
+  if (Array.isArray(markers)) {
+    cue.slices = []
+    for (const item of markers.slice(0, MAX_LIVE_SLICES)) {
+      const marker = record(item)
+      const time = marker ? number(marker['time']) : undefined
+      if (!marker || time === undefined) continue
+      const playCount = number(marker['playCount']) ?? 1
+      cue.slices.push({ time, playCount, infiniteLoop: playCount < 0 })
+    }
+  }
+  const lastCount = number(value('lastSlicePlayCount'))
+  const lastLoops = value('lastSliceInfiniteLoop')
+  if (lastCount !== undefined || lastLoops !== undefined) {
+    cue.lastSlice = { playCount: lastCount ?? 1, infiniteLoop: flag(lastLoops, false) || (lastCount ?? 1) < 0 }
+  }
 }
