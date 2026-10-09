@@ -87,11 +87,15 @@ test('a QLab track’s vamp holds until its devamp, which moves on past the slic
   const track = rows.nth(0)
   await expect(track).toContainText('track')
 
-  // The slices as the inspector draws them: the skipped bars on the bar, struck through.
+  // The slices as the waveform draws them the moment the track is selected: a marker where each
+  // piece meets the next, and the skipped bars in their place, struck through.
   await track.click()
+  await expect(page.locator('.slice-marker')).toHaveCount(6)
+  await expect(page.locator('.slice-region .slice-region-count')).toHaveText(['×1', '∞', 'skip', '×1', '∞', 'skip', '×1'])
+  await expect(page.locator('.slice-region[data-skip="true"]')).toHaveCount(2)
+  await expect(page.locator('.slice-region[data-vamp="true"]')).toHaveCount(2)
   await page.locator('.inspector-tab', { hasText: 'Slices' }).click()
-  await expect(page.locator('.slice-piece')).toHaveText(['×1', '∞', 'skip', '×1', '∞', 'skip', '×1'])
-  await expect(page.locator('.slice-piece[data-skip="true"]')).toHaveCount(2)
+  await expect(page.locator('.slices-summary')).toHaveText('7 slices · 2 vamps · 2 skipped — holds until a devamp')
 
   await track.click()
   await page.keyboard.press('Space')

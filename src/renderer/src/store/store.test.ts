@@ -2252,3 +2252,83 @@ describe('store — silence trim', () => {
     expect(useStore.getState().silenceFailures).toEqual({})
   })
 })
+
+describe('store — slices edited on the waveform', () => {
+  beforeEach(() => {
+    resetStore()
+    useStore.setState({ past: [], future: [] })
+    useStore.getState().endSliceDrag()
+  })
+
+  const slicesOfFirst = () => (useStore.getState().cues[0] as AudioCue).slices ?? null
+
+  function track(): string {
+    useStore.getState().addAudioCuesFromFiles([{ filePath: '/track.wav', name: 'Track' }])
+    useStore.setState({ past: [], future: [] })
+    return useStore.getState().cues[0].id
+  }
+
+  it('makes every edit one undo step, however quickly they follow each other', () => {
+    const id = track()
+    const store = useStore.getState()
+    store.setCueSlices(id, { markers: [1000], playCounts: [1, 1] })
+    store.setCueSlices(id, { markers: [1000], playCounts: [1, -1] })
+    store.setCueSlices(id, { markers: [1000], playCounts: [0, -1] })
+    expect(useStore.getState().past).toHaveLength(3)
+    useStore.getState().undo()
+    expect(slicesOfFirst()).toEqual({ markers: [1000], playCounts: [1, -1] })
+    useStore.getState().undo()
+    useStore.getState().undo()
+    expect(slicesOfFirst()).toBeNull()
+  })
+
+  it('folds the moves of one drag into one edit, and the next drag is an edit of its own', () => {
+    const id = track()
+    const store = useStore.getState()
+    store.setCueSlices(id, { markers: [1000], playCounts: [1, 1] })
+    for (const at of [1100, 1200, 1300]) store.setCueSlices(id, { markers: [at], playCounts: [1, 1] }, 'drag:0')
+    store.endSliceDrag()
+    for (const at of [1400, 1500]) store.setCueSlices(id, { markers: [at], playCounts: [1, 1] }, 'drag:0')
+    store.endSliceDrag()
+    expect(useStore.getState().past).toHaveLength(3)
+    useStore.getState().undo()
+    expect(slicesOfFirst()?.markers).toEqual([1300])
+    useStore.getState().undo()
+    expect(slicesOfFirst()?.markers).toEqual([1000])
+  })
+
+  it('opens no edit for a drag whose first move went nowhere, so its later moves still undo', () => {
+    const id = track()
+    const store = useStore.getState()
+    store.setCueSlices(id, { markers: [1000], playCounts: [1, 1] })
+    store.setCueSlices(id, { markers: [1000], playCounts: [1, 1] }, 'drag:0')
+    store.setCueSlices(id, { markers: [1200], playCounts: [1, 1] }, 'drag:0')
+    store.endSliceDrag()
+    useStore.getState().undo()
+    expect(slicesOfFirst()?.markers).toEqual([1000])
+  })
+
+  it('writes slices that ask for nothing as none, and a typed edit after a slice edit is its own', () => {
+    const id = track()
+    const store = useStore.getState()
+    store.setCueSlices(id, { markers: [], playCounts: [1] })
+    expect(useStore.getState().past).toHaveLength(0)
+    store.setCueSlices(id, { markers: [], playCounts: [-1] })
+    store.updateCue(id, { name: 'Vamp' })
+    expect(useStore.getState().past).toHaveLength(2)
+    expect(useStore.getState().isDirty).toBe(true)
+  })
+
+  it('keeps the marker the operator holds out of the show, and lets a reveal be asked for twice', () => {
+    track()
+    const before = useStore.getState().waveformReveal
+    useStore.getState().selectSliceMarker({ cueId: 'x', index: 2 })
+    useStore.getState().revealWaveform()
+    useStore.getState().revealWaveform()
+    expect(useStore.getState().waveformReveal).toBe(before + 2)
+    expect(useStore.getState().selectedSliceMarker).toEqual({ cueId: 'x', index: 2 })
+    expect(useStore.getState().past).toHaveLength(0)
+    useStore.getState().loadWorkspace([], 'Next show', null)
+    expect(useStore.getState().selectedSliceMarker).toBeNull()
+  })
+})

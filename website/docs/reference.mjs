@@ -246,7 +246,7 @@ export const REFERENCE = [
             <tr><td>Output patch</td><td>Device channels</td><td>Plays through one of the show's <strong>output patches</strong> (Settings → Audio) instead of naming device outputs: the routing then addresses the patch's own channels, on the device the patch names, and the patch's fader and mute in the <strong>Mixer</strong> apply. A cue whose patch is deleted plays on the device's channels.</td></tr>
             <tr><td>Loudness</td><td>not measured</td><td><strong>Normalize</strong> measures the file (EBU R128 integrated loudness and true peak) and sets the <strong>Trim</strong> so the cue plays at the show's target (−23 LUFS unless Settings → Audio says otherwise), its true peak held under the ceiling (−1 dBTP) and the trim inside its range. The reading stays on the cue. Select several cues and choose <strong>Normalize loudness</strong> from the right-click menu to do them all as one undo step.</td></tr>
             <tr><td>Audition</td><td>—</td><td><strong>Audition cue</strong> plays the cue as the show would — region, loops, slices, level, fades — and <strong>Whole file</strong> plays the file from its start, both on the show's <strong>audition output</strong> only. Nothing in the show moves: no row lights and nothing advances. Press again to stop. The right-click menu auditions a selection, one cue after another. With no audition output chosen it says so and plays nothing.</td></tr>
-            <tr><td>Slices</td><td>none</td><td>On the <strong>Slices</strong> tab: markers cut the region into slices, up to 128, and each plays a number of times, <strong>0</strong> to skip it, or is a <strong>Vamp</strong> that loops until a devamp cue moves it on. Playback follows the slices to the sample: a skipped slice is jumped over from the end of the slice before, and a skipped last slice ends the cue where it begins. With slices the loop count is not used; with none the cue is its region and its loop count, as it always was.</td></tr>
+            <tr><td>Slices</td><td>none</td><td>Made on the <strong>waveform</strong>: markers cut the region into slices, up to 128, and each plays a number of times (up to 999), <strong>0</strong> to skip it, or is a <strong>vamp</strong> that loops until a devamp cue moves it on. A marker is a time in the file, kept to a thousandth of a millisecond; one outside the region is kept, drawn dimmed, and cuts nothing until the region reaches it again. A dragged marker snaps to a note within 32 px and 100 ms of the pointer, then to the nearest zero crossing within 4 ms; <kbd>Shift</kbd> drags free; markers stay at least 1 ms apart and never cross. Taking a marker out joins the slices either side with the earlier one's count. Playback follows the slices to the sample: a skipped slice is jumped over from the end of the slice before, and a skipped last slice ends the cue where it begins. With slices the loop count is not used; with none the cue is its region and its loop count, as it always was. The <strong>Slices</strong> tab counts them and lists the markers, and <strong>Show on waveform</strong> opens the waveform. Keys: <a href="keyboard.html#slices">slices on the waveform</a>.</td></tr>
           </tbody>
         </table>
       </div>
@@ -793,6 +793,25 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
         never half a change. It
         keeps the last 50 edits. In a focused text field, the field's own undo applies
         instead.
+      </div>
+    </section>
+
+    <section class="panel reveal delay-2" id="slices">
+      <h2>Slices on the waveform</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Keys</th><th>Action</th><th>Where</th></tr></thead>
+          <tbody>
+            <tr><td><kbd>M</kbd></td><td>Add a slice marker at the cursor — or, while the cue plays, where the music is. A cue's own hotkey on <kbd>M</kbd> still fires everywhere else</td><td>The waveform, once it has the keyboard: click it, or <kbd>Tab</kbd> to it</td></tr>
+            <tr><td>Double-click</td><td>Add a marker at the note under the pointer</td><td>The waveform</td></tr>
+            <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd> + <kbd>Tab</kbd></td><td>Walk the slices and markers from left to right</td><td>The waveform's slice strip</td></tr>
+            <tr><td><kbd>←</kbd> / <kbd>→</kbd></td><td>Nudge the marker 10 ms; with <kbd>Shift</kbd> 100 ms, with <kbd>Alt</kbd> 1 ms. Each press is one undo; a held key is one</td><td>A selected marker</td></tr>
+            <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td>Take the marker out; the slices either side join with the earlier one's count</td><td>A selected marker</td></tr>
+            <tr><td><kbd>Enter</kbd></td><td>Choose the slice's count: ×1–×4, a typed count, ∞ vamp or skip</td><td>A focused slice</td></tr>
+            <tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>One pass more or fewer: skip, ×1 … ×999, then ∞</td><td>A focused slice</td></tr>
+            <tr><td><kbd>0</kbd> … <kbd>9</kbd>, <kbd>V</kbd></td><td>Set the count: a digit is that many passes, <kbd>0</kbd> skips, <kbd>V</kbd> vamps</td><td>A focused slice</td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
 `

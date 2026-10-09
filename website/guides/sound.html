@@ -121,14 +121,56 @@
         holds for a scene change of unknown length and then resolves properly.
       </p>
       <p>
-        For music with more than one place to hold, use the <strong>Slices</strong> tab: add
-        markers to cut the region into slices, and give each a number of passes or make it a
-        <strong>Vamp</strong>. The cue plays the intro once, vamps the groove until the devamp,
-        plays the bridge twice and holds on the next vamp — each change landing on its sample.
-        A devamp set to <strong>Stop at the end of the slice</strong> ends the cue there instead.
+        For music with more than one place to hold, cut the cue into <a href="#slices-on-the-waveform">slices</a>
+        on its waveform.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="slices-on-the-waveform">
+      <h2>Slices, on the waveform</h2>
+      <figure class="figure">
+        <a href="../assets/guide/20-slices.png" target="_blank" rel="noreferrer">
+          <img src="../assets/guide/20-slices.png" alt="The waveform of a sliced cue: a grip and a line at every marker, and along the top each slice's count — ×1, ×2, an amber ∞ over a tinted vamp, a struck-out skip over a hatched, dimmed bar. The vamp is playing: it is lit, says pass 2, and the header names the devamp that will release it." />
+        </a>
+        <figcaption>A sliced cue on the waveform, holding in its vamp.</figcaption>
+      </figure>
+      <p>
+        A slice is a piece of the cue's music between two <strong>markers</strong>, and it plays
+        a number of times, not at all, or until a devamp moves it on. Every marker is a line on
+        the waveform with a grip above it, and every slice says its count in the strip along the
+        top: <strong>×2</strong>, an amber <strong>∞</strong> over a tinted vamp, and
+        <strong>skip</strong> struck through over a dimmed, hatched bar. The cue plays the intro
+        once, vamps the groove until the devamp, plays the bridge twice and holds on the next
+        vamp — each change landing on its sample.
+      </p>
+      <ul class="tight-list">
+        <li><strong>Add a marker</strong> — click the waveform to put the cursor on the note and press <kbd>M</kbd>, double-click, or right-click and choose <strong>Add marker</strong>. While the cue plays, <kbd>M</kbd> marks where the music is.</li>
+        <li><strong>Move one</strong> — drag its grip, or its line. It lands on a note near the pointer and then on the zero crossing beside it, so the cut does not click; hold <kbd>Shift</kbd> for a free hand. Markers stop against each other rather than cross. With the grip selected, <kbd>←</kbd> <kbd>→</kbd> nudge it 10 ms, 100 ms with <kbd>Shift</kbd>.</li>
+        <li><strong>Take one out</strong> — <kbd>Delete</kbd> on a selected marker, or <strong>Delete marker</strong> from the right-click menu on it. The slices either side join and keep the <em>earlier</em> one's count; the waveform's header says which.</li>
+        <li><strong>Set a count</strong> — click a slice and choose ×1 to ×4, type a larger count, <strong>∞ vamp</strong> or <strong>skip</strong>. On a focused slice <kbd>↑</kbd> <kbd>↓</kbd> step the count, a digit sets it (<kbd>0</kbd> skips) and <kbd>V</kbd> makes it a vamp; the scroll wheel over it steps it too.</li>
+      </ul>
+      <p>
+        Each of those is one edit, and one <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd> takes it
+        back — a whole drag included. <kbd>Tab</kbd> walks the strip from left to right, a
+        slice and then the marker that ends it. Zoom in to place a marker on a note; zoomed out,
+        a slice too narrow for its label still shows its tint and its line.
+      </p>
+      <p>
+        While the cue plays, the slice the music is in is lit and counts its passes —
+        <strong>2/4</strong> on a slice that plays four times, <strong>pass 3</strong> on a
+        vamp — and a bracket over the waveform shows the playhead jumping back at each pass and
+        over each skipped slice. A vamp that is holding says so in the header, with the devamp
+        cue that will let it go. A devamp set to <strong>Stop at the end of the slice</strong>
+        ends the cue there instead.
+      </p>
+      <p>
         A slice set to play <strong>0</strong> times is skipped — a cut bar, or the bar a
         recording repeats after a vamp — and the music goes from the slice before straight into
-        the slice after; a last slice of 0 ends the cue where it begins.
+        the slice after; a last slice of 0 ends the cue where it begins. A cue with slices
+        ignores its loop count. The inspector's <strong>Slices</strong> tab counts the slices,
+        vamps and skips, lists the markers — pick one to select it on the waveform — and
+        <strong>Show on waveform</strong> opens the waveform when the dock is showing something
+        else.
       </p>
     </section>
 
