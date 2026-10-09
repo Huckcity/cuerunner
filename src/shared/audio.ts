@@ -810,6 +810,13 @@ export interface AudioProgress {
   loopsCompleted: number
   /** Sample-clock ms the run was scheduled to start at. */
   startedAtMs: number
+  /**
+   * The slice the voice is in, for a cue sent with slices: `index` counts the pieces it was
+   * sent from 0, skipped ones included, and `pass` is which pass of that piece this is, from
+   * 1. Null for a voice without slices; absent from an engine that does not report it, where
+   * the window works the piece out from `elapsedMs` instead.
+   */
+  slice?: { index: number; pass: number } | null
 }
 
 /** What a `start` resolves to: the identity every later event for this run carries. */

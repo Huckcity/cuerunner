@@ -16,7 +16,7 @@ import { CurveEditor } from '../audio/CurveEditor'
 import { PatchSelect } from '../audio/PatchSelect'
 import { NormalizeControls } from '../audio/NormalizeControls'
 import { AuditionButton } from '../audio/AuditionButton'
-import { SlicesEditor } from './SlicesEditor'
+import { SlicesSummary } from './SlicesSummary'
 
 interface Props { cue: AudioCue; tab: string }
 
@@ -200,7 +200,7 @@ export function AudioInspector({ cue, tab }: Props) {
     }
   }
 
-  if (tab === 'Slices') return <SlicesEditor cue={cue} />
+  if (tab === 'Slices') return <SlicesSummary cue={cue} />
 
   if (tab === 'Time & Loops') {
     const toSeconds = (ms: number) => Math.round(ms / 100) / 10  // 1 decimal

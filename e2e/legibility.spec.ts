@@ -2,7 +2,7 @@
 // one icon column, a header that reads as words, and an empty list that says so where
 // the list is.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
-import { addCueFromMoreMenu, closeApp, launchApp, mintLicense, toolbarCueBtn } from './helpers'
+import { addCueFromMoreMenu, closeApp, launchApp, mintLicense, toolbarCueBtn, unreadableText } from './helpers'
 
 let app: ElectronApplication
 let page: Page
@@ -97,51 +97,7 @@ test('every tone the window writes in is readable on the panel behind it', async
   await toolbarCueBtn(page, 'Audio').click()
   await toolbarCueBtn(page, 'Group').click()
 
-  const failures = await page.evaluate(() => {
-    const luminance = (rgb: number[]): number => {
-      const [r, g, b] = rgb.map(v => {
-        const channel = v / 255
-        return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
-      })
-      return 0.2126 * r + 0.7152 * g + 0.0722 * b
-    }
-    const parse = (colour: string): number[] | null => {
-      const parts = colour.match(/[\d.]+/g)
-      if (parts === null) return null
-      // Anything see-through is not this element's ground: keep looking upwards.
-      if (parts.length > 3 && Number(parts[3]) < 1) return null
-      return parts.slice(0, 3).map(Number)
-    }
-    /** The colour actually behind an element, which is the first opaque one above it. */
-    const ground = (node: Element): number[] => {
-      for (let at: Element | null = node; at !== null; at = at.parentElement) {
-        const found = parse(getComputedStyle(at).backgroundColor)
-        if (found !== null) return found
-      }
-      return [0, 0, 0]
-    }
-
-    const bad: string[] = []
-    for (const node of document.querySelectorAll<HTMLElement>('body *')) {
-      const text = [...node.childNodes]
-        .filter(child => child.nodeType === Node.TEXT_NODE)
-        .map(child => child.textContent ?? '')
-        .join('')
-        .trim()
-      if (text === '') continue
-      const style = getComputedStyle(node)
-      if (style.visibility === 'hidden' || style.display === 'none') continue
-      if (node.matches(':disabled, :disabled *')) continue
-      const colour = parse(style.color)
-      if (colour === null) continue
-      const [a, b] = [luminance(colour), luminance(ground(node))]
-      const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
-      if (ratio < 4.5) {
-        bad.push(`${node.className || node.tagName} "${text.slice(0, 24)}" at ${ratio.toFixed(2)}:1`)
-      }
-    }
-    return bad
-  })
+  const failures = await unreadableText(page)
 
   expect(failures, failures.join('\n')).toEqual([])
 })

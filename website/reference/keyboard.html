@@ -109,6 +109,25 @@
         instead.
       </div>
     </section>
+
+    <section class="panel reveal delay-2" id="slices">
+      <h2>Slices on the waveform</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Keys</th><th>Action</th><th>Where</th></tr></thead>
+          <tbody>
+            <tr><td><kbd>M</kbd></td><td>Add a slice marker at the cursor — or, while the cue plays, where the music is. A cue's own hotkey on <kbd>M</kbd> still fires everywhere else</td><td>The waveform, once it has the keyboard: click it, or <kbd>Tab</kbd> to it</td></tr>
+            <tr><td>Double-click</td><td>Add a marker at the note under the pointer</td><td>The waveform</td></tr>
+            <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd> + <kbd>Tab</kbd></td><td>Walk the slices and markers from left to right</td><td>The waveform's slice strip</td></tr>
+            <tr><td><kbd>←</kbd> / <kbd>→</kbd></td><td>Nudge the marker 10 ms; with <kbd>Shift</kbd> 100 ms, with <kbd>Alt</kbd> 1 ms. Each press is one undo; a held key is one</td><td>A selected marker</td></tr>
+            <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td>Take the marker out; the slices either side join with the earlier one's count</td><td>A selected marker</td></tr>
+            <tr><td><kbd>Enter</kbd></td><td>Choose the slice's count: ×1–×4, a typed count, ∞ vamp or skip</td><td>A focused slice</td></tr>
+            <tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>One pass more or fewer: skip, ×1 … ×999, then ∞</td><td>A focused slice</td></tr>
+            <tr><td><kbd>0</kbd> … <kbd>9</kbd>, <kbd>V</kbd></td><td>Set the count: a digit is that many passes, <kbd>0</kbd> skips, <kbd>V</kbd> vamps</td><td>A focused slice</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </main>
 
   <footer class="site-footer">

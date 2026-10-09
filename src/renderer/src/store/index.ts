@@ -41,6 +41,7 @@ import type {
 } from '../../../shared/show'
 import { createCue, nextCueNumber } from '../utils/cueDefaults'
 import { partName, regionEndMs, splitAudioCue } from '../utils/cueSplit'
+import { slicesInUse, type CueSlices } from '../../../shared/slices'
 import type { MediaLengthAnswer } from '../utils/mediaLength'
 import {
   addEnsemble,
@@ -180,6 +181,12 @@ export interface WaveformCursor {
   ms: number
 }
 
+/** A slice marker the operator has their hand on: which cue's, and which marker, 0-based. */
+export interface SelectedSliceMarker {
+  cueId: string
+  index: number
+}
+
 interface CueListState {
   // Workspace metadata. The identity belongs to the show, not to a save: it comes out of
   // the file it was opened from and is written back unchanged, so saving a show twice
@@ -313,6 +320,32 @@ interface CueListState {
 
   /** The region grip has been let go, so the next drag of it opens a new edit. */
   endRegionDrag: () => void
+
+  /**
+   * Writes an audio cue's slices as one edit and one undo. Slices that ask for nothing — no
+   * marker, every piece once — are written as none. `drag` names a gesture in progress (a
+   * marker being dragged, an arrow held on one): every write of the same gesture folds into
+   * the edit its first write opened, until `endSliceDrag` says the hand is off it.
+   */
+  setCueSlices: (id: string, slices: CueSlices | null, drag?: string) => void
+
+  /** The marker drag or nudge is over, so the next one is a new edit. */
+  endSliceDrag: () => void
+
+  /**
+   * The slice marker selected on the waveform, which Delete takes out and the inspector's
+   * list points at. Session state, like the cursor: what the operator is holding is not the
+   * show.
+   */
+  selectedSliceMarker: SelectedSliceMarker | null
+  selectSliceMarker: (marker: SelectedSliceMarker | null) => void
+
+  /**
+   * Asks the window for the selected cue's waveform: the dock opened on it and the panel
+   * focused. A count, so the same request twice is two requests.
+   */
+  waveformReveal: number
+  revealWaveform: () => void
 
   /**
    * Splits an audio cue at a point in its own file, as one edit: the cue keeps its
@@ -799,6 +832,18 @@ let _coalesceTime = 0
 // The region grip whose drag is in progress ("<cueId>:<edge>"), so the moves of one drag
 // fold into the single edit it opened.
 let _regionGrip: string | null = null
+// The slice gesture in progress ("<cueId>:<gesture>"), likewise: a marker dragged or nudged
+// is one edit however many moves it took.
+let _sliceGrip: string | null = null
+
+/** Whether two cues' slices say the same thing; absent and null are both none. */
+function sameSlices(a: CueSlices | null | undefined, b: CueSlices | null | undefined): boolean {
+  if (!a || !b) return !a && !b
+  return a.markers.length === b.markers.length &&
+    a.markers.every((marker, i) => marker === b.markers[i]) &&
+    a.playCounts.length === b.playCounts.length &&
+    a.playCounts.every((count, i) => count === b.playCounts[i])
+}
 
 /** Whether a patch points the cue at a file other than the one it names now. */
 function cueRetargeted(cues: Cue[], id: string, patch: Partial<Cue>): boolean {
@@ -934,6 +979,8 @@ export const useStore = create<CueListState>()(withCueLists<CueListState>((set, 
   selectedIds: [],
   selectionAnchorId: null,
   waveformCursor: null,
+  selectedSliceMarker: null,
+  waveformReveal: 0,
   collapsedGroupIds: new Set<string>(),
   running: new Map(),
   lastRuns: {},
@@ -1553,6 +1600,32 @@ export const useStore = create<CueListState>()(withCueLists<CueListState>((set, 
 
   endRegionDrag: () => { _regionGrip = null },
 
+  setCueSlices: (id, slices, drag) => set(s => {
+    const cue = s.cues.find(c => c.id === id)
+    if (!cue || cue.type !== 'audio') return s
+    const next = slicesInUse(slices) ? { markers: [...slices.markers], playCounts: [...slices.playCounts] } : null
+    if (sameSlices(cue.slices, next)) return s
+    // The grip is taken only by a write that changed something: a drag whose first move
+    // went nowhere has opened no edit for the later moves to fold into.
+    const grip = drag === undefined ? null : `${id}:${drag}`
+    const record = grip === null || _sliceGrip !== grip
+    _sliceGrip = grip
+    // A typed edit to this cue straight after is an edit of its own, not part of this one.
+    _coalesceId = null
+    return {
+      cues: s.cues.map(c => c.id === id ? { ...c, slices: next } as Cue : c),
+      isDirty: true,
+      future: [],
+      ...(record ? { past: pushPast(s.past, snapshotOf(s)) } : {})
+    }
+  }),
+
+  endSliceDrag: () => { _sliceGrip = null },
+
+  selectSliceMarker: marker => set({ selectedSliceMarker: marker }),
+
+  revealWaveform: () => set(s => ({ waveformReveal: s.waveformReveal + 1 })),
+
   splitAudioCueAt: (id, atMs) => set(s => {
     const cue = s.cues.find(c => c.id === id)
     if (!cue || cue.type !== 'audio') return s
@@ -1838,6 +1911,7 @@ export const useStore = create<CueListState>()(withCueLists<CueListState>((set, 
       showHistory: history ?? [],
       // Where the last show's cursor sat says nothing about this one.
       waveformCursor: null,
+      selectedSliceMarker: null,
       // Nothing has been told to this show's desk yet.
       deskState: UNKNOWN_DESK_STATE,
       deskSceneId: null,
