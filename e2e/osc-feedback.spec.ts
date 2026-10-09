@@ -39,15 +39,18 @@ async function twoWaits(): Promise<void> {
   await toolbarCueBtn(page, 'Wait').click()
   await toolbarCueBtn(page, 'Wait').click()
   await page.locator('.cue-row').first().click()
+  await expect(page.locator('.cue-row').first()).toHaveAttribute('data-selected', 'true')
 }
 
 test('a QLab remote’s query is answered on /reply, to the port it asked from', async () => {
   await twoWaits()
-  // The window publishes its state as it changes; ask until it has.
+  // The window publishes its state as it changes, a moment behind the click: a reply asked
+  // for in that moment names the cue added last. Ask until the reply names the selection.
   await expect.poll(async () => {
     await send('/cue/selected/number')
-    return last('/reply/cue/selected/number')?.args[0] ?? null
-  }).not.toBeNull()
+    const reply = last('/reply/cue/selected/number')
+    return reply ? (JSON.parse(String(reply.args[0])) as { data?: unknown }).data : null
+  }).toBe('1')
   const body = JSON.parse(String(last('/reply/cue/selected/number')!.args[0]))
   expect(body).toMatchObject({ address: '/cue/selected/number', status: 'ok', data: '1' })
   expect(typeof body.workspace_id).toBe('string')
