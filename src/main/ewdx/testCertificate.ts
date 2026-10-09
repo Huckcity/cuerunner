@@ -23,8 +23,14 @@ function der(tag: number, ...parts: Buffer[]): Buffer {
 }
 
 /** A positive INTEGER: DER reads a leading 1 bit as a sign, so one is padded with a zero byte. */
-function integer(bytes: Buffer): Buffer {
-  return der(0x02, bytes[0] & 0x80 ? Buffer.concat([Buffer.from([0]), bytes]) : bytes)
+export function integer(bytes: Buffer): Buffer {
+  // DER wants the shortest form: no leading zero byte unless the next byte's top bit would
+  // otherwise read as a sign. A serial cut from a hash starts with 0x00 one time in 256, and
+  // OpenSSL refuses that certificate as "illegal padding".
+  let start = 0
+  while (start < bytes.length - 1 && bytes[start] === 0 && (bytes[start + 1] & 0x80) === 0) start++
+  const minimal = bytes.subarray(start)
+  return der(0x02, minimal[0] & 0x80 ? Buffer.concat([Buffer.from([0]), minimal]) : minimal)
 }
 
 /** ecdsa-with-SHA256, 1.2.840.10045.4.3.2: what the certificate is signed with. */
