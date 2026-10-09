@@ -3,6 +3,7 @@
   "version": "0.17.0",
   "license": "FSL-1.1-MIT",
   "description": "QLab-style show control for Windows",
+  "homepage": "https://cuerunner.app",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -20,10 +21,10 @@
     "peer:eos": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON integration/peers/eos.ts",
     "peer:desk": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON integration/peers/desk.ts",
     "relay:desk": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON integration/deskRelay.ts",
-    "dist": "electron-vite build && electron-builder",
-    "dist:win": "electron-vite build && electron-builder --win",
-    "dist:mac": "electron-vite build && electron-builder --mac",
-    "dist:linux": "electron-vite build && electron-builder --linux",
+    "dist": "electron-vite build && electron-builder --publish never",
+    "dist:win": "electron-vite build && electron-builder --win --publish never",
+    "dist:mac": "electron-vite build && electron-builder --mac --publish never",
+    "dist:linux": "electron-vite build && electron-builder --linux --publish never",
     "screenshots": "electron-vite build && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/capture-screenshots.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/capture-redundancy.mjs",
     "screenshots:redundancy": "electron-vite build && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/capture-redundancy.mjs",
     "site": "node scripts/serve-website.mjs",
@@ -35,7 +36,7 @@
     "postinstall": "node scripts/postinstall.js",
     "build:native": "node scripts/build-native-audio.mjs",
     "build:ffmpeg": "node scripts/build-ffmpeg-linux.mjs",
-    "test:native": "node native/audio/tests/asio-rules.mjs && node native/audio/tests/snapshot-cell.mjs && node native/audio/tests/offline.mjs && node native/audio/tests/wire-protocol.mjs && node native/audio/tests/pace.mjs && node native/audio/tests/analysis-priority.mjs && node native/audio/tests/long-file-start.mjs && node native/audio/tests/stream-seek.mjs && node native/audio/tests/stack.mjs && node native/audio/tests/shutdown-race.mjs && node native/audio/tests/device-failure.mjs && node native/audio/tests/stream-stall.mjs && node native/audio/tests/matrix-bench.mjs",
+    "test:native": "node native/audio/tests/asio-rules.mjs && node native/audio/tests/snapshot-cell.mjs && node native/audio/tests/offline.mjs && node native/audio/tests/pause.mjs && node native/audio/tests/output-level.mjs && node native/audio/tests/wire-protocol.mjs && node native/audio/tests/pace.mjs && node native/audio/tests/analysis-priority.mjs && node native/audio/tests/long-file-start.mjs && node native/audio/tests/stream-seek.mjs && node native/audio/tests/stack.mjs && node native/audio/tests/shutdown-race.mjs && node native/audio/tests/device-failure.mjs && node native/audio/tests/stream-stall.mjs && node native/audio/tests/ltc.mjs && node native/audio/tests/video-audio.mjs && node native/audio/tests/live-input.mjs && node native/audio/tests/slices.mjs && node native/audio/tests/curves.mjs && node native/audio/tests/patches.mjs && node native/audio/tests/loudness.mjs && node native/audio/tests/multi-device.mjs && node native/audio/tests/matrix-bench.mjs",
     "soak": "node native/audio/tests/soak.mjs",
     "presoak": "node scripts/ensure-native.mjs",
     "soak:report": "node scripts/soak-report.mjs",
@@ -51,10 +52,10 @@
     "pretest:integration": "node scripts/ensure-native.mjs",
     "pretest:native": "node scripts/ensure-native.mjs --with-decoders",
     "prescreenshots": "node scripts/ensure-native.mjs",
-    "predist": "node scripts/ensure-native.mjs --with-decoders",
-    "predist:win": "node scripts/ensure-native.mjs",
-    "predist:mac": "node scripts/ensure-native.mjs",
-    "predist:linux": "node scripts/ensure-native.mjs --with-decoders",
+    "predist": "node scripts/ensure-native.mjs --with-decoders && node scripts/release-notes.mjs",
+    "predist:win": "node scripts/ensure-native.mjs && node scripts/release-notes.mjs",
+    "predist:mac": "node scripts/ensure-native.mjs && node scripts/release-notes.mjs",
+    "predist:linux": "node scripts/ensure-native.mjs --with-decoders && node scripts/release-notes.mjs",
     "ensure:native": "node scripts/ensure-native.mjs --with-decoders",
     "pretest:native:device": "node scripts/ensure-native.mjs",
     "pretest:native:asio": "node scripts/ensure-native.mjs"
@@ -75,6 +76,10 @@
       {
         "from": "resources/demo",
         "to": "demo"
+      },
+      {
+        "from": "CHANGELOG.md",
+        "to": "CHANGELOG.md"
       },
       {
         "from": "native/audio/build",
@@ -104,12 +109,21 @@
           "arch": [
             "universal"
           ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
         }
       ],
       "icon": "resources/icon.icns",
       "category": "public.app-category.music",
       "minimumSystemVersion": "12.0",
-      "x64ArchFiles": "Contents/Resources/audio/**"
+      "x64ArchFiles": "Contents/Resources/audio/**",
+      "extendInfo": {
+        "NSCameraUsageDescription": "A Camera cue shows a live camera on a video output."
+      }
     },
     "nsis": {
       "oneClick": false,
@@ -124,12 +138,44 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "category": "AudioVideo",
-      "icon": "resources/logos/png/cuerunner-icon-512.png"
+      "icon": "resources/logos/png/cuerunner-icon-512.png",
+      "maintainer": "Cuerunner <orders@cuerunner.app>",
+      "synopsis": "Show control for live performance"
     },
-    "publish": null
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0",
+        "libgbm1",
+        "libasound2t64 | libasound2"
+      ],
+      "recommends": [
+        "pipewire-alsa | pulseaudio"
+      ],
+      "priority": "optional"
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://pub.cuerunner.app/latest/"
+      }
+    ]
   },
   "allowScripts": {
     "electron": true,
@@ -141,6 +187,7 @@
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/ibm-plex-sans": "^5.3.0",
     "@fontsource/ibm-plex-sans-condensed": "^5.3.0",
+    "electron-updater": "^6.8.9",
     "node-osc": "^11.4.0",
     "zustand": "^5.0.0"
   },

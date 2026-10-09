@@ -103,6 +103,12 @@ export function RecoveryNotice() {
             midiSettings: store.midiSettings,
             showSettings: store.showSettings,
             triggerGuard: store.triggerGuard,
+            lighting: store.lighting,
+            timecode: store.timecode,
+            videoOutputs: store.videoOutputs,
+            cueLists: store.cueLists,
+            pictures: store.pictures,
+            oscPatches: store.oscPatches,
             cues: store.cues
           })
           const answer = await window.cuerunner.workspace.save(ws, store.workspacePath)
@@ -148,7 +154,19 @@ export function RecoveryNotice() {
       snapshot.workspace.triggerGuard,
       // The file's own record of its saves travels with the snapshot, for the same
       // reason: a recovered session is the same show, not a new one.
-      snapshot.workspace.history ?? []
+      snapshot.workspace.history ?? [],
+      // And its rig: recovering without it would hand back a show whose lights are gone.
+      snapshot.workspace.lighting,
+      // And how it follows timecode: recovering without it would hand back a show that had
+      // stopped chasing.
+      snapshot.workspace.timecode,
+      // And its outputs: a recovered show still has its projectors.
+      snapshot.workspace.videoOutputs,
+      // And its lists: without them every list's cues would come back in the main one.
+      snapshot.workspace.cueLists,
+      // And what it says about its pictures: whether the next GO takes them down.
+      snapshot.workspace.pictures,
+      snapshot.workspace.oscPatches
     )
     // The place, not just the cues: standing where the session stood means the next GO
     // fires what it would have fired.

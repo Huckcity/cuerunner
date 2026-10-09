@@ -26,6 +26,13 @@ import type { LoadNote, Workspace } from '../../shared/workspace'
 import type { AudioCue, Cue } from '../../shared/cue'
 import { CUE_TYPES } from '../../shared/cue'
 import { heldShowSettings } from '../../shared/show'
+import { LIGHTING_SHAPE } from '../../shared/dmxShape'
+import { lightingRefusal } from '../../shared/dmx'
+import { TIMECODE_SHOW_SHAPE } from '../../shared/timecodeShape'
+import { CUE_LISTS_SHAPE } from '../../shared/cueListsShape'
+import { cueListsRefusal, heldCueLists, MAIN_CUE_LIST_ID, type CueListInfo } from '../../shared/cueLists'
+import { OSC_PATCH_SHAPE, oscPatchesRefusal } from '../../shared/oscPatches'
+import { timecodeShowRefusal, type TimecodeShowSettings } from '../../shared/timecode'
 import { hasCueList, isUnnamedShow, normalizeTriggerGuard, UNTITLED_SHOW } from '../../shared/workspace'
 import {
   CUE_FIELD_SHAPE,
@@ -36,6 +43,7 @@ import {
   type DeclaredFields,
   type ShapeLeaf
 } from '../../shared/workspaceSections'
+import { carriesMediaFile } from '../../shared/visual'
 
 /**
  * The largest workspace file this app opens: 64 MiB of JSON is already far past a
@@ -60,7 +68,9 @@ const LOAD_REPAIR_DETAIL: Record<LoadNote['kind'], string> = {
   // top-level cues, which is not necessarily where it sat inside the block it was in.
   'missing-group': 'it has no group in this file: still fires with the show, at the top level',
   cycle: 'in a loop of groups: returned to the top level',
-  reordered: 'its children were gathered into one block behind it'
+  reordered: 'its children were gathered into one block behind it',
+  'missing-list': 'its cue list is not in this file: it runs in the main list',
+  'list-in-group': 'it named a cue list from inside a group: it runs in its group’s list'
 }
 
 /**
@@ -204,6 +214,35 @@ function normalizeGrouping(cues: Cue[], notes?: LoadNote[]): Cue[] {
     }
   }
   return ordered
+}
+
+/**
+ * Repairs which list each cue says it runs in, the way the grouping is repaired: a cue at the
+ * top level naming a list the file does not have runs in the main list, and a child naming a
+ * list at all — a child is in its group's list, and a file this build wrote never says
+ * otherwise — has the name taken off. Each repair is a load note; a file that needs none comes
+ * back as the same array, and nothing but `listId` is touched.
+ */
+function normalizeListMembership(cues: Cue[], lists: CueListInfo[] | undefined, notes?: LoadNote[]): Cue[] {
+  const known = new Set(heldCueLists(lists).map(list => list.id))
+  let out: Cue[] | null = null
+  cues.forEach((cue, at) => {
+    if (cue.listId === undefined) return
+    const kind: LoadNote['kind'] | null = cue.parentId !== null
+      ? 'list-in-group'
+      : known.has(cue.listId) && cue.listId !== MAIN_CUE_LIST_ID ? null : 'missing-list'
+    if (kind === null) return
+    // A cue that names the main list says what saying nothing says; it is written without the
+    // name, so it is taken off quietly rather than reported as a repair.
+    if (!(kind === 'missing-list' && cue.listId === MAIN_CUE_LIST_ID)) {
+      notes?.push({ cueId: cue.id, kind, detail: LOAD_REPAIR_DETAIL[kind] })
+    }
+    const bare = { ...cue }
+    delete bare.listId
+    out ??= cues.slice()
+    out[at] = bare
+  })
+  return out ?? cues
 }
 
 /** Every section the saved form declares, as a file's own top level is read with it. */
@@ -687,8 +726,50 @@ function refuseUnknownShape(workspace: Workspace, source: string): void {
     // before one of them existed differs at.
     refuseForeignFields(sections, DECLARED_SETTINGS_FIELDS, '', -1, source, SETTINGS_VOICE, null)
   }
+  // The lighting rig is read field by field the way the settings are — a field this build does
+  // not write refuses, and so does one it writes and the file left out — and then for what a
+  // kind cannot say: its counts against the bounds the engine is held to, and its words.
+  if (Object.hasOwn(workspace, 'lighting') && workspace.lighting !== undefined) {
+    refuseForeignFields(workspace.lighting, LIGHTING_SHAPE, 'lighting', -1, source, SHOW_VOICE_STRICT, null)
+    const refusal = lightingRefusal(workspace.lighting)
+    if (refusal !== null) {
+      throw new Refusal(`that show’s lighting has ${refusal} — ${source} was probably saved by another build`)
+    }
+  }
+  // How the show follows timecode is read field by field the way the settings are — a field
+  // this build does not write refuses, and so does one it writes and the file left out — and
+  // then for the words a kind cannot hold: a rate or a stop behaviour this build has none for.
+  if (Object.hasOwn(workspace, 'timecode') && workspace.timecode !== undefined) {
+    refuseForeignFields(workspace.timecode, TIMECODE_SHOW_SHAPE, 'timecode', -1, source, SHOW_VOICE_STRICT, null)
+    const refusal = timecodeShowRefusal(workspace.timecode as TimecodeShowSettings)
+    if (refusal !== null) {
+      throw new Refusal(`that show has ${refusal} — ${source} was probably saved by another build`)
+    }
+  }
+  // The show's OSC patches are read element by element the way the lighting is — a field this
+  // build does not write refuses, and so does one it writes and the file left out — and then for
+  // what a kind cannot say: two patches under one id, a port past UDP's, more than a show names.
+  if (Object.hasOwn(workspace, 'oscPatches') && workspace.oscPatches !== undefined) {
+    refuseForeignValue(workspace.oscPatches, { elements: OSC_PATCH_SHAPE }, 'oscPatches', source, SHOW_VOICE_STRICT, null)
+    const refusal = oscPatchesRefusal(workspace.oscPatches)
+    if (refusal !== null) {
+      throw new Refusal(`that show has ${refusal} — ${source} was probably saved by another build`)
+    }
+  }
+  // The cue lists are read element by element the way the settings are — a field this build
+  // does not write refuses — and then for what a kind cannot say: an id twice, no main list.
+  if (Object.hasOwn(workspace, 'cueLists') && workspace.cueLists !== undefined) {
+    refuseForeignValue(workspace.cueLists, CUE_LISTS_SHAPE, 'cueLists', source, SHOW_VOICE_STRICT, null)
+    const refusal = cueListsRefusal(workspace.cueLists)
+    if (refusal !== null) {
+      throw new Refusal(`that show has ${refusal} — ${source} was probably saved by another build`)
+    }
+  }
   refuseForeignCues(workspace.cues, source)
 }
+
+/** The show's voice, refusing a field it does not name: the lighting and the timecode are each this build's own whole. */
+const SHOW_VOICE_STRICT: RefusalVoice = { subject: 'that show', verb: 'has', refuseForeignFields: true }
 
 /** A document as the window holds it: its settings read with this build's defaults in. */
 const asHeld = (workspace: Workspace): Workspace => ({
@@ -724,6 +805,8 @@ export function migrateWorkspace(workspace: Workspace, source: string, notes?: L
   }
 
   workspace.cues = normalizeGrouping(workspace.cues, notes)
+  // After the grouping, because a cue it returned to the top level is a cue with a list.
+  workspace.cues = normalizeListMembership(workspace.cues, workspace.cueLists, notes)
   // A workspace saved before the firing guard existed has none: it gets the default,
   // which is the window that keeps a bounced trigger from truncating a cue.
   workspace.triggerGuard = normalizeTriggerGuard(workspace.triggerGuard)
@@ -797,8 +880,9 @@ function resolveCueMedia(
   workspaceDir: string | null,
   missingMedia: MissingMedia[]
 ): Cue {
-  if (cue.type !== 'audio') return cue
-  const audio = cue as AudioCue
+  // Audio, video and image cues name a file; every other cue has nothing to resolve.
+  if (!carriesMediaFile(cue)) return cue
+  const audio = cue as unknown as AudioCue
   const stored = mediaOf(audio)
   // A cue with no file is waiting to be given one, not broken: blank audio cues are
   // added from the toolbar and filled in later.
@@ -1210,7 +1294,7 @@ export async function relinkWorkspaceMedia(
 
   const workspaceDir = workspacePath === null ? null : dirname(workspacePath)
   const cues = current.workspace.cues.map(cue => {
-    const relinked = cue.type === 'audio' ? plan.get(cue.id) : undefined
+    const relinked = carriesMediaFile(cue) ? plan.get(cue.id) : undefined
     if (relinked === undefined) return cue
     // The picked file replaces the show's stored route as well as the runtime path: the
     // next save writes where the file is now, not where the show last saw it. The route
@@ -1526,7 +1610,9 @@ export interface MergedShow {
 const MERGE_REPAIR_DETAIL: Record<LoadNote['kind'], (source: string) => string> = {
   'missing-group': source => `its group is not in “${source}”: placed at the top level`,
   cycle: source => `its group led back to it in “${source}”: placed at the top level`,
-  reordered: source => `its children were gathered into one block behind it in “${source}”`
+  reordered: source => `its children were gathered into one block behind it in “${source}”`,
+  'missing-list': source => `its cue list is not in “${source}”: placed in the main list`,
+  'list-in-group': source => `it named a cue list from inside a group in “${source}”: it runs in its group’s list`
 }
 
 /**

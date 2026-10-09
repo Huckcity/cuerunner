@@ -30,6 +30,17 @@
 namespace ws {
 namespace {
 
+// The code a file that could not be opened is refused with: a decoder this machine does not
+// have, a video with no sound in it (the picture still plays — the window reads the code),
+// or a file that is not media this engine reads.
+const char* sourceErrorCode(SourceError code) {
+  switch (code) {
+    case SourceError::DecoderUnavailable: return "format-unavailable";
+    case SourceError::NoAudioTrack: return "no-audio";
+    default: return "decode";
+  }
+}
+
 constexpr int kBackgroundTickMs = 2;
 constexpr int kAckTimeoutMs = 2000;
 
@@ -62,6 +73,53 @@ constexpr int64_t kSampleWindowMs = 1000;
 /** Envelope and onset answers kept per engine: a show's files, with room for a few
  *  windows inside them. */
 constexpr size_t kMaxAnalysisCacheEntries = 64;
+
+/** A drawn fade shape the engine can play: two points or more, each a share from 0 to 1. */
+bool validCurveTable(const CurveTable& table, EngineError& error) {
+  if (table.count == 0) return true;
+  if (table.count < 2 || table.count > kMaxCurvePoints) {
+    error = {"invalid", "a fade shape has 2 to " + std::to_string(kMaxCurvePoints) + " points"};
+    return false;
+  }
+  for (int i = 0; i < table.count; i++) {
+    const double value = static_cast<double>(table.values[i]);
+    if (!std::isfinite(value) || value < 0.0 || value > 1.0) {
+      error = {"invalid", "a fade shape's points are shares from 0 to 1"};
+      return false;
+    }
+  }
+  return true;
+}
+
+/** What a start carries beyond the file's region: its patch, its fade-in shape and its slices. */
+bool validStartExtras(const StartOptions& options, EngineError& error) {
+  if (options.patch < -1 || options.patch >= kMaxPatches) {
+    error = {"invalid", "there is no output patch " + std::to_string(options.patch)};
+    return false;
+  }
+  if (!validCurveTable(options.fadeInShape, error)) return false;
+  if (options.sliceCount < 0 || options.sliceCount > kMaxSlices) {
+    error = {"invalid", "a cue has at most " + std::to_string(kMaxSlices) + " slices"};
+    return false;
+  }
+  for (int i = 0; i < options.sliceCount; i++) {
+    const SliceSpec& slice = options.slices[i];
+    if (!std::isfinite(slice.startMs) || !std::isfinite(slice.endMs) || slice.startMs < 0.0 ||
+        slice.endMs <= slice.startMs) {
+      error = {"invalid", "slice " + std::to_string(i + 1) + " must end after it starts"};
+      return false;
+    }
+    if (i > 0 && slice.startMs < options.slices[i - 1].startMs) {
+      error = {"invalid", "slices must be in the order they play"};
+      return false;
+    }
+    if (slice.playCount < -1 || slice.playCount == 0) {
+      error = {"invalid", "a slice plays once or more, or -1 until it is released"};
+      return false;
+    }
+  }
+  return true;
+}
 
 int64_t msFrame(double ms, int sampleRate) {
   if (!(ms > 0.0) || sampleRate <= 0) return 0;
@@ -239,7 +297,16 @@ void deviceNotificationCallback(const ma_device_notification* notification) {
 
 }  // namespace
 
+// What an extra output device (aux_output.cpp) needs from this file: the id the main device
+// list gives a device, so a patch that names one finds it, and the one classification of a
+// backend notification, so an extra device is lost on exactly the evidence the main one is.
+std::string auxDeviceIdString(const ma_device_id& id, ma_backend backend) { return deviceIdToString(id, backend); }
+const char* auxClassifyNotification(int type, bool expectedStop) {
+  return classifyDeviceNotification(type, expectedStop);
+}
+
 Engine::Engine() : mixer_(cache_, streams_, events_, reclaim_) {
+  mixer_.attachInputs(&inputs_);
   cache_.configure(options_.cacheMaxBytes, options_.cacheMaxFiles, options_.cacheMaxFileBytes);
   sessionId_ = mintSessionId();
 }
@@ -458,6 +525,8 @@ bool Engine::startDevice(EngineError& error) {
 
   mixer_.configure(state->channels, state->sampleRate);
   renderScratch_.assign(static_cast<size_t>(kMaxOutputFrames) * static_cast<size_t>(state->channels), 0.0f);
+  // The extra output devices are locked to this device's timeline: at another rate, they relock.
+  auxOutputs_.setSourceRate(state->sampleRate);
 
   const ma_result startResult = ma_device_start(&state->device);
   if (startResult != MA_SUCCESS) {
@@ -500,6 +569,9 @@ bool Engine::start(const EngineOptions& options, EngineError& error) {
   if (running_.load()) return true;
   options_ = options;
   cache_.configure(options_.cacheMaxBytes, options_.cacheMaxFiles, options_.cacheMaxFileBytes);
+  inputs_.configure(options_.backend == "offline", options_.testInputs);
+  auxOutputs_.configure(options_.backend == "offline", options_.testOutputs, options_.backend,
+                        options_.backend == "offline" ? options_.testOutputCapture : options_.capturePath);
 
   if (options_.backend == "offline") {
     const int channels = options_.channels > 0 ? options_.channels : 2;
@@ -542,6 +614,8 @@ void Engine::stop() {
   silentStarted_ = false;
   capture_.stop();
   stopAudioThreads();
+  inputs_.closeAll();
+  auxOutputs_.closeAll();
   deviceStarted_ = false;
   {
     std::lock_guard<std::mutex> lock(ackMutex_);
@@ -634,6 +708,7 @@ void Engine::handleBackgroundWork() {
     // it applies the queue, so the loss reaches the desk from inside this tick.
     drainPending_.store(!drainLostDevice(), std::memory_order_release);
   }
+  handleAuxFailures();
 
   // Acks first, then the file work. A command's acknowledgement is a promise to the
   // connection thread, which is waiting on it with a deadline, and everything below can
@@ -658,7 +733,44 @@ void Engine::handleBackgroundWork() {
 
   // The state check is cheap but not free; a hundred milliseconds of latency on a device
   // that has already gone is plenty.
-  if ((healthTick_++ % 50) == 0) checkDeviceHealth();
+  if ((healthTick_++ % 50) == 0) {
+    checkDeviceHealth();
+    auxOutputs_.checkHealth();
+  }
+}
+
+/**
+ * An extra output device has gone. It is reported in the device-loss path's own words — an
+ * `error` with code `device`, which the window raises as the alarm a lost device is — and the
+ * voices playing through its patches end `device-lost`. Nothing else stops: the main device
+ * and every other extra one play on, and the master, the pause and the panic go on covering
+ * all of them. The device's stream is stopped and its slot kept, so its patches play on the
+ * main device's outputs of the same numbers until it is opened again.
+ *
+ * Ack-free, for the reason the main device's loss is: this is the service thread, the only
+ * one that resolves acknowledgements.
+ */
+void Engine::handleAuxFailures() {
+  std::string reason;
+  for (int slot = auxOutputs_.takeFailure(reason); slot >= 0; slot = auxOutputs_.takeFailure(reason)) {
+    Command lost;
+    lost.kind = Command::AuxLost;
+    lost.auxSlot = slot;
+    submitInternalCommand(lost);
+    // The open and close of a device hold the set's lock, and this waits on it: nothing that
+    // holds it waits on an acknowledgement.
+    std::string name;
+    auxOutputs_.halt(slot, name);
+    Event event;
+    event.kind = Event::Error;
+    copyStr(event.code, sizeof(event.code), "device");
+    copyStr(event.message, sizeof(event.message),
+            "output device " + name + " lost (" + reason +
+                "): the cues playing through its patches stopped, and its patches play on the main device until it "
+                "is reconnected; every other device plays on");
+    event.atMs = clockMs();
+    if (eventCallback_) eventCallback_(event);
+  }
 }
 
 /**
@@ -720,6 +832,7 @@ bool Engine::drainLostDevice() {
                        static_cast<double>(mixer_.clockFrames()) * 1000.0 /
                            static_cast<double>(mixer_.sampleRate()),
                        renderedFrames_.load(std::memory_order_relaxed));
+  mixer_.writeOptionalMeters(optionalMeters_, optionalMetersCell_);
   return true;
 }
 
@@ -855,6 +968,11 @@ void Engine::renderAudio(float* out, int frames) {
     Command command;
     while (commands_.pop(command)) mixer_.apply(command);
     mixer_.render(target, chunk, channels);
+    // LTC voices write their own output channel, after the mix and before the capture tee.
+    ltcOutputs_.render(target, chunk, channels, mixer_.sampleRate());
+    // What the mixer made for the extra output devices goes into their locks, stamped on this
+    // device's timeline. A show on one device pays this one test.
+    if (mixer_.anyAux()) pushAux(chunk);
     mixer_.advanceClock(chunk);
     if (capture_.active()) capture_.write(target, chunk);
     renderedFrames_.fetch_add(static_cast<uint64_t>(chunk), std::memory_order_relaxed);
@@ -866,6 +984,7 @@ void Engine::renderAudio(float* out, int frames) {
   mixer_.writeSnapshot(snapshot_, snapshotCell_,
                        static_cast<double>(mixer_.clockFrames()) * 1000.0 / static_cast<double>(mixer_.sampleRate()),
                        renderedFrames_.load(std::memory_order_relaxed));
+  mixer_.writeOptionalMeters(optionalMeters_, optionalMetersCell_);
 }
 
 void Engine::renderOfflineBlock(float* out, int frames) { renderAudio(out, frames); }
@@ -878,6 +997,17 @@ double Engine::snapshotClockMs() const {
 
 void Engine::copySnapshot(MixSnapshot& out) const { snapshotCell_.read(out); }
 
+void Engine::meters(int& channels, float* peaks, double& master, double& atMs) const {
+  // The snapshot is large (every voice), so it is read off the heap rather than a socket
+  // thread's stack.
+  auto snapshot = std::make_unique<MixSnapshot>();
+  snapshotCell_.read(*snapshot);
+  channels = std::min(snapshot->meterChannels, kMaxOutputChannels);
+  for (int channel = 0; channel < channels; channel++) peaks[channel] = snapshot->meterPeak[channel];
+  master = snapshot->masterGain;
+  atMs = snapshot->clockMs;
+}
+
 double Engine::clockMs() const { return snapshotClockMs(); }
 
 bool Engine::prepare(const std::string& cueId, const std::string& filePath, PrepareDTO& out, EngineError& error) {
@@ -889,7 +1019,7 @@ bool Engine::prepare(const std::string& cueId, const std::string& filePath, Prep
   SourceError openCode = SourceError::None;
   std::unique_ptr<Source> probe = openSource(filePath, openError, &openCode);
   if (probe == nullptr) {
-    error = {openCode == SourceError::DecoderUnavailable ? "format-unavailable" : "decode", openError};
+    error = {sourceErrorCode(openCode), openError};
     return false;
   }
   SourceInfo info = probe->info();
@@ -955,7 +1085,7 @@ bool Engine::probe(const std::string& filePath, ProbeDTO& out, EngineError& erro
   SourceError openCode = SourceError::None;
   std::unique_ptr<Source> source = openSource(filePath, openError, &openCode);
   if (source == nullptr) {
-    error = {openCode == SourceError::DecoderUnavailable ? "format-unavailable" : "decode", openError};
+    error = {sourceErrorCode(openCode), openError};
     return false;
   }
   const SourceInfo info = source->info();
@@ -1008,6 +1138,7 @@ bool Engine::startCue(const std::string& cueId, double whenMs, const StartOption
     error = {"invalid", "start time cannot be negative"};
     return false;
   }
+  if (!validStartExtras(options, error)) return false;
 
   PreparedFile file;
   {
@@ -1145,7 +1276,7 @@ bool Engine::seekCue(const std::string& cueId, double positionMs, double whenMs,
  * vamping, so neither is released; the caller is told which it got.
  */
 bool Engine::releaseCue(const std::string& cueId, double whenMs, bool hasEnd, double endMs, CommandResultDTO& out,
-                        EngineError& error) {
+                        EngineError& error, bool stopAtSliceEnd) {
   if (!finiteNumber(whenMs)) {
     error = {"invalid", "release needs a finite time"};
     return false;
@@ -1160,6 +1291,54 @@ bool Engine::releaseCue(const std::string& cueId, double whenMs, bool hasEnd, do
   command.whenMs = whenMs;
   command.hasEndMs = hasEnd;
   command.endMs = endMs;
+  command.stopAtSliceEnd = stopAtSliceEnd;
+  AckResult ack;
+  if (!submitCommand(command, ack, error)) return false;
+  out.atMs = clockMs();
+  out.applied = ack.applied;
+  return true;
+}
+
+bool Engine::pauseCue(const std::string& cueId, double whenMs, CommandResultDTO& out, EngineError& error) {
+  if (!finiteNumber(whenMs)) {
+    error = {"invalid", "pause needs a finite time"};
+    return false;
+  }
+  Command command;
+  command.kind = Command::Pause;
+  copyStr(command.cueId, sizeof(command.cueId), cueId);
+  command.whenMs = whenMs;
+  AckResult ack;
+  if (!submitCommand(command, ack, error)) return false;
+  out.atMs = clockMs();
+  out.applied = ack.applied;
+  return true;
+}
+
+bool Engine::resumeCue(const std::string& cueId, double whenMs, CommandResultDTO& out, EngineError& error) {
+  if (!finiteNumber(whenMs)) {
+    error = {"invalid", "resume needs a finite time"};
+    return false;
+  }
+  Command command;
+  command.kind = Command::Resume;
+  copyStr(command.cueId, sizeof(command.cueId), cueId);
+  command.whenMs = whenMs;
+  AckResult ack;
+  if (!submitCommand(command, ack, error)) return false;
+  out.atMs = clockMs();
+  out.applied = ack.applied;
+  return true;
+}
+
+bool Engine::setMaster(double gain, CommandResultDTO& out, EngineError& error) {
+  if (!finiteNumber(gain) || gain < 0.0) {
+    error = {"invalid", "master needs a level of zero or more"};
+    return false;
+  }
+  Command command;
+  command.kind = Command::Master;
+  command.value = gain;
   AckResult ack;
   if (!submitCommand(command, ack, error)) return false;
   out.atMs = clockMs();
@@ -1184,7 +1363,7 @@ bool Engine::cancelCue(const std::string& cueId, double whenMs, CancelResultDTO&
 }
 
 bool Engine::fadeCue(const std::string& cueId, int param, double value, double durationMs, int curve, double whenMs,
-                     CommandResultDTO& out, EngineError& error) {
+                     CommandResultDTO& out, EngineError& error, const CurveTable* shape) {
   if (param < 0 || param >= kMaxRampParams) {
     error = {"invalid", "unknown fade parameter"};
     return false;
@@ -1197,10 +1376,12 @@ bool Engine::fadeCue(const std::string& cueId, int param, double value, double d
     error = {"invalid", "rate must be greater than zero"};
     return false;
   }
-  if (curve < 0 || curve > 2) {
+  if (curve < 0 || curve > static_cast<int>(Curve::Table) ||
+      (curve == static_cast<int>(Curve::Table) && (shape == nullptr || shape->count < 2))) {
     error = {"invalid", "unknown fade curve"};
     return false;
   }
+  if (shape != nullptr && !validCurveTable(*shape, error)) return false;
   Command command;
   command.kind = Command::Fade;
   copyStr(command.cueId, sizeof(command.cueId), cueId);
@@ -1208,6 +1389,7 @@ bool Engine::fadeCue(const std::string& cueId, int param, double value, double d
   command.value = value;
   command.durationMs = durationMs;
   command.curve = static_cast<Curve>(curve);
+  if (shape != nullptr && curve == static_cast<int>(Curve::Table)) command.shape = *shape;
   command.whenMs = whenMs;
   AckResult ack;
   if (!submitCommand(command, ack, error)) return false;
@@ -1376,6 +1558,12 @@ InfoDTO Engine::info() const {
   if (out.xruns > 0) out.warnings.push_back("device callback xruns: " + std::to_string(out.xruns));
   if (out.droppedChunks > 0) out.warnings.push_back("dropped media chunks: " + std::to_string(out.droppedChunks));
   if (!out.lastError.empty()) out.warnings.push_back(out.lastError);
+  for (const OutputStatus& output : auxOutputs_.status()) {
+    if (output.failed) {
+      out.warnings.push_back("output device " + output.name + " lost (" + output.error +
+                             "): its patches play on the main device until it is reconnected");
+    }
+  }
   if (device_ == nullptr && options_.backend != "silent" && options_.backend != "offline") {
     out.warnings.push_back("audio engine has no device");
   }
@@ -1570,6 +1758,7 @@ bool Engine::reopenDeviceLocked(const EngineOptions& updated, const EngineOption
     return false;
   }
   restartCapture();
+  auxOutputs_.setBackend(options_.backend);
   return true;
 }
 
@@ -1787,7 +1976,7 @@ bool Engine::waveform(const std::string& filePath, int points, const RegionQuery
   SourceError openCode = SourceError::None;
   std::unique_ptr<Source> source = openSource(filePath, openError, &openCode);
   if (source == nullptr) {
-    error = {openCode == SourceError::DecoderUnavailable ? "format-unavailable" : "decode", openError};
+    error = {sourceErrorCode(openCode), openError};
     return false;
   }
   const SourceInfo info = source->info();
@@ -2147,6 +2336,450 @@ bool Engine::silence(const std::string& filePath, double thresholdDb, SilenceDTO
     result.endMs = frameMs(lastFrame + 1, sampleRate);
   }
   cacheSilence(filePath, thresholdDb, stamp, result);
+  out = std::move(result);
+  return true;
+}
+
+// ── Live inputs ─────────────────────────────────────────────────────────────────────
+
+bool Engine::inputDevices(std::vector<InputDeviceInfo>& out, EngineError& error) const {
+  std::string listError;
+  if (!inputs_.list(out, listError)) {
+    error = {"device", listError};
+    return false;
+  }
+  return true;
+}
+
+bool Engine::openInput(const InputOpenOptions& options, InputFeedStatus& out, EngineError& error) {
+  if (!running_.load(std::memory_order_acquire)) {
+    error = {"engine", "audio engine is not running"};
+    return false;
+  }
+  if (!std::isfinite(options.skewPpm) || !std::isfinite(options.latencyMs) || options.latencyMs < 0.0 ||
+      options.latencyMs > 1000.0) {
+    error = {"invalid", "an input's buffer is between 0 and 1000 ms"};
+    return false;
+  }
+  std::string openError;
+  const int slot = inputs_.open(options, mixer_.sampleRate(), openError);
+  if (slot < 0) {
+    error = {"device", openError};
+    return false;
+  }
+  for (const InputFeedStatus& status : inputs_.status()) {
+    if (status.slot == slot) out = status;
+  }
+  return true;
+}
+
+bool Engine::closeInput(const std::string& device, bool& closed, EngineError& error) {
+  (void)error;
+  closed = inputs_.close(device);
+  return true;
+}
+
+std::vector<InputFeedStatus> Engine::inputStatus() { return inputs_.status(); }
+
+bool Engine::startInput(const std::string& cueId, double whenMs, const InputOpenOptions& input,
+                        const std::vector<int>& channels, StartOptions options, StartResultDTO& out,
+                        EngineError& error) {
+  if (cueId.empty() || cueId.size() >= kMaxCueIdLen) {
+    error = {"invalid", "missing or over-long cue id"};
+    return false;
+  }
+  if (!finiteNumber(whenMs) || !finiteNumber(options.volume) || !finiteNumber(options.pan) ||
+      !finiteNumber(options.trim) || !finiteNumber(options.fadeInMs) || options.fadeInMs < 0.0) {
+    error = {"invalid", "start options contain a non-finite value"};
+    return false;
+  }
+  if (channels.empty() || channels.size() > static_cast<size_t>(kMaxOutputChannels)) {
+    error = {"invalid", "a live input takes 1 to " + std::to_string(kMaxOutputChannels) + " channels"};
+    return false;
+  }
+  if (options.crosspointCount < 0 || options.crosspointCount > kMaxCrosspoints) {
+    error = {"invalid", "too many crosspoints"};
+    return false;
+  }
+  options.sliceCount = 0;
+  if (!validStartExtras(options, error)) return false;
+
+  InputFeedStatus feed;
+  if (!openInput(input, feed, error)) return false;
+  for (int channel : channels) {
+    if (channel < 0 || channel >= feed.channels) {
+      error = {"invalid", feed.name + " has no channel " + std::to_string(channel + 1)};
+      return false;
+    }
+  }
+  for (int i = 0; i < options.crosspointCount; i++) {
+    const Crosspoint& point = options.crosspoints[i];
+    if (point.inputChannel < 0 || point.inputChannel >= static_cast<int>(channels.size()) || point.outputChannel < 0 ||
+        point.outputChannel >= kMaxOutputChannels || !finiteNumber(point.gain)) {
+      error = {"invalid", "crosspoint is outside the input or device channel range"};
+      return false;
+    }
+  }
+
+  Command command;
+  command.kind = Command::Start;
+  copyStr(command.cueId, sizeof(command.cueId), cueId);
+  command.whenMs = whenMs;
+  options.inputFeed = feed.slot;
+  options.inputChannelCount = static_cast<int>(channels.size());
+  for (size_t i = 0; i < channels.size(); i++) options.inputChannels[i] = channels[i];
+  // A live voice has no region and no loop: it runs until it is stopped.
+  options.startTimeMs = 0.0;
+  options.endTimeMs = -1.0;
+  options.loopCount = 0;
+  options.rate = 1.0;
+  command.options = options;
+
+  const unsigned long long runNumber = nextRunId_.fetch_add(1, std::memory_order_relaxed);
+  std::snprintf(command.runId, sizeof(command.runId), "run-%llu", runNumber);
+  AckResult ack;
+  if (!submitCommand(command, ack, error)) return false;
+  if (!ack.applied) {
+    error = {"limit", "no free voice for this cue"};
+    return false;
+  }
+  out.cueId = cueId;
+  out.runId = command.runId;
+  out.state = ack.state == static_cast<int>(VoiceState::Scheduled) ? "scheduled" : "playing";
+  out.startAtMs = std::max(whenMs, clockMs());
+  return true;
+}
+
+// ── Output patches and the mixer ──────────────────────────────────────────────────────
+
+bool Engine::setPatch(int slot, bool defined, const std::vector<int>& outputs, double gain, const std::string& device,
+                      PatchResultDTO& out, EngineError& error) {
+  if (slot < 0 || slot >= kMaxPatches) {
+    error = {"invalid", "a patch slot is 0 to " + std::to_string(kMaxPatches - 1)};
+    return false;
+  }
+  if (outputs.size() > static_cast<size_t>(kMaxOutputChannels)) {
+    error = {"invalid", "a patch has at most " + std::to_string(kMaxOutputChannels) + " channels"};
+    return false;
+  }
+  if (!finiteNumber(gain) || gain < 0.0) {
+    error = {"invalid", "a patch needs a level of zero or more"};
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(patchMutex_);
+  mixer_.prepareBuses();
+  PatchState& state = patches_[slot];
+  state.defined = defined && !outputs.empty();
+  state.outputs = outputs;
+  state.gain = gain;
+  state.device = state.defined && device != "default" ? device : std::string();
+  state.aux = -1;
+  out.device.clear();
+  out.fallback = false;
+  out.reason.clear();
+  // The main device by its own id is the main device: a show made on this machine names the
+  // interface the engine already plays on, and opening it a second time would be two streams
+  // of one device.
+  if (!state.device.empty() && state.device != mainDeviceId()) {
+    std::string openError;
+    state.aux = openAuxLocked(OutputOpenOptions{state.device}, openError);
+    if (state.aux >= 0) {
+      out.device = state.device;
+    } else {
+      out.fallback = true;
+      out.reason = openError;
+    }
+  }
+  Command command;
+  command.kind = Command::Bus;
+  command.busSlot = slot;
+  command.busDefined = state.defined;
+  command.busChannels = static_cast<int>(outputs.size());
+  for (size_t i = 0; i < outputs.size(); i++) {
+    // An output past the device's own is kept, and carries nothing until a device that has
+    // it is opened: a show patched for a bigger interface still loads on a laptop.
+    command.busMap[i] = outputs[i] < 0 || outputs[i] >= kMaxOutputChannels ? -1 : outputs[i];
+  }
+  command.value = gain;
+  command.busAux = state.aux;
+  AckResult ack;
+  if (!submitCommand(command, ack, error)) return false;
+  out.atMs = clockMs();
+  out.applied = ack.applied;
+  return true;
+}
+
+// ── Extra output devices ─────────────────────────────────────────────────────────────────
+
+std::string Engine::mainDeviceId() const {
+  std::lock_guard<std::mutex> lock(deviceMutex_);
+  return device_ != nullptr ? device_->deviceId : std::string();
+}
+
+int Engine::openAuxLocked(const OutputOpenOptions& options, std::string& error) {
+  if (!running_.load(std::memory_order_acquire)) {
+    error = "audio engine is not running";
+    return -1;
+  }
+  const int slot = auxOutputs_.open(options, mixer_.sampleRate(), clockMs(), error);
+  if (slot < 0) return -1;
+  // Mixed for from the next block on. Sent whether or not the mixer had it already: a device
+  // opened again after a loss is mixed for again, and one already mixed for is unchanged.
+  mixer_.prepareAux();
+  Command command;
+  command.kind = Command::AuxOutput;
+  command.auxSlot = slot;
+  command.auxChannels = auxOutputs_.at(slot).channels();
+  AckResult ack;
+  EngineError submitError;
+  if (!submitCommand(command, ack, submitError)) {
+    error = submitError.message;
+    return -1;
+  }
+  return slot;
+}
+
+bool Engine::pointPatchLocked(int slot, int aux, EngineError& error) {
+  PatchState& state = patches_[slot];
+  state.aux = aux;
+  Command command;
+  command.kind = Command::Bus;
+  command.busSlot = slot;
+  command.busDefined = state.defined;
+  command.busChannels = static_cast<int>(state.outputs.size());
+  for (size_t i = 0; i < state.outputs.size(); i++) {
+    command.busMap[i] = state.outputs[i] < 0 || state.outputs[i] >= kMaxOutputChannels ? -1 : state.outputs[i];
+  }
+  command.value = state.gain;
+  command.busAux = aux;
+  AckResult ack;
+  return submitCommand(command, ack, error);
+}
+
+bool Engine::outputDevices(std::vector<OutputDeviceInfo>& out, EngineError& error) const {
+  std::string listError;
+  if (!auxOutputs_.list(out, listError)) {
+    error = {"device", listError};
+    return false;
+  }
+  return true;
+}
+
+bool Engine::openOutput(const OutputOpenOptions& options, OutputStatus& out, EngineError& error) {
+  if (!finiteNumber(options.skewPpm) || !finiteNumber(options.jitterMs) || !finiteNumber(options.latencyMs) ||
+      options.latencyMs < 0.0 || options.latencyMs > 1000.0) {
+    error = {"invalid", "an output's buffer is between 0 and 1000 ms"};
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(patchMutex_);
+  if (options.device.empty() || options.device == mainDeviceId()) {
+    error = {"invalid", "the main device is opened in Settings → Audio, not as an extra output"};
+    return false;
+  }
+  std::string openError;
+  const int slot = openAuxLocked(options, openError);
+  if (slot < 0) {
+    error = {"device", openError};
+    return false;
+  }
+  // A reconnect: every patch that asked for this device and fell back comes back to it.
+  for (int patch = 0; patch < kMaxPatches; patch++) {
+    if (!patches_[patch].defined || patches_[patch].device != options.device || patches_[patch].aux == slot) continue;
+    if (!pointPatchLocked(patch, slot, error)) return false;
+  }
+  for (const OutputStatus& status : auxOutputs_.status()) {
+    if (status.slot == slot) out = status;
+  }
+  return true;
+}
+
+bool Engine::closeOutput(const std::string& device, bool& closed, EngineError& error) {
+  std::lock_guard<std::mutex> lock(patchMutex_);
+  closed = false;
+  const int slot = auxOutputs_.find(device);
+  if (slot < 0) return true;
+  // Its patches go to the main device first, so none is left addressing a slot the next
+  // device to open may take.
+  for (int patch = 0; patch < kMaxPatches; patch++) {
+    if (patches_[patch].aux != slot) continue;
+    if (!pointPatchLocked(patch, -1, error)) return false;
+  }
+  Command command;
+  command.kind = Command::AuxOutput;
+  command.auxSlot = slot;
+  command.auxChannels = 0;
+  AckResult ack;
+  if (!submitCommand(command, ack, error)) return false;
+  auxOutputs_.close(slot);
+  closed = true;
+  return true;
+}
+
+void Engine::outputMeters(std::vector<OutputMeterDTO>& out) const {
+  auto snapshot = std::make_unique<OptionalMeters>();
+  optionalMetersCell_.read(*snapshot);
+  for (const OutputStatus& status : auxOutputs_.status()) {
+    const int channels = snapshot->auxChannels[status.slot];
+    if (channels <= 0) continue;
+    OutputMeterDTO meter;
+    meter.device = status.device;
+    meter.peaks.assign(snapshot->auxPeak[status.slot], snapshot->auxPeak[status.slot] + channels);
+    out.push_back(std::move(meter));
+  }
+}
+
+bool Engine::simulateOutputNotification(const std::string& device, int type, bool deliberate, EngineError& error) {
+  // The same rule the main device's hook keeps: a real device can never be made to look
+  // lost, so this cannot mask or imitate a genuine event.
+  if (!isTestOutput(device)) {
+    error = {"invalid", "only a test output's notifications can be simulated"};
+    return false;
+  }
+  const int slot = auxOutputs_.find(device);
+  if (slot < 0) {
+    error = {"invalid", "no output device " + device + " is open"};
+    return false;
+  }
+  const char* failure = auxClassifyNotification(type, deliberate);
+  if (failure != nullptr) auxOutputs_.at(slot).fail(failure);
+  return true;
+}
+
+void Engine::pushAux(int frames) {
+  const int rate = mixer_.sampleRate();
+  const bool offline = options_.backend == "offline";
+  const double blockStart = static_cast<double>(mixer_.clockFrames()) / static_cast<double>(rate);
+  const double at = offline ? blockStart : steadyNowMs() / 1000.0;
+  for (int slot = 0; slot < kMaxAuxOutputs; slot++) {
+    if (mixer_.auxChannels(slot) > 0) auxOutputs_.at(slot).push(mixer_.auxBlock(slot), frames, at);
+  }
+  // A simulated device's callbacks run on the main device's timeline: every one due before
+  // this device's next block.
+  if (offline) auxOutputs_.advanceSimulation(blockStart + static_cast<double>(frames) / static_cast<double>(rate));
+}
+
+bool Engine::setOutputGains(const std::vector<double>& gains, CommandResultDTO& out, EngineError& error) {
+  if (gains.size() > static_cast<size_t>(kMaxOutputChannels)) {
+    error = {"invalid", "the engine has at most " + std::to_string(kMaxOutputChannels) + " outputs"};
+    return false;
+  }
+  Command command;
+  command.kind = Command::OutputGains;
+  for (int output = 0; output < kMaxOutputChannels; output++) command.outputGains[output] = 1.0f;
+  for (size_t i = 0; i < gains.size(); i++) {
+    if (!finiteNumber(gains[i]) || gains[i] < 0.0) {
+      error = {"invalid", "an output needs a level of zero or more"};
+      return false;
+    }
+    command.outputGains[i] = static_cast<float>(gains[i]);
+  }
+  AckResult ack;
+  if (!submitCommand(command, ack, error)) return false;
+  out.atMs = clockMs();
+  out.applied = ack.applied;
+  return true;
+}
+
+void Engine::busMeters(int* channels, float (*peaks)[kMaxOutputChannels]) const {
+  auto snapshot = std::make_unique<OptionalMeters>();
+  optionalMetersCell_.read(*snapshot);
+  for (int slot = 0; slot < kMaxPatches; slot++) {
+    channels[slot] = snapshot->busChannels[slot];
+    for (int channel = 0; channel < kMaxOutputChannels; channel++) peaks[slot][channel] = snapshot->busPeak[slot][channel];
+  }
+}
+
+// ── Loudness ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * A file's integrated loudness and true peak, in one pass over its samples — what
+ * normalising a cue to the show's target reads. A file the show has already decoded is
+ * measured straight out of the cache; the answer is kept per file and its stamp, so a
+ * batch over a selection that shares files reads each one once.
+ */
+bool Engine::loudness(const std::string& filePath, LoudnessDTO& out, EngineError& error) {
+  const FileStamp stamp = fileStampOf(filePath);
+  {
+    std::lock_guard<std::mutex> lock(analysisCacheMutex_);
+    for (LoudnessCacheEntry& entry : loudnessCache_) {
+      if (entry.filePath == filePath && entry.stamp.bytes == stamp.bytes && entry.stamp.modified == stamp.modified) {
+        entry.lastUse = ++analysisCacheClock_;
+        out = entry.result;
+        return true;
+      }
+    }
+  }
+
+  LoudnessDTO result;
+  result.filePath = filePath;
+  int64_t frames = -1;
+  int64_t consumed = 0;
+  std::unique_ptr<LoudnessMeter> meter;
+
+  CacheEntry* resident = nullptr;
+  if (cache_.isResident(filePath)) {
+    bool cacheHit = false;
+    bool bypassed = false;
+    std::string cacheError;
+    resident = cache_.pin(filePath, cacheHit, bypassed, cacheError);
+  }
+  if (resident != nullptr && (resident->channels <= 0 || resident->sampleRate <= 0)) {
+    cache_.release(resident);
+    resident = nullptr;
+  }
+  if (resident != nullptr) {
+    result.channels = resident->channels;
+    result.sampleRate = resident->sampleRate;
+    frames = resident->frames;
+    meter = std::make_unique<LoudnessMeter>(result.sampleRate, result.channels);
+    meter->feed(resident->data.data(), frames);
+    consumed = frames;
+    cache_.release(resident);
+  } else {
+    std::string openError;
+    std::unique_ptr<Source> source = openSource(filePath, openError);
+    if (source == nullptr) {
+      error = {"decode", openError};
+      return false;
+    }
+    const SourceInfo info = source->info();
+    result.channels = info.channels;
+    result.sampleRate = info.sampleRate;
+    frames = info.frames;
+    if (result.channels <= 0 || result.sampleRate <= 0) {
+      error = {"decode", "media file reports an invalid format"};
+      return false;
+    }
+    meter = std::make_unique<LoudnessMeter>(result.sampleRate, result.channels);
+    std::vector<float> chunk(static_cast<size_t>(8192) * static_cast<size_t>(result.channels));
+    for (;;) {
+      if (analysisCancelled()) return cancelledScan(error);
+      const int64_t got = source->readFrames(chunk.data(), 8192);
+      if (got <= 0) break;
+      meter->feed(chunk.data(), got);
+      consumed += got;
+    }
+  }
+
+  result.durationMs = frameMs(frames > 0 ? frames : consumed, result.sampleRate);
+  double lufs = 0.0;
+  result.silent = !meter->integrated(lufs);
+  result.integratedLufs = result.silent ? -70.0 : lufs;
+  const auto db = [](double linear) { return linear > 0.0 ? 20.0 * std::log10(linear) : -200.0; };
+  result.truePeakDb = db(meter->truePeak());
+  result.samplePeakDb = db(meter->samplePeak());
+
+  {
+    std::lock_guard<std::mutex> lock(analysisCacheMutex_);
+    if (loudnessCache_.size() >= kMaxAnalysisCacheEntries) {
+      auto oldest = std::min_element(loudnessCache_.begin(), loudnessCache_.end(),
+                                     [](const LoudnessCacheEntry& a, const LoudnessCacheEntry& b) {
+                                       return a.lastUse < b.lastUse;
+                                     });
+      loudnessCache_.erase(oldest);
+    }
+    loudnessCache_.push_back({filePath, stamp, result, ++analysisCacheClock_});
+  }
   out = std::move(result);
   return true;
 }

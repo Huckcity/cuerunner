@@ -85,7 +85,10 @@ test('a stop cue aimed at a script takes that run away too', async () => {
   // A stop cue for the script alone, not for everything.
   await page.locator('.toolbar-cue-btn', { hasText: 'Stop' }).click()
   await page.locator('.inspector-tab', { hasText: 'Stop' }).click()
-  await page.locator('.field-row').filter({ hasText: 'Target' }).locator('select').selectOption({ index: 1 })
+  // These cues, then the first cue in the show — the one this stop is for.
+  await page.locator('#stop-target-mode').selectOption('cues')
+  await page.locator('#stop-target-add').selectOption({ index: 1 })
+  await expect(page.locator('.target-row')).toHaveCount(1)
 
   await page.locator('.cue-row').nth(1).click()
   await goAgain()
@@ -121,7 +124,10 @@ test('a stop cue aimed at a group reaches the scripts inside it', async () => {
   await page.locator('.cue-list-scroll').click({ position: { x: 60, y: 200 } })
   await page.locator('.toolbar-cue-btn', { hasText: 'Stop' }).click()
   await page.locator('.inspector-tab', { hasText: 'Stop' }).click()
-  await page.locator('.field-row').filter({ hasText: 'Target' }).locator('select').selectOption({ index: 1 })
+  // These cues, then the first cue in the show — the one this stop is for.
+  await page.locator('#stop-target-mode').selectOption('cues')
+  await page.locator('#stop-target-add').selectOption({ index: 1 })
+  await expect(page.locator('.target-row')).toHaveCount(1)
   await page.locator('.cue-row').last().click()
   await goAgain()
 

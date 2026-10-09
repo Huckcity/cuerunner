@@ -8,6 +8,7 @@ import { CUE_COLOR_VAR } from '../../utils/cueColors'
 import { formatRunTime, runTiming } from '../../utils/runTiming'
 import { audioEngine } from '../../engine/audioEngineClient'
 import { CueIcon, GroupChevron } from '../../utils/cueIcons'
+import { TimeCell } from './TimeCell'
 import './CueRow.css'
 
 interface Props {
@@ -165,6 +166,9 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaStat
         ) : (
           <span className="name-text">{cue.name || <em>untitled</em>}</span>
         )}
+        {cue.type === 'memo' && cue.notes.trim() !== '' && (
+          <span className="memo-text" title={cue.notes}>{cue.notes.trim().split('\n')[0]}</span>
+        )}
         {!cue.isArmed && (
           <span className="disarmed-pill">disarmed</span>
         )}
@@ -174,6 +178,9 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaStat
         {isRunning && runState?.state === 'post-wait' && (
           <span className="state-pill">post-wait</span>
         )}
+        {isRunning && runState?.state === 'paused' && (
+          <span className="state-pill" data-paused="true">paused</span>
+        )}
         {vamping && <span className="state-pill" data-vamping="true">vamping</span>}
         {/* The last run, not this one: a cue fired again is doing what its other pills
             say, and what it did last time comes back only if it does it again. */}
@@ -181,7 +188,14 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaStat
           <span className="failed-pill" title={`Last run failed: ${failure}`}>failed</span>
         )}
       </span>
-      <span className="col-dur">
+      <TimeCell
+        className="col-dur"
+        ms={cue.duration}
+        // A wait's and a fade's length is the cue's own; anything else's is measured or derived.
+        editable={(cue.type === 'wait' || cue.type === 'fade') && !isRunning}
+        label="Duration"
+        onCommit={ms => updateCue(cue.id, { duration: ms })}
+      >
         {countingDown ? (
           <span ref={remainingRef} className="col-dur-remaining" />
         ) : cue.type === 'audio' && cue.filePath === '' ? (
@@ -202,10 +216,17 @@ export function CueRow({ cue, depth, isSelected, runState, durationMs, mediaStat
         ) : (
           formatDuration(totalMs)
         )}
-      </span>
-      <span className="col-pre">{cue.preWait > 0 ? formatDuration(cue.preWait) : '–'}</span>
-      <span className="col-post">{cue.postWait > 0 ? formatDuration(cue.postWait) : '–'}</span>
+      </TimeCell>
+      <TimeCell className="col-pre" ms={cue.preWait} editable={!isRunning} label="Pre-wait"
+        onCommit={ms => updateCue(cue.id, { preWait: ms })}>
+        {cue.preWait > 0 ? formatDuration(cue.preWait) : '–'}
+      </TimeCell>
+      <TimeCell className="col-post" ms={cue.postWait} editable={!isRunning} label="Post-wait"
+        onCommit={ms => updateCue(cue.id, { postWait: ms })}>
+        {cue.postWait > 0 ? formatDuration(cue.postWait) : '–'}
+      </TimeCell>
       <span className="col-adv">{cue.advance !== 'none' ? cue.advance : ''}</span>
+      <span className="col-notes" title={cue.notes || undefined}>{cue.notes.trim().split('\n')[0]}</span>
 
       {isAudioPlaying && (
         <div className="cue-progress-bar">

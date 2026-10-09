@@ -3,6 +3,9 @@
 #include "util.h"
 #include "wsaudio.h"
 
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
@@ -30,6 +33,7 @@ std::string text(const cJSON* object, const char* name, const char* fallback) {
 }
 
 int curveFromName(const std::string& name) {
+  if (name == "custom") return static_cast<int>(Curve::Table);
   if (name == "sCurve") return static_cast<int>(Curve::SCurve);
   if (name == "logarithmic") return static_cast<int>(Curve::Logarithmic);
   return static_cast<int>(Curve::Linear);
@@ -131,6 +135,14 @@ const WireField kCrosspointFields[] = {
     wireNumber("gain", "1"),
 };
 
+// One slice of a file, as `start.options.slices` carries it: a region in file ms and how
+// many times it plays (-1 until a release moves the voice on).
+const WireField kSliceFields[] = {
+    wireNumber("startTime", "0"),
+    wireNumber("endTime", "0"),
+    wireNumber("playCount", "1"),
+};
+
 const WireField kStartOptionFields[] = {
     wireNumber("startTime", "0"),
     wireNull("endTime", WireFieldType::Number, true),
@@ -141,6 +153,9 @@ const WireField kStartOptionFields[] = {
     wireNumber("pan", "0"),
     wireNumber("fadeInDuration", "0"),
     wireOptionalElements("outputs", fieldsOf(kCrosspointFields)),
+    wireNumber("patch", "-1"),
+    wireNull("fadeInShape", WireFieldType::Array, true),
+    wireOptionalElements("slices", fieldsOf(kSliceFields)),
 };
 
 const WireField kDeviceOptionFields[] = {
@@ -181,10 +196,22 @@ const WireField kReleaseFields[] = {
     wireRequired("cueId", WireFieldType::String),
     wireNumber("whenMs", "0"),
     wireNull("endMs", WireFieldType::Number, true),
+    wireFlag("stopAtSliceEnd", false),
 };
 const WireField kCancelFields[] = {
     wireRequired("cueId", WireFieldType::String),
     wireNumber("whenMs", "0"),
+};
+const WireField kPauseFields[] = {
+    wireRequired("cueId", WireFieldType::String),
+    wireNumber("whenMs", "0"),
+};
+const WireField kResumeFields[] = {
+    wireRequired("cueId", WireFieldType::String),
+    wireNumber("whenMs", "0"),
+};
+const WireField kMasterFields[] = {
+    wireNumber("gain", "1"),
 };
 const WireField kFadeFields[] = {
     wireRequired("cueId", WireFieldType::String),
@@ -193,6 +220,7 @@ const WireField kFadeFields[] = {
     wireNumber("durationMs", "0"),
     wireText("curve", "linear"),
     wireNumber("whenMs", "0"),
+    wireNull("shape", WireFieldType::Array, true),
 };
 const WireField kRoutingFields[] = {
     wireRequired("cueId", WireFieldType::String),
@@ -224,10 +252,85 @@ const WireField kSilenceFields[] = {
     wireRequired("filePath", WireFieldType::String),
     wireNumber("thresholdDb", "-60"),
 };
+const WireField kLoudnessFields[] = {
+    wireRequired("filePath", WireFieldType::String),
+};
+
+// ── Live inputs and the mixer (live_input.h) ─────────────────────────────────
+const WireField kInputOpenFields[] = {
+    wireRequired("device", WireFieldType::String),
+    wireNumber("sampleRate", "0"),
+    wireNumber("channels", "2"),
+    wireNumber("skewPpm", "0"),
+    wireNumber("periodFrames", "0"),
+    wireNumber("latencyMs", "0"),
+    wireNumber("jitterMs", "0"),
+};
+const WireField kInputCloseFields[] = {
+    wireRequired("device", WireFieldType::String),
+};
+const WireField kStartInputFields[] = {
+    wireRequired("cueId", WireFieldType::String),
+    wireNumber("whenMs", "0"),
+    wireRequired("device", WireFieldType::String),
+    wireRequired("channels", WireFieldType::Array),
+    wireNumber("latencyMs", "0"),
+    wireOptionalObject("options", fieldsOf(kStartOptionFields)),
+};
+const WireField kPatchFields[] = {
+    wireRequired("slot", WireFieldType::Number),
+    wireNull("outputs", WireFieldType::Array, true),
+    wireNumber("gain", "1"),
+    wireText("device", ""),
+};
+const WireField kOutputGainsFields[] = {
+    wireRequired("gains", WireFieldType::Array),
+};
+// The extra output devices (aux_output.h).
+const WireField kOutputOpenFields[] = {
+    wireRequired("device", WireFieldType::String),
+    wireNumber("sampleRate", "0"),
+    wireNumber("channels", "2"),
+    wireNumber("skewPpm", "0"),
+    wireNumber("periodFrames", "0"),
+    wireNumber("latencyMs", "0"),
+    wireNumber("jitterMs", "0"),
+};
+const WireField kOutputCloseFields[] = {
+    wireRequired("device", WireFieldType::String),
+};
+// ── end of the live input and mixer fields ───────────────────────────────────
+
 const WireField kSimulateDeviceNotificationFields[] = {
     wireRequired("type", WireFieldType::String),
     wireFlag("deliberate", false),
+    wireText("device", ""),
 };
+
+// ── Linear timecode (ltc.h) ──────────────────────────────────────────────────
+// The LTC verbs, kept together: a generator voice per timecode cue (`ltcStart`,
+// `ltcControl`, `ltcStatus`), and the reader that listens on a capture device
+// (`ltcInputs`, `ltcListen`, `ltcRead`, `ltcUnlisten`).
+const WireField kLtcStartFields[] = {
+    wireRequired("voiceId", WireFieldType::String),
+    wireNumber("channel", "0"),
+    wireText("rate", "25"),
+    wireNumber("frame", "0"),
+    wireNumber("levelDb", "-12"),
+};
+const WireField kLtcControlFields[] = {
+    wireRequired("voiceId", WireFieldType::String),
+    wireRequired("action", WireFieldType::String),
+    wireNumber("frame", "0"),
+};
+const WireField kLtcListenFields[] = {
+    wireText("device", ""),
+    wireNumber("channel", "0"),
+};
+const WireField kLtcReadFields[] = {
+    wireNumber("limit", "256"),
+};
+// ── end of the LTC fields ────────────────────────────────────────────────────
 
 // The dispatch chain below answers the same set, verb for verb and in the same order; it
 // is the table that decides what a request must carry, what an absent field means and what
@@ -241,6 +344,10 @@ const WireVerb kWireVerbs[] = {
     {"seek", fieldsOf(kSeekFields)},
     {"release", fieldsOf(kReleaseFields)},
     {"cancel", fieldsOf(kCancelFields)},
+    {"pause", fieldsOf(kPauseFields)},
+    {"resume", fieldsOf(kResumeFields)},
+    {"master", fieldsOf(kMasterFields)},
+    {"meters", {}},
     {"fade", fieldsOf(kFadeFields)},
     {"routing", fieldsOf(kRoutingFields)},
     {"progress", fieldsOf(kProgressFields)},
@@ -252,8 +359,30 @@ const WireVerb kWireVerbs[] = {
     {"waveform", fieldsOf(kWaveformFields)},
     {"onsets", fieldsOf(kOnsetsFields)},
     {"silence", fieldsOf(kSilenceFields)},
+    {"loudness", fieldsOf(kLoudnessFields)},
     {"simulateDeviceNotification", fieldsOf(kSimulateDeviceNotificationFields)},
     {"shutdown", {}},
+    // Linear timecode (ltc.h).
+    {"ltcStart", fieldsOf(kLtcStartFields)},
+    {"ltcControl", fieldsOf(kLtcControlFields)},
+    {"ltcStatus", {}},
+    {"ltcInputs", {}},
+    {"ltcListen", fieldsOf(kLtcListenFields)},
+    {"ltcRead", fieldsOf(kLtcReadFields)},
+    {"ltcUnlisten", {}},
+    // Live inputs and the mixer (live_input.h).
+    {"inputs", {}},
+    {"inputOpen", fieldsOf(kInputOpenFields)},
+    {"inputClose", fieldsOf(kInputCloseFields)},
+    {"inputStatus", {}},
+    {"startInput", fieldsOf(kStartInputFields)},
+    {"patch", fieldsOf(kPatchFields)},
+    {"outputGains", fieldsOf(kOutputGainsFields)},
+    // Extra output devices (aux_output.h).
+    {"outputs", {}},
+    {"outputOpen", fieldsOf(kOutputOpenFields)},
+    {"outputClose", fieldsOf(kOutputCloseFields)},
+    {"outputStatus", {}},
 };
 
 constexpr size_t kWireVerbCount = sizeof(kWireVerbs) / sizeof(kWireVerbs[0]);
@@ -582,6 +711,8 @@ bool parseOutputs(const cJSON* owner, const WireField& declared, StartOptions& o
   return true;
 }
 
+bool parseCurveTable(const cJSON* owner, const WireField& declared, CurveTable& out, std::string& error);
+
 // Reads the options a `start` carries from the declaration: the declaration has already
 // refused a missing or mistyped one, so every value here is the request's or the table's.
 bool parseStartOptions(const cJSON* options, const WireField& declared, StartOptions& out, std::string& error) {
@@ -600,7 +731,108 @@ bool parseStartOptions(const cJSON* options, const WireField& declared, StartOpt
   if (!parseOutputs(options, subField(declared, "outputs"), out, automatic, count, points, error)) return false;
   out.automatic = automatic;
   out.crosspointCount = count;
+  out.patch = static_cast<int>(numberField(options, subField(declared, "patch")));
+  if (!parseCurveTable(options, subField(declared, "fadeInShape"), out.fadeInShape, error)) return false;
+  const WireField& slices = subField(declared, "slices");
+  const cJSON* sliceList = member(options, slices.name);
+  out.sliceCount = 0;
+  if (sliceList != nullptr && !cJSON_IsNull(sliceList)) {
+    const int total = cJSON_GetArraySize(sliceList);
+    if (total > kMaxSlices) {
+      error = "a cue has at most " + std::to_string(kMaxSlices) + " slices";
+      return false;
+    }
+    for (int i = 0; i < total; i++) {
+      const cJSON* item = cJSON_GetArrayItem(sliceList, i);
+      SliceSpec& slice = out.slices[out.sliceCount++];
+      slice.startMs = numberField(item, subField(slices, "startTime"));
+      slice.endMs = numberField(item, subField(slices, "endTime"));
+      slice.playCount = static_cast<int>(numberField(item, subField(slices, "playCount")));
+    }
+  }
   return true;
+}
+
+// A list the declaration types as an array, whose elements must all be numbers: the
+// declaration cannot say that of a list with no fields of its own, so it is said here.
+bool parseNumbers(const cJSON* owner, const WireField& declared, size_t limit, std::vector<double>& out,
+                  std::string& error) {
+  out.clear();
+  const cJSON* list = member(owner, declared.name);
+  if (list == nullptr || cJSON_IsNull(list)) return true;
+  const int total = cJSON_GetArraySize(list);
+  if (static_cast<size_t>(total) > limit) {
+    error = "'" + std::string(declared.name) + "' holds at most " + std::to_string(limit) + " values";
+    return false;
+  }
+  for (int i = 0; i < total; i++) {
+    const cJSON* item = cJSON_GetArrayItem(list, i);
+    if (!cJSON_IsNumber(item)) {
+      error = "'" + std::string(declared.name) + "[" + std::to_string(i) + "]' must be a number";
+      return false;
+    }
+    out.push_back(item->valuedouble);
+  }
+  return true;
+}
+
+// A fade shape as the wire carries it: the share of the change done at evenly spaced points.
+bool parseCurveTable(const cJSON* owner, const WireField& declared, CurveTable& out, std::string& error) {
+  std::vector<double> values;
+  if (!parseNumbers(owner, declared, static_cast<size_t>(kMaxCurvePoints), values, error)) return false;
+  out.count = static_cast<int>(values.size());
+  for (size_t i = 0; i < values.size(); i++) out.values[i] = static_cast<float>(values[i]);
+  return true;
+}
+
+cJSON* outputStatusJson(const OutputStatus& output) {
+  cJSON* object = cJSON_CreateObject();
+  cJSON_AddNumberToObject(object, "slot", output.slot);
+  cJSON_AddStringToObject(object, "device", output.device.c_str());
+  cJSON_AddStringToObject(object, "name", output.name.c_str());
+  cJSON_AddNumberToObject(object, "channels", output.channels);
+  cJSON_AddNumberToObject(object, "sampleRate", output.sampleRate);
+  cJSON_AddBoolToObject(object, "running", output.running);
+  cJSON_AddBoolToObject(object, "failed", output.failed);
+  cJSON_AddBoolToObject(object, "synthetic", output.synthetic);
+  if (output.error.empty()) {
+    cJSON_AddNullToObject(object, "error");
+  } else {
+    cJSON_AddStringToObject(object, "error", output.error.c_str());
+  }
+  cJSON_AddNumberToObject(object, "latencyMs", output.latencyMs);
+  cJSON_AddNumberToObject(object, "targetMs", output.targetMs);
+  cJSON_AddNumberToObject(object, "deviceLatencyMs", output.deviceLatencyMs);
+  cJSON_AddNumberToObject(object, "driftPpm", output.driftPpm);
+  cJSON_AddNumberToObject(object, "periodFrames", output.periodFrames);
+  cJSON_AddNumberToObject(object, "underruns", static_cast<double>(output.underruns));
+  cJSON_AddNumberToObject(object, "overruns", static_cast<double>(output.overruns));
+  cJSON_AddNumberToObject(object, "resyncs", static_cast<double>(output.resyncs));
+  cJSON_AddNumberToObject(object, "playedFrames", static_cast<double>(output.playedFrames));
+  cJSON_AddNumberToObject(object, "startedAtMs", output.startedAtMs);
+  return object;
+}
+
+cJSON* inputStatusJson(const InputFeedStatus& feed) {
+  cJSON* object = cJSON_CreateObject();
+  cJSON_AddNumberToObject(object, "slot", feed.slot);
+  cJSON_AddStringToObject(object, "device", feed.device.c_str());
+  cJSON_AddStringToObject(object, "name", feed.name.c_str());
+  cJSON_AddNumberToObject(object, "channels", feed.channels);
+  cJSON_AddNumberToObject(object, "sampleRate", feed.sampleRate);
+  cJSON_AddBoolToObject(object, "running", feed.running);
+  cJSON_AddBoolToObject(object, "synthetic", feed.synthetic);
+  cJSON_AddNumberToObject(object, "latencyMs", feed.latencyMs);
+  cJSON_AddNumberToObject(object, "targetMs", feed.targetMs);
+  cJSON_AddNumberToObject(object, "ratioPpm", feed.ratioPpm);
+  cJSON_AddNumberToObject(object, "periodFrames", feed.periodFrames);
+  cJSON_AddNumberToObject(object, "underruns", static_cast<double>(feed.underruns));
+  cJSON_AddNumberToObject(object, "overruns", static_cast<double>(feed.overruns));
+  cJSON_AddNumberToObject(object, "resyncs", static_cast<double>(feed.resyncs));
+  cJSON_AddNumberToObject(object, "capturedFrames", static_cast<double>(feed.capturedFrames));
+  cJSON* peaks = cJSON_AddArrayToObject(object, "peaks");
+  for (float peak : feed.peaks) cJSON_AddItemToArray(peaks, cJSON_CreateNumber(peak));
+  return object;
 }
 
 std::string replyOk(int id, cJSON* result) {
@@ -1029,7 +1261,9 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
     EngineError error;
     // `endMs`, when it carries a value, is a time in the file, not on the clock: it is
     // where a cue trimmed of its trailing silence stops hearing the file.
-    if (engine.releaseCue(textOf("cueId"), numberOf("whenMs"), carries("endMs"), numberOf("endMs"), result, error)) {
+    if (engine.releaseCue(textOf("cueId"), numberOf("whenMs"), carries("endMs"),
+                          carries("endMs") ? numberOf("endMs") : 0.0, result, error,
+                          booleanField(root, declared("stopAtSliceEnd")))) {
       cJSON* body = cJSON_CreateObject();
       cJSON_AddBoolToObject(body, "ok", 1);
       cJSON_AddNumberToObject(body, "at", result.atMs);
@@ -1050,13 +1284,36 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
     } else {
       out = replyError(id, error.code, error.message);
     }
+  } else if (verb == "pause" || verb == "resume") {
+    CommandResultDTO result;
+    EngineError error;
+    const bool ok = verb == "pause"
+                        ? engine.pauseCue(textOf("cueId"), numberOf("whenMs"), result, error)
+                        : engine.resumeCue(textOf("cueId"), numberOf("whenMs"), result, error);
+    if (ok) {
+      cJSON* body = cJSON_CreateObject();
+      cJSON_AddBoolToObject(body, "ok", 1);
+      cJSON_AddNumberToObject(body, "at", result.atMs);
+      cJSON_AddBoolToObject(body, "applied", result.applied);
+      out = replyOk(id, body);
+    } else {
+      out = replyError(id, error.code, error.message);
+    }
   } else if (verb == "fade") {
     CommandResultDTO result;
     EngineError error;
     const int param = paramFromName(textOf("param"));
-    const int curve = curveFromName(textOf("curve"));
-    if (engine.fadeCue(textOf("cueId"), param, numberOf("value"), numberOf("durationMs"), curve, numberOf("whenMs"),
-                       result, error)) {
+    int curve = curveFromName(textOf("curve"));
+    // A drawn shape is the fade's curve whatever name came with it: the shape is the answer
+    // to "how", and the name only ever named one of three.
+    CurveTable shape;
+    std::string shapeError;
+    const bool shapeRead = parseCurveTable(root, declared("shape"), shape, shapeError);
+    if (shapeRead && shape.count >= 2) curve = static_cast<int>(Curve::Table);
+    if (!shapeRead) {
+      out = replyError(id, "invalid", shapeError);
+    } else if (engine.fadeCue(textOf("cueId"), param, numberOf("value"), numberOf("durationMs"), curve,
+                              numberOf("whenMs"), result, error, shape.count >= 2 ? &shape : nullptr)) {
       cJSON* body = cJSON_CreateObject();
       cJSON_AddBoolToObject(body, "ok", 1);
       cJSON_AddNumberToObject(body, "at", result.atMs);
@@ -1115,6 +1372,59 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
     } else {
       out = replyError(id, error.code, error.message);
     }
+  } else if (verb == "master") {
+    CommandResultDTO result;
+    EngineError error;
+    if (engine.setMaster(numberOf("gain"), result, error)) {
+      cJSON* body = cJSON_CreateObject();
+      cJSON_AddBoolToObject(body, "ok", 1);
+      cJSON_AddNumberToObject(body, "at", result.atMs);
+      cJSON_AddBoolToObject(body, "applied", result.applied);
+      out = replyOk(id, body);
+    } else {
+      out = replyError(id, error.code, error.message);
+    }
+  } else if (verb == "meters") {
+    int channels = 0;
+    float levels[kMaxOutputChannels] = {};
+    double master = 1.0;
+    double atMs = 0.0;
+    engine.meters(channels, levels, master, atMs);
+    cJSON* body = cJSON_CreateObject();
+    cJSON_AddNumberToObject(body, "at", atMs);
+    cJSON_AddNumberToObject(body, "master", master);
+    cJSON* peaks = cJSON_AddArrayToObject(body, "peaks");
+    for (int channel = 0; channel < channels; channel++) {
+      cJSON_AddItemToArray(peaks, cJSON_CreateNumber(levels[channel]));
+    }
+    // Each output patch's own meter, after its fader: the patches that are defined.
+    int busChannels[kMaxPatches] = {};
+    std::vector<float> busPeakStore(static_cast<size_t>(kMaxPatches) * static_cast<size_t>(kMaxOutputChannels));
+    auto* busPeaks = reinterpret_cast<float (*)[kMaxOutputChannels]>(busPeakStore.data());
+    engine.busMeters(busChannels, busPeaks);
+    cJSON* buses = cJSON_AddArrayToObject(body, "buses");
+    for (int slot = 0; slot < kMaxPatches; slot++) {
+      if (busChannels[slot] <= 0) continue;
+      cJSON* bus = cJSON_CreateObject();
+      cJSON_AddNumberToObject(bus, "slot", slot);
+      cJSON* busList = cJSON_AddArrayToObject(bus, "peaks");
+      for (int channel = 0; channel < busChannels[slot]; channel++) {
+        cJSON_AddItemToArray(busList, cJSON_CreateNumber(busPeaks[slot][channel]));
+      }
+      cJSON_AddItemToArray(buses, bus);
+    }
+    // Each open extra output device's own meter, after the master level.
+    std::vector<OutputMeterDTO> outputMeters;
+    engine.outputMeters(outputMeters);
+    cJSON* devices = cJSON_AddArrayToObject(body, "devices");
+    for (const OutputMeterDTO& meter : outputMeters) {
+      cJSON* device = cJSON_CreateObject();
+      cJSON_AddStringToObject(device, "device", meter.device.c_str());
+      cJSON* deviceList = cJSON_AddArrayToObject(device, "peaks");
+      for (float peak : meter.peaks) cJSON_AddItemToArray(deviceList, cJSON_CreateNumber(peak));
+      cJSON_AddItemToArray(devices, device);
+    }
+    out = replyOk(id, body);
   } else if (verb == "clock") {
     cJSON* body = cJSON_CreateObject();
     cJSON_AddNumberToObject(body, "clockMs", engine.clockMs());
@@ -1255,7 +1565,27 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
     // Test hook for the device-loss classification: it runs the same code the backend
     // callback runs, and is refused whenever a real device is open, so it cannot be
     // mistaken for (or mask) a genuine device event.
-    if (!engine.hasNoDevice()) {
+    const std::string device = textOf("device");
+    if (!device.empty()) {
+      // An extra output device's loss, through the same classification: refused for anything
+      // but a test output, so it can neither stand in for nor mask a real device's event.
+      const std::string type = textOf("type");
+      int notificationType = -1;
+      if (type == "stopped") notificationType = 1;
+      else if (type == "interruption_began") notificationType = 2;
+      else if (type == "unlocked") notificationType = 3;
+      EngineError error;
+      if (notificationType < 0) {
+        out = replyError(id, "invalid", "unknown notification type '" + type + "'");
+      } else if (!engine.simulateOutputNotification(device, notificationType,
+                                                    booleanField(root, wireField(verb, "deliberate")), error)) {
+        out = replyError(id, error.code, error.message);
+      } else {
+        cJSON* body = cJSON_CreateObject();
+        cJSON_AddBoolToObject(body, "ok", 1);
+        out = replyOk(id, body);
+      }
+    } else if (!engine.hasNoDevice()) {
       out = replyError(id, "invalid", "simulateDeviceNotification is only available with the silent/offline backend");
     } else {
       const std::string type = textOf("type");
@@ -1281,6 +1611,317 @@ std::string handleRequestLine(Engine& engine, const std::string& line, bool& shu
     cJSON* body = cJSON_CreateObject();
     cJSON_AddBoolToObject(body, "ok", 1);
     out = replyOk(id, body);
+  // ── Linear timecode (ltc.h) ────────────────────────────────────────────────
+  } else if (verb == "ltcStart") {
+    const std::string voiceId = textOf("voiceId");
+    LtcRate rate;
+    const int channel = static_cast<int>(numberOf("channel"));
+    if (voiceId.empty() || voiceId.size() >= sizeof(LtcOutputs::Command{}.id)) {
+      out = replyError(id, "invalid", "missing or over-long LTC voice id");
+    } else if (!ltcRateFromName(textOf("rate"), rate)) {
+      out = replyError(id, "invalid", "unknown timecode rate '" + textOf("rate") + "'");
+    } else if (channel < 0 || channel >= kMaxOutputChannels) {
+      out = replyError(id, "invalid", "LTC output channel is outside the device");
+    } else {
+      LtcOutputs::Command command;
+      command.op = LtcOutputs::Command::Start;
+      std::snprintf(command.id, sizeof(command.id), "%s", voiceId.c_str());
+      command.channel = channel;
+      command.rate = rate;
+      command.frame = static_cast<int64_t>(numberOf("frame"));
+      command.gain = static_cast<float>(std::pow(10.0, std::min(0.0, numberOf("levelDb")) / 20.0));
+      if (!engine.ltcOutputs().post(command)) {
+        out = replyError(id, "limit", "every LTC voice is in use");
+      } else {
+        cJSON* body = cJSON_CreateObject();
+        cJSON_AddBoolToObject(body, "ok", 1);
+        cJSON_AddNumberToObject(body, "atMs", engine.clockMs());
+        out = replyOk(id, body);
+      }
+    }
+  } else if (verb == "ltcControl") {
+    const std::string action = textOf("action");
+    LtcOutputs::Command command;
+    std::snprintf(command.id, sizeof(command.id), "%s", textOf("voiceId").c_str());
+    command.frame = static_cast<int64_t>(numberOf("frame"));
+    bool known = true;
+    if (action == "stop") command.op = LtcOutputs::Command::Stop;
+    else if (action == "pause") command.op = LtcOutputs::Command::Pause;
+    else if (action == "resume") command.op = LtcOutputs::Command::Resume;
+    else if (action == "locate") command.op = LtcOutputs::Command::Locate;
+    else known = false;
+    if (!known) {
+      out = replyError(id, "invalid", "unknown LTC action '" + action + "'");
+    } else {
+      // A voice that is not running has nothing to stop: that is the state asked for.
+      const bool applied = engine.ltcOutputs().post(command);
+      cJSON* body = cJSON_CreateObject();
+      cJSON_AddBoolToObject(body, "ok", 1);
+      cJSON_AddBoolToObject(body, "applied", applied);
+      out = replyOk(id, body);
+    }
+  } else if (verb == "ltcStatus") {
+    cJSON* body = cJSON_CreateObject();
+    cJSON* voices = cJSON_AddArrayToObject(body, "voices");
+    for (const LtcOutputs::SlotStatus& slot : engine.ltcOutputs().status()) {
+      cJSON* voice = cJSON_CreateObject();
+      cJSON_AddStringToObject(voice, "voiceId", slot.id.c_str());
+      cJSON_AddNumberToObject(voice, "channel", slot.channel);
+      cJSON_AddStringToObject(voice, "rate", ltcRateName(slot.rate));
+      cJSON_AddNumberToObject(voice, "frame", static_cast<double>(slot.frame));
+      cJSON_AddBoolToObject(voice, "running", slot.running);
+      cJSON_AddBoolToObject(voice, "paused", slot.paused);
+      cJSON_AddItemToArray(voices, voice);
+    }
+    out = replyOk(id, body);
+  } else if (verb == "ltcInputs") {
+    std::vector<std::pair<std::string, std::string>> inputs;
+    std::string listError;
+    if (!ltcCaptureDevices(inputs, listError)) {
+      out = replyError(id, "device", listError);
+    } else {
+      cJSON* body = cJSON_CreateObject();
+      cJSON* list = cJSON_AddArrayToObject(body, "inputs");
+      for (const auto& input : inputs) {
+        cJSON* entry = cJSON_CreateObject();
+        cJSON_AddStringToObject(entry, "id", input.first.c_str());
+        cJSON_AddStringToObject(entry, "name", input.second.c_str());
+        cJSON_AddItemToArray(list, entry);
+      }
+      out = replyOk(id, body);
+    }
+  } else if (verb == "ltcListen") {
+    std::string listenError;
+    if (!engine.ltcInput().listen(textOf("device"), static_cast<int>(numberOf("channel")), listenError)) {
+      out = replyError(id, "device", listenError);
+    } else {
+      cJSON* body = cJSON_CreateObject();
+      cJSON_AddBoolToObject(body, "ok", 1);
+      cJSON_AddStringToObject(body, "description", engine.ltcInput().description().c_str());
+      out = replyOk(id, body);
+    }
+  } else if (verb == "ltcRead") {
+    const double limit = std::max(1.0, std::min(1024.0, numberOf("limit")));
+    cJSON* body = cJSON_CreateObject();
+    cJSON_AddBoolToObject(body, "listening", engine.ltcInput().listening());
+    cJSON_AddStringToObject(body, "description", engine.ltcInput().description().c_str());
+    cJSON_AddNumberToObject(body, "nowMs", steadyNowMs());
+    cJSON* frames = cJSON_AddArrayToObject(body, "frames");
+    for (const LtcDecoded& decoded : engine.ltcInput().drain(static_cast<size_t>(limit))) {
+      cJSON* frame = cJSON_CreateObject();
+      cJSON_AddNumberToObject(frame, "hours", decoded.fields.hours);
+      cJSON_AddNumberToObject(frame, "minutes", decoded.fields.minutes);
+      cJSON_AddNumberToObject(frame, "seconds", decoded.fields.seconds);
+      cJSON_AddNumberToObject(frame, "frames", decoded.fields.frames);
+      cJSON_AddBoolToObject(frame, "dropFrame", decoded.fields.dropFrame);
+      cJSON_AddBoolToObject(frame, "reverse", decoded.reverse);
+      cJSON_AddNumberToObject(frame, "atMs", decoded.atMs);
+      cJSON_AddNumberToObject(frame, "cellSamples", decoded.cellSamples);
+      cJSON_AddItemToArray(frames, frame);
+    }
+    out = replyOk(id, body);
+  } else if (verb == "ltcUnlisten") {
+    engine.ltcInput().close();
+    cJSON* body = cJSON_CreateObject();
+    cJSON_AddBoolToObject(body, "ok", 1);
+    out = replyOk(id, body);
+  // ── end of the LTC verbs ───────────────────────────────────────────────────
+  // ── Live inputs and the mixer (live_input.h) ─────────────────────────────────
+  } else if (verb == "inputs") {
+    std::vector<InputDeviceInfo> inputs;
+    EngineError error;
+    if (!engine.inputDevices(inputs, error)) {
+      out = replyError(id, error.code, error.message);
+    } else {
+      cJSON* body = cJSON_CreateObject();
+      cJSON* list = cJSON_AddArrayToObject(body, "inputs");
+      for (const InputDeviceInfo& input : inputs) {
+        cJSON* entry = cJSON_CreateObject();
+        cJSON_AddStringToObject(entry, "id", input.id.c_str());
+        cJSON_AddStringToObject(entry, "name", input.name.c_str());
+        cJSON_AddNumberToObject(entry, "channels", input.channels);
+        cJSON_AddNumberToObject(entry, "sampleRate", input.sampleRate);
+        cJSON_AddBoolToObject(entry, "isDefault", input.isDefault);
+        cJSON_AddBoolToObject(entry, "synthetic", input.synthetic);
+        cJSON_AddItemToArray(list, entry);
+      }
+      out = replyOk(id, body);
+    }
+  } else if (verb == "inputOpen") {
+    InputOpenOptions options;
+    options.device = textOf("device");
+    options.sampleRate = static_cast<int>(numberOf("sampleRate"));
+    options.channels = static_cast<int>(numberOf("channels"));
+    options.skewPpm = numberOf("skewPpm");
+    options.periodFrames = static_cast<int>(numberOf("periodFrames"));
+    options.latencyMs = numberOf("latencyMs");
+    options.jitterMs = numberOf("jitterMs");
+    InputFeedStatus status;
+    EngineError error;
+    if (engine.openInput(options, status, error)) {
+      out = replyOk(id, inputStatusJson(status));
+    } else {
+      out = replyError(id, error.code, error.message);
+    }
+  } else if (verb == "inputClose") {
+    bool closed = false;
+    EngineError error;
+    engine.closeInput(textOf("device"), closed, error);
+    cJSON* body = cJSON_CreateObject();
+    cJSON_AddBoolToObject(body, "closed", closed);
+    out = replyOk(id, body);
+  } else if (verb == "inputStatus") {
+    cJSON* body = cJSON_CreateObject();
+    cJSON* list = cJSON_AddArrayToObject(body, "feeds");
+    for (const InputFeedStatus& feed : engine.inputStatus()) cJSON_AddItemToArray(list, inputStatusJson(feed));
+    out = replyOk(id, body);
+  } else if (verb == "startInput") {
+    StartOptions options;
+    std::string parseError;
+    std::vector<double> channelList;
+    if (!parseStartOptions(member(root, "options"), declared("options"), options, parseError) ||
+        !parseNumbers(root, declared("channels"), static_cast<size_t>(kMaxOutputChannels), channelList, parseError)) {
+      out = replyError(id, "invalid", parseError);
+    } else {
+      InputOpenOptions input;
+      input.device = textOf("device");
+      input.latencyMs = numberOf("latencyMs");
+      std::vector<int> channels;
+      for (double channel : channelList) channels.push_back(static_cast<int>(channel));
+      StartResultDTO result;
+      EngineError error;
+      if (engine.startInput(textOf("cueId"), numberOf("whenMs"), input, channels, options, result, error)) {
+        cJSON* body = cJSON_CreateObject();
+        cJSON_AddStringToObject(body, "cueId", result.cueId.c_str());
+        cJSON_AddStringToObject(body, "runId", result.runId.c_str());
+        cJSON_AddStringToObject(body, "state", result.state.c_str());
+        cJSON_AddNumberToObject(body, "startAtMs", result.startAtMs);
+        out = replyOk(id, body);
+      } else {
+        out = replyError(id, error.code, error.message);
+      }
+    }
+  } else if (verb == "patch") {
+    std::vector<double> outputs;
+    std::string parseError;
+    if (!parseNumbers(root, declared("outputs"), static_cast<size_t>(kMaxOutputChannels), outputs, parseError)) {
+      out = replyError(id, "invalid", parseError);
+    } else {
+      std::vector<int> map;
+      for (double output : outputs) map.push_back(static_cast<int>(output));
+      PatchResultDTO result;
+      EngineError error;
+      if (engine.setPatch(static_cast<int>(numberOf("slot")), carries("outputs"), map, numberOf("gain"),
+                          textOf("device"), result, error)) {
+        cJSON* body = cJSON_CreateObject();
+        cJSON_AddBoolToObject(body, "ok", 1);
+        cJSON_AddNumberToObject(body, "at", result.atMs);
+        cJSON_AddBoolToObject(body, "applied", result.applied);
+        // Where it plays: an extra device's id, or null for the main device — and whether that
+        // is a fallback from a device that would not open, and why.
+        if (result.device.empty()) {
+          cJSON_AddNullToObject(body, "device");
+        } else {
+          cJSON_AddStringToObject(body, "device", result.device.c_str());
+        }
+        cJSON_AddBoolToObject(body, "fallback", result.fallback);
+        if (result.reason.empty()) {
+          cJSON_AddNullToObject(body, "reason");
+        } else {
+          cJSON_AddStringToObject(body, "reason", result.reason.c_str());
+        }
+        out = replyOk(id, body);
+      } else {
+        out = replyError(id, error.code, error.message);
+      }
+    }
+  } else if (verb == "outputGains") {
+    std::vector<double> gains;
+    std::string parseError;
+    if (!parseNumbers(root, declared("gains"), static_cast<size_t>(kMaxOutputChannels), gains, parseError)) {
+      out = replyError(id, "invalid", parseError);
+    } else {
+      CommandResultDTO result;
+      EngineError error;
+      if (engine.setOutputGains(gains, result, error)) {
+        cJSON* body = cJSON_CreateObject();
+        cJSON_AddBoolToObject(body, "ok", 1);
+        cJSON_AddNumberToObject(body, "at", result.atMs);
+        cJSON_AddBoolToObject(body, "applied", result.applied);
+        out = replyOk(id, body);
+      } else {
+        out = replyError(id, error.code, error.message);
+      }
+    }
+  } else if (verb == "outputs") {
+    std::vector<OutputDeviceInfo> devices;
+    EngineError error;
+    if (!engine.outputDevices(devices, error)) {
+      out = replyError(id, error.code, error.message);
+    } else {
+      cJSON* body = cJSON_CreateObject();
+      cJSON* list = cJSON_AddArrayToObject(body, "outputs");
+      for (const OutputDeviceInfo& device : devices) {
+        cJSON* entry = cJSON_CreateObject();
+        cJSON_AddStringToObject(entry, "id", device.id.c_str());
+        cJSON_AddStringToObject(entry, "name", device.name.c_str());
+        cJSON_AddNumberToObject(entry, "channels", device.channels);
+        cJSON_AddNumberToObject(entry, "sampleRate", device.sampleRate);
+        cJSON_AddBoolToObject(entry, "isDefault", device.isDefault);
+        cJSON_AddBoolToObject(entry, "synthetic", device.synthetic);
+        cJSON_AddItemToArray(list, entry);
+      }
+      out = replyOk(id, body);
+    }
+  } else if (verb == "outputOpen") {
+    OutputOpenOptions options;
+    options.device = textOf("device");
+    options.sampleRate = static_cast<int>(numberOf("sampleRate"));
+    options.channels = static_cast<int>(numberOf("channels"));
+    options.skewPpm = numberOf("skewPpm");
+    options.periodFrames = static_cast<int>(numberOf("periodFrames"));
+    options.latencyMs = numberOf("latencyMs");
+    options.jitterMs = numberOf("jitterMs");
+    OutputStatus status;
+    EngineError error;
+    if (engine.openOutput(options, status, error)) {
+      out = replyOk(id, outputStatusJson(status));
+    } else {
+      out = replyError(id, error.code, error.message);
+    }
+  } else if (verb == "outputClose") {
+    bool closed = false;
+    EngineError error;
+    if (engine.closeOutput(textOf("device"), closed, error)) {
+      cJSON* body = cJSON_CreateObject();
+      cJSON_AddBoolToObject(body, "closed", closed);
+      out = replyOk(id, body);
+    } else {
+      out = replyError(id, error.code, error.message);
+    }
+  } else if (verb == "outputStatus") {
+    cJSON* body = cJSON_CreateObject();
+    cJSON* list = cJSON_AddArrayToObject(body, "outputs");
+    for (const OutputStatus& output : engine.outputStatus()) cJSON_AddItemToArray(list, outputStatusJson(output));
+    out = replyOk(id, body);
+  } else if (verb == "loudness") {
+    LoudnessDTO result;
+    EngineError error;
+    if (engine.loudness(textOf("filePath"), result, error)) {
+      cJSON* body = cJSON_CreateObject();
+      cJSON_AddStringToObject(body, "filePath", result.filePath.c_str());
+      cJSON_AddNumberToObject(body, "integratedLufs", result.integratedLufs);
+      cJSON_AddNumberToObject(body, "truePeakDb", result.truePeakDb);
+      cJSON_AddNumberToObject(body, "samplePeakDb", result.samplePeakDb);
+      cJSON_AddBoolToObject(body, "silent", result.silent);
+      cJSON_AddNumberToObject(body, "durationMs", result.durationMs);
+      cJSON_AddNumberToObject(body, "sampleRate", result.sampleRate);
+      cJSON_AddNumberToObject(body, "channels", result.channels);
+      out = replyOk(id, body);
+    } else {
+      out = replyError(id, error.code, error.message);
+    }
+  // ── end of the live input and mixer verbs ─────────────────────────────────────
   } else {
     out = replyError(id, "invalid", "unknown verb '" + verb + "'");
   }

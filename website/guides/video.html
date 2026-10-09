@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Video and outputs — Cuerunner</title>
+  <meta name="description" content="Video, image, text and camera cues on one or more outputs: placing an output on a projector, sound that runs through the engine, layers, blend modes, fades and exact crossfades, geometry and moving it, the next GO, mirrors and masks, corner pin and soft edges, and the timers." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Video and outputs — Cuerunner" />
+  <meta property="og:description" content="Video, image, text and camera cues on one or more outputs: placing an output on a projector, sound that runs through the engine, layers, blend modes, fades and exact crossfades, geometry and moving it, the next GO, mirrors and masks, corner pin and soft edges, and the timers." />
+  <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="../index.html" aria-label="Cuerunner home">
+        <img src="../assets/logo-mark.svg" alt="Cuerunner" class="brand-mark" />
+        <span>CUERUNNER</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../guide.html" aria-current="page">Guides</a>
+        <a href="../reference/index.html">Reference</a>
+        <a href="../pricing.html">Pricing</a>
+        <a href="../support.html">Support</a>
+        <a href="../interop.html">Other programs</a>
+        <a href="../reliability.html">Reliability</a>
+      </nav>
+      <a class="header-cta" href="../index.html#download">Download</a>
+    </div>
+  </header>
+
+  <main class="layout doc-layout">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="../guide.html">Guides</a>
+        <span aria-hidden="true">/</span>
+        <span>Video and outputs</span>
+      </nav>
+
+    <section class="panel reveal">
+      <h1>Video and outputs</h1>
+      <p class="doc-lede">
+        Pictures go to <strong>outputs</strong> — windows Cuerunner keeps open for the show,
+        one per projector or screen — and four cue types put them there: <strong>Video</strong>,
+        <strong>Image</strong>, <strong>Text</strong> and <strong>Camera</strong>. All of it is free.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1" id="outputs">
+      <h2>Adding an output</h2>
+      <p>
+        Open the <strong>Outputs</strong> tab in the dock and press <strong>+ Add output</strong>.
+        A black window opens: that is the output, and it stays open for as long as the show
+        has it, so a cue that follows another lands on a picture that was never taken down —
+        there is no black frame between cues. Each output's card shows a live picture of what
+        it is showing, so you can see the projector from the desk.
+      </p>
+      <p>
+        <strong>Display</strong> puts it somewhere: <strong>A window</strong> you can drag and
+        size, or one of this computer's displays, with <strong>Fullscreen</strong> to fill it.
+        A fullscreen output never takes the keyboard, so GO stays with the cue list.
+        Where an output goes is kept on <em>this computer</em>, not in the show file: the same
+        show opens in rehearsal on a laptop and on the night on the venue's projectors, and
+        each machine remembers its own places. The output's name, its size, its timer and its
+        projector settings travel with the show.
+      </p>
+      <p>
+        A display that is not connected when the show opens is not a failure: the output opens
+        as a window instead, with a red banner across it saying which display it was meant
+        for, and its card says the same. It moves back as soon as the display is plugged in.
+      </p>
+      <p>
+        <strong>Identify</strong> draws each output's name across it for three seconds.
+        <strong>Test pattern</strong> puts a grid, the centre, the corners and colour bars over
+        one output, at its own resolution, for lining a projector up.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1" id="video">
+      <h2>A video cue</h2>
+      <p>
+        Add one from the toolbar's <strong>More</strong> menu, then <strong>Browse</strong> on
+        its <strong>Video</strong> tab. MP4 (H.264), WebM (VP8, VP9, AV1) and the other formats
+        Chromium decodes all play. A small preview of the file sits under its name.
+        <strong>Start time</strong> and <strong>End time</strong> trim it, <strong>Loop
+        count</strong> repeats it (−1 loops it until it is stopped or a devamp cue lets it go),
+        and <strong>Hold last frame</strong> keeps the final frame up when it ends — the cue
+        then runs until it is stopped, the way a held picture does.
+      </p>
+      <p>
+        While it plays, the Video tab has <strong>Pause</strong>/<strong>Resume</strong> and a
+        <strong>Position</strong> slider. A paused video stands on the frame it is on, its
+        sound taken away, and resumes from exactly there.
+      </p>
+      <h3>Its sound</h3>
+      <p>
+        A video's sound plays through the audio engine as an ordinary voice — the same
+        level, pan, routing matrix, fades and meters an audio cue has, on the
+        <strong>Sound</strong> tab — and the picture is silent. Both start on the engine's
+        clock at the same instant, and the output keeps the picture on that clock frame by
+        frame: a small drift is closed by playing the picture a touch fast or slow, a large one
+        by moving it. However long the video, picture and sound stay together. A fade cue on
+        the video's <strong>Volume</strong> fades the sound; a stop cue with a fade takes
+        both down together.
+      </p>
+      <p>
+        A video with no sound track plays as a picture alone, and its cue ends with it. The
+        sound of an MP4 or MOV plays everywhere; a WebM's or MKV's needs a decoder this machine
+        has — on Windows that is the system's own, and where it has none the picture plays
+        silent and the Sound tab says so.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="pictures">
+      <h2>Images and text</h2>
+      <p>
+        An <strong>Image</strong> cue shows a still — PNG, JPEG, GIF, WebP, SVG and the rest —
+        for <strong>Shown for</strong> seconds, or until it is stopped when that is empty.
+        A <strong>Text</strong> cue draws its text in the font, size, colour and style you give
+        it, anchored to one of nine places on the output.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="camera">
+      <h2>A live camera</h2>
+      <p>
+        A <strong>Camera</strong> cue shows a live picture on an output until it is stopped,
+        with the fades, layer, blend and geometry every picture has. Its <strong>Camera</strong>
+        tab chooses the source. <strong>A camera on this machine</strong> lists the capture
+        devices the outputs can see — a webcam, a USB camera, an HDMI capture card. The list
+        comes from the output windows, the one place Cuerunner opens a camera, so open an output
+        first. The show keeps the camera's <em>name</em>, so the venue machine finds the same
+        model; each machine keeps its own pick of the exact device, so two cameras with one name
+        are never confused. A camera that is stood on is opened ahead of its GO, so its picture
+        is live the moment it is asked for.
+      </p>
+      <p>
+        If the camera is not connected, the output says so in a banner across it —
+        <em>Camera Stage cam is not connected</em> — the output's card says the same, and the
+        cue keeps running: plug the camera in and the picture comes up by itself. A cable pulled
+        mid-show does the same.
+      </p>
+      <p>
+        <strong>A network stream</strong> takes an address: HTTP video, an HLS playlist
+        (<code>.m3u8</code>), or MJPEG — what most IP cameras and phone camera apps serve. A login
+        in the address (<code>http://user:password@camera/…</code>) is passed on. The stream is
+        fetched by Cuerunner itself, only from the address a cue names. RTSP is not supported:
+        use the camera's HTTP, MJPEG or HLS address.
+      </p>
+      <p>
+        On a Mac, the first camera cue asks for camera access once; if it was refused, allow
+        Cuerunner under Camera in the Mac's Privacy &amp; Security settings.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="layers">
+      <h2>Layers, fades and crossfades</h2>
+      <p>
+        Every picture cue has a <strong>Picture</strong> tab. <strong>Output</strong> says which
+        output it goes to (empty is the show's first). <strong>Layer</strong> stacks it: higher
+        is in front, and pictures on one layer stack in the order they were fired, the newest
+        in front — so a title on layer 5 sits over every video on layer 1. Pictures layer;
+        nothing is taken down because another went up, unless you ask for it.
+      </p>
+      <p>
+        <strong>Fade in</strong> starts on the picture's first frame on screen, not on the GO,
+        so a file that takes a moment to open never jumps in half-faded. <strong>Fade
+        out</strong> lands on the picture's own end — the end of a video's last pass, or of an
+        image's or text's display time.
+      </p>
+      <p>
+        <strong>Crossfade</strong> dissolves a video or image in from whatever is on its
+        output at or below its layer, over its fade-in. The dissolve is exact: half way
+        through, the output is half the old frame and half the new, so nothing dips through
+        black and a letterboxed video's bars dissolve to black rather than to the picture it
+        replaced. When it lands, what it replaced is taken down and its cue is stopped; a
+        video it replaced takes its sound down over the same time. With nothing on the output,
+        a crossfade simply fades up. A title on a layer above stays exactly where it is.
+      </p>
+      <p>
+        A <strong>fade cue</strong> aimed at a picture can move its <strong>Opacity</strong>,
+        with the same curves and <strong>Stop target when done</strong> a sound fade has.
+        <strong>Opacity</strong> on the Picture tab is the level a picture rests at; changing
+        it while the picture is up changes it at once.
+      </p>
+      <h3>Blend modes</h3>
+      <p>
+        <strong>Blend</strong> on the Picture tab says how a picture is laid over what is
+        behind it: <strong>Normal</strong>, <strong>Multiply</strong>, <strong>Screen</strong>,
+        <strong>Overlay</strong>, <strong>Darken</strong>, <strong>Lighten</strong>,
+        <strong>Colour dodge</strong>, <strong>Colour burn</strong>, <strong>Hard light</strong>,
+        <strong>Soft light</strong>, <strong>Difference</strong>, <strong>Exclusion</strong>,
+        <strong>Add</strong> and <strong>Subtract</strong>. Screen or Add a flare or a smoke
+        loop over a scene so its black disappears; Multiply a gobo or a texture over it so its
+        white does. The picture's opacity sets how much of the blend shows. Every mode draws the
+        same on the GPU and on the 2D fallback.
+      </p>
+      <h3>The next GO</h3>
+      <p>
+        <strong>Next GO</strong> on the Picture tab takes the picture down — over its own fade
+        out — the next time GO is pressed, whatever that GO fires: a caption, a title card, a
+        still between scenes. <strong>The show's default</strong> follows the
+        <strong>Next GO</strong> box at the top of the Outputs panel, so a show of surtitles can
+        say it once. A GO from a trigger or a desk counts the same as the button. It is the next
+        GO <em>in the picture's own cue list</em>: a sound effect fired from a cart list leaves
+        the main list's captions up. A picture the GO's own crossfade is dissolving away is left
+        to the dissolve.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="geometry">
+      <h2>Where a picture sits</h2>
+      <p>
+        <strong>Size to</strong> fits the picture inside the output (letterboxed),
+        <strong>fills</strong> it (cropping what spills over), <strong>stretches</strong> it to
+        the output's shape, or shows it <strong>native</strong>, one pixel per pixel. Then
+        <strong>Position</strong> moves it as a share of the output, <strong>Scale</strong>
+        sizes it, <strong>Rotate</strong> turns it clockwise, and <strong>Crop</strong> cuts
+        from each edge first. Every one of them applies while the picture is up.
+      </p>
+      <h3>Moving it</h3>
+      <p>
+        <strong>Keyframes</strong>, under the geometry, move a picture over its own play.
+        <strong>Add keyframe</strong> puts one a second on from the last, where the picture would
+        be then; give it a time (from the picture's first frame), a place, scale, rotation and
+        crop, and how it gets there — <strong>Linear</strong>, <strong>Ease in</strong>,
+        <strong>Ease out</strong>, <strong>Ease in and out</strong>, or <strong>Jump</strong>.
+        The picture starts where its own geometry puts it and stays at the last keyframe. A
+        paused picture's keyframes pause with it.
+      </p>
+      <p>
+        A <strong>fade cue</strong> moves a picture that is up: with its <strong>Property</strong>
+        set to <strong>Opacity</strong> or <strong>Geometry only</strong>, tick what it moves under
+        <strong>Move the picture</strong> — position, scale, rotation, crop — and give each its
+        target. It moves from wherever the picture is when the fade starts, over the fade's time
+        and curve, and the picture stays where the fade left it. A property you then change by
+        hand on the Picture tab is yours again.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="mirrors">
+      <h2>Mirrors and masks</h2>
+      <p>
+        <strong>Shows</strong>, on an output's card, makes it a mirror of another output: it
+        shows that output's pictures exactly as that output composes them — a confidence monitor
+        at the desk, or a second projector stacked on the first for brightness. A mirror keeps
+        its own display, timer and corner pin; a picture cue cannot be pointed at a mirror, only
+        at the output it shows.
+      </p>
+      <p>
+        <strong>Mask</strong> lays an image over an output's pictures: where it is white they
+        show, where it is black they do not — or by its transparency, with <strong>Mask
+        reads</strong> set so, and turned round with <strong>Invert</strong>. Draw it on the test
+        pattern's grid to mask a set piece or a proscenium. The mask is stretched to the output
+        and pinned with the picture; the timer and test pattern are drawn over it. A mirror with
+        no mask of its own shows its source's. A mask that cannot be read is said on the output
+        and the pictures are drawn unmasked.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-3" id="projector">
+      <h2>Corner pin and soft edges</h2>
+      <p>
+        A projector that is not square to its screen throws a keystoned picture.
+        <strong>Corner pin and soft edges</strong>, on the output's card, moves each of the four
+        corners by a share of the output, and the whole frame — text and the timer included —
+        is laid onto that shape in perspective. <strong>Soft edge</strong> fades an edge to
+        black across a share of the frame, for two projectors whose pictures overlap; the
+        <strong>edge curve</strong> bends that ramp for the projectors' gamma. Both are part
+        of the show, because they belong to the venue's rig as the show was teched on it.
+      </p>
+      <p>
+        An output draws on the computer's GPU. On a machine whose graphics Chromium will not
+        use it draws the same picture with its 2D fallback, says so on its card, and puts a
+        corner pin's offsets aside — that one thing needs the GPU — with a banner saying so.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-3" id="timers">
+      <h2>Timers</h2>
+      <p>
+        <strong>Timer</strong> on an output's card draws a clock over it: the time of day, the
+        show clock (from the first GO since the show was opened), or the time left on the
+        most recently started cue that has an end. <strong>Floating timer</strong>, in the
+        panel's header, opens a small window that stays on top of everything else on this
+        computer, counting the same way — for the operator, not the audience.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-3" id="safety">
+      <h2>When things go wrong</h2>
+      <p>
+        Panic takes every output down with the sound, whichever surface raised it. An output
+        whose window crashes reloads in place and puts back every picture it had, where each
+        would have been by then — the record is kept by the app, not by the window. A picture
+        whose file is missing says so in the log and on its cue.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Cuerunner — show control for Windows, macOS and Linux. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+    <p class="seller">Cuerunner is provided by ALGD LTD, company number NI744090, 121 Glencam Road, Omagh, Tyrone, BT79 7HB, United Kingdom.</p>
+  </footer>
+</body>
+</html>

@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Working with sound — Cuerunner</title>
-  <meta name="description" content="Audio cues in practice: levels and pan, fades, trimming silence, loops and vamps, and routing channels to the device." />
+  <meta name="description" content="Audio cues in practice: levels and pan, fades and their shapes, loudness, loops, vamps and slices, routing, patches and the mixer, auditioning, and live inputs." />
   <meta property="og:type" content="article" />
   <meta property="og:title" content="Working with sound — Cuerunner" />
-  <meta property="og:description" content="Audio cues in practice: levels and pan, fades, trimming silence, loops and vamps, and routing channels to the device." />
+  <meta property="og:description" content="Audio cues in practice: levels and pan, fades and their shapes, loudness, loops, vamps and slices, routing, patches and the mixer, auditioning, and live inputs." />
   <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="../styles.css" />
 </head>
@@ -76,13 +76,29 @@
       <p>
         <strong>Volume</strong> and <strong>Pan</strong> are the cue's own, applied as it
         plays. <strong>Fade in</strong> ramps it up from silence over that many seconds
-        when it starts.
+        when it starts, and <strong>Fade out</strong> takes it down to silence over that
+        many seconds before its own end — the end of its region, or of its last loop — so a
+        track that should not stop dead does not.
       </p>
       <p>
         To change a level while a cue is already playing, use a <strong>fade cue</strong>
         pointed at it: a target, a level to reach, and a time to take getting there. Tick
         <strong>Stop when done</strong> and the fade becomes a fade-out — the usual way to
         take music out under dialogue.
+      </p>
+      <p>
+        Every fade has a <strong>shape</strong>: the cue's fade in and fade out, a fade cue,
+        a Light cue's fade. Leave it at its default, pick a preset — <strong>equal power</strong>
+        for a crossfade that does not dip, <strong>exponential</strong> for a slow start — or
+        choose <strong>Custom</strong> and drag the curve's two handles until it moves the way
+        the moment wants. What is drawn is what plays.
+      </p>
+      <p>
+        <strong>Normalize</strong>, on the Audio tab beside the trim, measures the file the way
+        a broadcast meter does (EBU R128) and sets the trim so the cue plays at the show's
+        loudness target, its true peak kept under the ceiling. Select a run of cues and choose
+        <strong>Normalize loudness</strong> from the right-click menu to level the whole set in
+        one go — and take it back with one undo. The target and ceiling are in Settings → Audio.
       </p>
       <p>
         A <strong>stop cue</strong> stops a target at once, or fades it out first over a
@@ -104,6 +120,13 @@
         lap it is on and plays out to the end of the file. That is the underscore that
         holds for a scene change of unknown length and then resolves properly.
       </p>
+      <p>
+        For music with more than one place to hold, use the <strong>Slices</strong> tab: add
+        markers to cut the region into slices, and give each a number of passes or make it a
+        <strong>Vamp</strong>. The cue plays the intro once, vamps the groove until the devamp,
+        plays the bridge twice and holds on the next vamp — each change landing on its sample.
+        A devamp set to <strong>Stop at the end of the slice</strong> ends the cue there instead.
+      </p>
     </section>
 
     <section class="panel reveal delay-2">
@@ -119,6 +142,38 @@
       <p>
         The device itself, its sample rate, buffer and channel count are in
         Settings → Audio, with what the engine is actually doing underneath them.
+      </p>
+      <p>
+        <strong>Output patches</strong>, also in Settings → Audio, name sets of outputs —
+        Mains, Foldback, Delays — so a cue says where it goes by name: choose the patch under
+        <strong>Output patch</strong>, and a matrix then addresses the patch's own channels. When
+        the rig changes, change the patch, not every cue. The <strong>Mixer</strong> button by
+        the master opens a strip for each patch and each output, with a fader, a mute and a
+        meter, and the master beside them.
+      </p>
+      <p>
+        A patch can play on another interface: choose it as the patch's device — the band's
+        in-ear rack beside the house system, a second USB interface for the delays. The engine
+        plays every device the patches name at once, opened when the show loads so the first
+        cue on one starts at once, and holds each to the show's own device's clock, so a cue
+        sent to two of them stays in phase all night rather than drifting apart. The master,
+        PAUSE, PANIC, fades and live inputs reach them all. <strong>Output devices</strong>, under
+        the patches, says how each one is: its rate, its clock against the show's device and
+        how far behind it it sounds. If one goes — unplugged, taken by another program — its
+        cues stop, the rest of the show plays on, and its patches play on the show's device
+        until <strong>Reconnect</strong> brings it back. A show opened on a machine that has not
+        got one of its devices says which patches fell back, and where they are playing instead.
+      </p>
+      <p>
+        <strong>Audition</strong> plays a cue, a selection or a whole file on the show's
+        audition output — headphones at the desk — without firing anything: the list does not
+        move. Choose the audition output in Settings → Audio first.
+      </p>
+      <p>
+        A <strong>Live Input</strong> cue plays a microphone or a line input through the engine
+        with the same level, pan, routing, patches and fades as a file. Pick the input and its
+        channels; <strong>Open input</strong> shows the level and the time through the engine. A
+        separate interface works: the engine follows its clock and keeps the buffer steady.
       </p>
       <p>
         On Windows, <strong>Audio system</strong> above the device picks how the sound

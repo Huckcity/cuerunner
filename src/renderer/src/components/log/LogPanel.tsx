@@ -3,6 +3,7 @@ import { useStore, type LogEntry } from '../../store'
 import { formatClock } from '../../utils/cueDefaults'
 import { describeEvent } from '../monitor/MonitorPanel'
 import type { ShowEvent } from '../../../../shared/show'
+import { openLogsFolder } from '../../hooks/useLogFile'
 import './LogPanel.css'
 
 // How close to the bottom counts as "following the log". Scrolling further up
@@ -116,6 +117,13 @@ export function LogPanel({ onClose }: Props) {
           ))}
         </div>
         <div className="log-actions">
+          <button
+            className="log-btn log-folder"
+            onClick={() => { void openLogsFolder() }}
+            title="Open the folder the log is written to — it outlives this window"
+          >
+            Folder
+          </button>
           <button className="log-btn" onClick={clear} disabled={log.length === 0 && events.length === 0}>
             Clear
           </button>

@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lighting from the cue list — Cuerunner</title>
+  <meta name="description" content="Patch the rig, send it out as sACN or Art-Net, build a look on the faders, record it into a Light cue, and run it with the sound." />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="Lighting from the cue list — Cuerunner" />
+  <meta property="og:description" content="Patch the rig, send it out as sACN or Art-Net, build a look on the faders, record it into a Light cue, and run it with the sound." />
+  <link rel="icon" href="../assets/logo-mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="../index.html" aria-label="Cuerunner home">
+        <img src="../assets/logo-mark.svg" alt="Cuerunner" class="brand-mark" />
+        <span>CUERUNNER</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a href="../guide.html" aria-current="page">Guides</a>
+        <a href="../reference/index.html">Reference</a>
+        <a href="../pricing.html">Pricing</a>
+        <a href="../support.html">Support</a>
+        <a href="../interop.html">Other programs</a>
+        <a href="../reliability.html">Reliability</a>
+      </nav>
+      <a class="header-cta" href="../index.html#download">Download</a>
+    </div>
+  </header>
+
+  <main class="layout doc-layout">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="../guide.html">Guides</a>
+        <span aria-hidden="true">/</span>
+        <span>Lighting from the cue list</span>
+      </nav>
+
+    <section class="panel reveal">
+      <h1>Lighting from the cue list<span class="pro">Pro</span></h1>
+      <p class="doc-lede">
+        The lights in the same list as the sound, fired by the same GO: Cuerunner sends
+        DMX over the network itself, as sACN or Art-Net, to whatever node or dimmer rack
+        the rig is on.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>1. Patch the rig</h2>
+      <p>
+        The <strong>Lighting</strong> view, then <strong>Patch</strong>. Choose a type and a
+        mode, a universe, and how many: <strong>Patch</strong> puts them one after another in
+        the first gaps that fit, or from the address you type. The built-in types are a
+        dimmer, RGB, dimmer + RGB, RGBW, RGBA, RGBAW + UV and a basic moving head in 8- or
+        16-bit; anything else is a type you make from a channel list, an
+        <strong>Open Fixture Library</strong> definition file read in, or a
+        <strong>GDTF</strong> file — the format fixture makers publish their own fixtures in,
+        on the GDTF Share and on their own sites — with <strong>Import GDTF file…</strong>.
+      </p>
+      <p>
+        A GDTF import brings every DMX mode the fixture has, each channel at its own width,
+        where each one rests, and the functions across a channel's travel: a shutter that is
+        closed, open and then strobing says which on its fader as you move it. A 24-bit
+        channel is driven on its top two bytes, and the import says so. A fixture whose mode
+        is split over several DMX breaks — separately addressed parts — is refused with a
+        sentence saying so: patch each part as a fixture of its own type. The
+        <a href="../reference/formats.html#gdtf">formats reference</a> has the whole mapping.
+      </p>
+      <p>
+        Two fixtures sharing a slot, and one that runs off the end of its universe, are
+        listed above the patch in amber before the show finds them.
+        <strong>Identify</strong> flashes a fixture for three seconds — light and colour
+        full, a head centred — so you can find it in the rig.
+      </p>
+      <p>
+        <strong>Groups</strong> are fixtures a cue drives as one: a level on a group reaches
+        every member that has that parameter, so "the wash to blue" is one line in a cue
+        however many fixtures are in the wash.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>2. Send it somewhere</h2>
+      <p>
+        <strong>Network</strong>, then <strong>Add output</strong> for each universe:
+        sACN to its multicast group or to one receiver, or Art-Net broadcast or to one node.
+        A universe can have both. sACN carries a priority, for a rig where a console sends
+        too; <strong>Synchronise</strong> holds every universe's frame until they can all
+        change at once. <strong>Interface</strong> pins the traffic to one network card —
+        a machine fact, kept with the machine rather than the show. <strong>Find
+        nodes</strong> asks the Art-Net network who is there.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>3. Build a look and record it</h2>
+      <p>
+        <strong>Faders</strong> has every fixture's parameters live, over whatever the cues
+        are doing. Set the look by eye, then <strong>Record into cue</strong> (or
+        <strong>New Light cue</strong>): the faders' values go into the cue and the faders
+        let go, so the next GO shows the cue rather than the faders on top of it. A look can
+        also be built and trimmed in the cue's own <strong>Light</strong> tab.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>4. Run it</h2>
+      <p>
+        A Light cue's <strong>Fade</strong> is how long its look takes to arrive, on the
+        curve it names. What the cue does not name stays where the cues before it left it —
+        tracking — and a later cue that sets the same parameter takes it over:
+        <strong>latest takes precedence</strong>. A cue whose intensity is
+        <strong>highest takes precedence</strong> adds its intensity alongside the others
+        instead, and the light is as bright as the brightest of them. The
+        <strong>Tracking</strong> tab shows, parameter by parameter, what the cue moves,
+        what it sets to where it already was, and what it leaves.
+      </p>
+      <ul class="tight-list">
+        <li><strong>STOP</strong> stops a fade where it has got to. The light stays on.</li>
+        <li>A <strong>Stop cue</strong> with a fade-out releases a Light cue: what it holds fades home.</li>
+        <li>A <strong>Fade cue</strong> aimed at a Light cue moves its intensity to a share of what it set — 0.5 is half.</li>
+        <li><strong>Effects</strong> keep a parameter moving after the fade — sine, triangle, square or saw. On a group, spread starts each member at its own point, which is a chase.</li>
+      </ul>
+    </section>
+
+    <section class="panel reveal delay-3">
+      <h2>5. Watch it, and the consoles beside it</h2>
+      <p>
+        <strong>Monitor</strong> shows every slot of a universe as it goes out, ten times a
+        second. <strong>Listen to this universe</strong> in Network hears another console's
+        sACN or Art-Net: it shows under each slot, and with <strong>Merge in</strong> it is
+        merged into this show's output, highest takes precedence.
+      </p>
+      <div class="note">
+        <strong>Blackout</strong> takes every slot to zero until it is pressed again;
+        <strong>Release all</strong> fades every cue's levels home. A panic does what the
+        show says under Network → <strong>On panic</strong>: hold the lights where they are
+        (the default — a panic is a sound emergency, and a dark stage is a second one),
+        release them, or black out. The packets are held byte for byte to the sACN and
+        Art-Net documents and to a listener on this machine in the test suite; no hardware
+        node has been part of a run yet.
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Cuerunner — show control for Windows, macOS and Linux. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+    <p class="seller">Cuerunner is provided by ALGD LTD, company number NI744090, 121 Glencam Road, Omagh, Tyrone, BT79 7HB, United Kingdom.</p>
+  </footer>
+</body>
+</html>

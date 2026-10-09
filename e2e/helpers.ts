@@ -224,7 +224,10 @@ export async function readRecovered(app: ElectronApplication, expression: string
 // Adds a cue from the toolbar's "More" menu (MIDI, OSC, Network, Script).
 export async function addCueFromMoreMenu(page: Page, label: string): Promise<void> {
   await page.locator('.toolbar-more-btn').click()
-  await page.locator('.toolbar-more-menu-item', { hasText: label }).click()
+  // The whole label, not a part of it: "MIDI" is also the start of "MIDI File". A locked
+  // entry carries its Pro mark after the label, which the match allows.
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  await page.locator('.toolbar-more-menu-item', { hasText: new RegExp(`^\\s*${escaped}\\s*(pro)?\\s*$`) }).click()
 }
 
 /** Sets the show's firing window, the way an operator would, and closes the panel. */
@@ -615,16 +618,24 @@ export async function buildDeskShow(
  * — so a spec that sends OSC to the app it launched sends it here.
  */
 export async function oscPortOfItsOwn(page: Page): Promise<number> {
-  const port = 43000 + Math.floor(Math.random() * 5000)
   await page.locator('.toolbar-brand').click()
   await page.locator('.file-menu [data-action="settings"]').click()
   const dialog = page.getByRole('dialog', { name: 'Settings' })
   await dialog.getByRole('button', { name: 'Network', exact: true }).click()
-  await dialog.locator('#settings-osc-port').fill(String(port))
-  await dialog.locator('#settings-osc-port').blur()
-  await expect(dialog.locator('.settings-service[data-service="osc-in"]')).toContainText(String(port))
-  await dialog.getByRole('button', { name: 'Close' }).click()
-  return port
+  const status = dialog.locator('.settings-service[data-service="osc-in"]')
+  // The listener binds its port alone, so a port another worker's app happened to pick is
+  // refused rather than shared: that is a port that is not this app's own, and another is tried.
+  for (let attempt = 0; ; attempt++) {
+    const port = 43000 + Math.floor(Math.random() * 5000)
+    await dialog.locator('#settings-osc-port').fill(String(port))
+    await dialog.locator('#settings-osc-port').blur()
+    await expect(status).toContainText(new RegExp(`listening on port ${port}|port ${port} is in use`))
+    if ((await status.textContent())?.includes(`listening on port ${port}`)) {
+      await dialog.getByRole('button', { name: 'Close' }).click()
+      return port
+    }
+    if (attempt >= 4) throw new Error('no OSC port of its own after five tries')
+  }
 }
 
 /** A free-ish port for a test that needs to listen for OSC. */

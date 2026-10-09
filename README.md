@@ -24,7 +24,7 @@ An Electron app with three layers — main process, preload bridge, renderer —
 exclusively over IPC. The renderer has no Node access; the audio engine is a native
 process of its own, so a renderer crash does not stop the sound.
 
-The **cue stack is free**: eleven cue types, groups and timelines, the waveform editor,
+The **cue stack is free**: nineteen cue types, groups and timelines, the waveform editor,
 the run log, workspaces, undo — and the ears it needs: OSC and MIDI input, cue triggers,
 and the monitor that shows what arrived. **Cuerunner Pro** is the show around it —
 wireless and the mic plot, scenes and the desk, the script panel with its tablet view,
@@ -113,7 +113,7 @@ npm run preview           # Preview built app without packaging
 npm run dist              # Build and package for all platforms
 npm run dist:win          # Build and package for Windows only
 npm run dist:mac          # Build and package for macOS only
-npm run dist:linux        # Build and package for Linux only (AppImage)
+npm run dist:linux        # Build and package for Linux only (AppImage and .deb)
 npm run screenshots       # Regenerate website/assets/guide images (requires build)
 npm run demo:write        # Put resources/demo/Demo Show.cuerunner through the serialiser
 npm run demo:check        # Fail if the shipped demo is not what that writes
@@ -159,7 +159,7 @@ npm install
 # Run in development
 npm run dev
 
-# Package an AppImage into dist/
+# Package an AppImage and a .deb into dist/
 npm run dist:linux
 ```
 
@@ -169,6 +169,20 @@ extract and run it instead:
 ```bash
 ./dist/Cuerunner-*.AppImage --appimage-extract-and-run
 ```
+
+The Debian package is written beside it, as `dist/cuerunner_<version>_amd64.deb`. Unlike the
+AppImage it declares what it needs from the system — Electron's own libraries and ALSA
+(`libasound2t64 | libasound2`) — so `apt` pulls those in:
+
+```bash
+sudo apt install ./dist/cuerunner_*_amd64.deb
+```
+
+The release pipeline publishes the `.deb` beside the AppImage — on the release page, and on the
+mirror as `pub.cuerunner.app/latest/Cuerunner.deb` with its digest in `latest/SHA256SUMS` — and
+`scripts/linux-packages.test.ts` holds it to its declared dependencies. A `.deb` install does not
+replace itself: the app checks for a newer version like any other and sends the operator to the
+download page for it (see Updates below).
 
 ### Troubleshooting `Error: Electron uninstall`
 
@@ -221,7 +235,7 @@ Renderer Layer (React/Zustand)
 Main Process Layer
   ├─ src/main/ipc/handlers.ts (ipcMain.handle)
   │   ├─ MidiEngine (using 'midi' npm package)
-  │   ├─ OscEngine (using 'node-osc')
+  │   ├─ OscEngine (its own UDP sockets and OSC codec, osc/codec.ts)
   │   └─ WorkspaceManager (fs + file dialogs)
   └─ src/main/ipc/windowHandlers.ts (the per-window channels: close request, menu action)
 ```
@@ -504,6 +518,7 @@ cuerunner/
 │   │   │   ├── handlers.ts          # Main process IPC handlers, one per declared channel
 │   │   │   ├── windowHandlers.ts    # The two channels registered per window
 │   │   │   └── parity.test.ts       # Fails the build when the declaration and the registrations disagree
+│   │   ├── dmx/                     # sACN and Art-Net packets, the lighting state, its sockets and frame loop
 │   │   └── index.ts                 # Electron main process entry
 │   ├── preload/
 │   │   └── index.ts                 # IPC bridge (context isolation)
@@ -687,7 +702,9 @@ GitHub Actions workflows in `.github/workflows/`:
   - Integration tests on Linux: Cuerunner against the protocol peers for the console and the
     desk (no vendor software, no hardware)
 - **`build.yml`**: Runs when a release is published, or manually
-  - Tests, then builds the Windows (NSIS), macOS (DMG) and Linux (AppImage) installers
+  - Tests, then builds the Windows (NSIS), macOS (DMG, and the zip a Mac updates itself from)
+    and Linux (AppImage and `.deb`) installers, each with electron-builder's `latest*.yml` update
+    feed beside it
   - Normally started by `release.yml`, which dispatches it for the tag it just cut; if a release
     ends up with no packaging run, start one by hand — `gh workflow run build.yml --ref <tag>` —
     because a release page with no assets means neither happened
@@ -710,6 +727,12 @@ GitHub Actions workflows in `.github/workflows/`:
     file is a way to check a download, not a signature
   - Uploads that list to R2 (Cloudflare) and GitHub Releases: the `pub.cuerunner.app/latest/`
     files the site's download cards point at, with the digests the cards link beside them
+  - Serves the update feed the app checks: each platform's `latest*.yml` goes to `latest/`,
+    rewritten so every file it names is this release's own copy under `versions/<tag>/` (the
+    macOS zip is copied there only), and a feed is published only beside the installer it
+    offers — a withheld Windows installer has no `latest.yml` either. The SHA-512 in a feed is
+    electron-builder's digest of the bytes, which the app checks a download against before
+    installing anything
 - **`release.yml`**: Semantic versioning with `semantic-release` — run it by hand from
   `main` (Actions → Release → Run workflow). Merging to `main` publishes nothing on its
   own, so a release happens only when it is meant to. Cutting the tag is not enough on its
@@ -933,7 +956,8 @@ keys are verified on the machine they are entered on:
   computer it was entered on, not to a workspace or a show file. A machine's half of a
   redundant pair is kept the same way (`redundancy.json`), and for the same reason: both
   machines of a pair run the same workspace file, so which one is the main is a fact about
-  the machine rather than about the show.
+  the machine rather than about the show. The interface the lights leave by and the sACN
+  identity this machine sends as are kept there too (`dmx.json`).
 - **A key ends when it ends.** The key is checked when the app starts, when one is
   entered, and whenever anything asks what the license is; the app's own clock crosses a
   key's last day while it is open, with no operator action and no restart. The moment it

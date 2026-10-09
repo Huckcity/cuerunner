@@ -1,0 +1,41 @@
+/* The cues a fade, a stop or a control cue acts on: one row per target, then the picker that
+   adds another. Rows borrow the trigger list's frame so the two lists read alike. */
+
+.target-list {
+  margin-bottom: var(--space-2);
+}
+
+.target-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: var(--space-1) 6px;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  margin-bottom: 3px;
+  font-size: var(--text-base);
+}
+
+.target-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-body);
+}
+
+.target-row[data-gone='true'] .target-text {
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
+.target-remove:hover:not(:disabled) {
+  color: var(--cue-color-red);
+}
+
+.target-list-empty {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-2);
+}

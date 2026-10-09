@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Toolbar } from './components/layout/Toolbar'
 import { TransportBar } from './components/layout/TransportBar'
 import { ContextBar } from './components/layout/ContextBar'
@@ -9,27 +9,47 @@ import { ShowSettings } from './components/show/ShowSettings'
 import { ChangesDialog } from './components/changes/ChangesDialog'
 import { MergeReportDialog } from './components/changes/MergeReportDialog'
 import { ReportDialog } from './components/layout/ReportDialog'
+import { QLabImportHost } from './components/qlab/QLabImportHost'
 import { CrashNotice } from './components/layout/CrashNotice'
 import { RecoveryNotice } from './components/layout/RecoveryNotice'
 import { NoticeBar } from './components/layout/NoticeBar'
 import { MissingMediaBar } from './components/media/MissingMediaBar'
 import { GroupingNoteBar } from './components/layout/GroupingNoteBar'
+import { PatchFallbackBar } from './components/layout/PatchFallbackBar'
 import { useAutosave } from './hooks/useAutosave'
 import { usePlaybackBridge } from './hooks/usePlaybackBridge'
 import { useMediaLengths } from './hooks/useMediaLengths'
 import { useSilenceTrim } from './hooks/useSilenceTrim'
 import { useShowBridge } from './hooks/useShowBridge'
 import { useCueTriggers } from './hooks/useCueTriggers'
+import { useHotkeyTriggers } from './hooks/useHotkeyTriggers'
+import { useClockTriggers } from './hooks/useClockTriggers'
+import { useOscFeedback } from './hooks/useOscFeedback'
+import { useOscPortReport } from './hooks/useOscPortReport'
 import { useDeskButtons } from './hooks/useDeskButtons'
 import { useHighestWins } from './hooks/useHighestWins'
 import { useCompanionPublisher } from './hooks/useCompanionPublisher'
 import { useRedundancy } from './hooks/useRedundancy'
+import { useTimecodeFollow } from './hooks/useTimecodeFollow'
+import { useOutputs } from './hooks/useOutputs'
+import { useAudioRoutingSync } from './hooks/useAudioRoutingSync'
 import { Dock, type DockTab } from './components/layout/Dock'
 import type { AppView } from './components/layout/Toolbar'
 import { ScenesView } from './components/scenes/ScenesView'
+import { ShowModeView } from './components/show-mode/ShowModeView'
+import { useCartMode, useShowMode } from './hooks/useShowMode'
+import { CartView } from './components/cart/CartView'
+import { useLogFile } from './hooks/useLogFile'
 import { useSelectedCue, useStore, usePro } from './store'
 import type { GroupCue } from '../../shared/cue'
 import { ProLock } from './components/license/ProLock'
+import { LightingView } from './components/lighting/LightingView'
+import { useLightingBridge } from './hooks/useLightingBridge'
+import { CueListTabs } from './components/cue-lists/CueListTabs'
+import { useTileKeys } from './hooks/useTileKeys'
+import { useUpdates } from './hooks/useUpdates'
+import { UpdateNotice } from './components/update/UpdateNotice'
+import { WhatsNewDialog } from './components/update/WhatsNewDialog'
 import './App.css'
 
 // Store-backed notice bar: save and open failures land here, where a packaged build
@@ -55,12 +75,27 @@ export function App() {
   useSilenceTrim()
   useShowBridge()
   useCueTriggers()
+  useHotkeyTriggers()
+  useClockTriggers()
+  useOscFeedback()
+  useOscPortReport()
   useDeskButtons()
   useHighestWins()
   useCompanionPublisher()
   // The other machine on the desk: what it is doing with the show, and what to do with
   // the show it hands over.
   useRedundancy()
+  // The session log, written to disk as it is written on screen.
+  useLogFile()
+  // The lighting engine is told where the show's universes go whenever that changes.
+  useLightingBridge()
+  // The incoming SMPTE clock: its status for the window, and the cues it fires.
+  useTimecodeFollow()
+  // The video outputs: which the show declares, what they report, and the timers on them.
+  useOutputs()
+  // A cart's tiles that have keys of their own answer them wherever the show is standing.
+  useTileKeys()
+  useAudioRoutingSync()
   const settingsTab = useStore(s => s.settingsTab)
   const openSettings = useStore(s => s.openSettings)
   const closeSettings = useStore(s => s.closeSettings)
@@ -80,13 +115,29 @@ export function App() {
   // it is edited; the cue stack is the other half, one click away at curtain up.
   const [view, setView] = useState<AppView>('cues')
   const selected = useSelectedCue()
+  // The large-type operator view (F5): it takes the place of the list and the inspector.
+  const [showMode, toggleShowMode] = useShowMode()
+  // A list that is a cart is shown as one; F6 on it shows its rows for editing, and back.
+  const activeIsCart = useStore(s => s.cueLists.find(list => list.id === s.activeListId)?.cart === true)
+  const [cartAsRows, setCartAsRows] = useState(false)
+  const activeIsCartRef = useRef(activeIsCart)
+  activeIsCartRef.current = activeIsCart
+  // The cart (F6): the list as a wall of buttons. Show mode, when it is on, is in front of it.
+  const [cartMode, toggleCartMode] = useCartMode(() => {
+    if (!activeIsCartRef.current) return false
+    setCartAsRows(rows => !rows)
+    return true
+  })
+  const cartShown = (activeIsCart ? !cartAsRows : cartMode) && !showMode && view === 'cues'
+  // Updates follow the show: main is told whether it is running, in Show Mode, a file.
+  useUpdates(showMode)
 
   const timelineGroupCue = selected?.type === 'group' && (selected as GroupCue).mode === 'timeline'
     ? selected as GroupCue
     : null
 
   const timelineFullscreen = timelineExpanded && timelineGroupCue !== null && dockTab === 'cue' && view === 'cues'
-  const shellClass = `app-shell${timelineFullscreen ? ' timeline-fullscreen' : ''}`
+  const shellClass = `app-shell${timelineFullscreen ? ' timeline-fullscreen' : ''}${showMode ? ' in-show-mode' : ''}${cartShown ? ' in-cart' : ''}`
 
   // The license can change while the window is open — a key entered in Settings, or one
   // that ran out overnight — so the panels follow the main process rather than the read
@@ -126,13 +177,13 @@ export function App() {
     const delivered = new Set<string>()
     const off = window.cuerunner.app.onMainError((message) => {
       delivered.add(message)
-      useStore.getState().appendLog([{ level: 'error', message }])
+      useStore.getState().appendLog([{ level: 'error', message, origin: 'main' }])
     })
     void window.cuerunner.app.drainMainErrors()
       .then(messages => {
         for (const message of messages) {
           if (delivered.has(message)) continue
-          useStore.getState().appendLog([{ level: 'error', message }])
+          useStore.getState().appendLog([{ level: 'error', message, origin: 'main' }])
         }
       })
       // A renderer that cannot read the backlog still runs the show; it just starts
@@ -146,16 +197,24 @@ export function App() {
       <CrashNotice />
       <RecoveryNotice />
       <NoticeHost />
+      <UpdateNotice showMode={showMode} />
+      <WhatsNewDialog />
       <MissingMediaBar />
       <GroupingNoteBar />
+      <PatchFallbackBar />
       <Toolbar
         onOpenSettings={() => openSettings('general')}
         view={view}
         onSwitchView={setView}
       />
       <ContextBar />
-      <div className="app-main" data-view={view}>
-        {view === 'scenes' ? (
+      {view === 'cues' && <CueListTabs readOnly={showMode} />}
+      <div className="app-main" data-view={showMode ? 'show' : cartShown ? 'cart' : view}>
+        {showMode ? (
+          <ShowModeView onExit={toggleShowMode} />
+        ) : cartShown ? (
+          <CartView onExit={activeIsCart ? () => setCartAsRows(true) : toggleCartMode} />
+        ) : view === 'scenes' ? (
           pro ? (
             <ScenesView />
           ) : (
@@ -163,6 +222,16 @@ export function App() {
               variant="view"
               feature="Scenes"
               blurb="Who is open on stage, scene by scene. Recall one and the desk moves with the show."
+            />
+          )
+        ) : view === 'lighting' ? (
+          pro ? (
+            <LightingView />
+          ) : (
+            <ProLock
+              variant="view"
+              feature="Lighting"
+              blurb="The rig patched, faders to build a look, and sACN or Art-Net out of this machine, run from the cue list."
             />
           )
         ) : (
@@ -187,6 +256,7 @@ export function App() {
       {mergeReport !== null && (
         <MergeReportDialog report={mergeReport} onClose={() => setMergeReport(null)} />
       )}
+      <QLabImportHost />
     </div>
   )
 }

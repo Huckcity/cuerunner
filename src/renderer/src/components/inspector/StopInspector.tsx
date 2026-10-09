@@ -1,7 +1,8 @@
 import { useStore } from '../../store'
 import type { StopCue } from '../../../../shared/cue'
 import { LastRun } from './LastRun'
-import { targetLabel } from './targetLabel'
+import { TargetList } from './TargetList'
+import { STOP_ALL, stopTargetIds, stopTargetsPatch } from '../../../../shared/cueTargets'
 import { ResetButton } from './ResetButton'
 import { NumberField } from '../common/Field'
 import { STOP_DEFAULTS } from '../../utils/cueDefaults'
@@ -13,23 +14,36 @@ export function StopInspector({ cue }: Props) {
   const cues = useStore(s => s.cues)
   const set = (patch: Partial<StopCue>) => update(cue.id, patch)
 
-  const otherCues = cues.filter(c => c.id !== cue.id)
-  const targetGone = cue.targetCueId !== 'all' && !otherCues.some(c => c.id === cue.targetCueId)
+  const targets = stopTargetIds(cue)
+  const all = targets === STOP_ALL
 
   return (
     <div>
       <div className="field-row">
-        <label>Target</label>
-        <select value={cue.targetCueId} onChange={e => set({ targetCueId: e.target.value })}>
+        <label htmlFor="stop-target-mode">Target</label>
+        <select
+          id="stop-target-mode"
+          value={all ? 'all' : 'cues'}
+          onChange={e => set(stopTargetsPatch(e.target.value === 'all' ? STOP_ALL : []))}
+        >
           <option value="all">All cues</option>
-          {/* A target that was deleted is said, not papered over: a select whose value
-              matches no option draws its first one, which reads as a choice nobody made. */}
-          {targetGone && <option value={cue.targetCueId}>— not in this show —</option>}
-          {otherCues.map(c => <option key={c.id} value={c.id}>{targetLabel(c)}</option>)}
+          <option value="cues">These cues</option>
         </select>
-        <ResetButton label="Target" value={cue.targetCueId} defaultValue={STOP_DEFAULTS.targetCueId}
-          onReset={() => set({ targetCueId: STOP_DEFAULTS.targetCueId })} />
+        <ResetButton label="Target" value={all ? STOP_ALL : targets} defaultValue={STOP_DEFAULTS.targetCueId}
+          onReset={() => set(stopTargetsPatch(STOP_ALL))} />
       </div>
+      {!all && (
+        <TargetList
+          id="stop-target-add"
+          cueId={cue.id}
+          ids={targets}
+          cues={cues}
+          // Anything that runs can be stopped; a note never runs.
+          eligible={candidate => candidate.type !== 'memo'}
+          onChange={ids => set(stopTargetsPatch(ids))}
+          empty="No cue chosen: this stop stops nothing."
+        />
+      )}
       <div className="field-row">
         <label>Fade out</label>
         <input type="checkbox" checked={cue.fadeOut}
@@ -53,8 +67,7 @@ export function StopInspector({ cue }: Props) {
           onReset={() => set({ waitForFade: STOP_DEFAULTS.waitForFade })} />
       </div>
       <p className="inspector-hint">
-        Stops the target at once, or fades it out first. Tick Wait for fade to hold the
-        show until the fade has finished.
+        Stops its targets at once, or fades them out first. A group stops whole.
       </p>
       <LastRun cueId={cue.id} />
     </div>

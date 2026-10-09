@@ -7,6 +7,7 @@
 // Everything else (device enumeration, limits, capture tee) is a flag on those.
 #include "engine.h"
 #include "offline.h"
+#include "ltc.h"
 #include "protocol.h"
 #include "transport.h"
 #include "util.h"
@@ -64,6 +65,9 @@ void usage() {
                "                             total streaming budget (0 = no budget)\n"
                "  --schedule-horizon-ms <n>  how far ahead a stamped verb may be scheduled\n"
                "  --frames <n>               offline: render exactly this many frames\n"
+               "  --test-inputs              offer the synthetic live inputs (test:tone, test:ramp)\n"
+               "  --test-outputs             offer the test output devices (test:out-a, test:out-b); with\n"
+               "                             --capture, each tees what it plays beside the capture\n"
                "  --protocol                 print the wire declaration: the protocol, every verb, every event and the shared bounds\n"
                "  --version\n",
                ws::kEngineVersion);
@@ -131,6 +135,10 @@ bool parseArgs(int argc, char** argv, ws::EngineOptions& engine, std::string& so
     } else if (arg == "--frames") {
       if (!nextValue(argc, argv, i, value)) return false;
       frames = std::atoll(value.c_str());
+    } else if (arg == "--test-inputs") {
+      engine.testInputs = true;
+    } else if (arg == "--test-outputs") {
+      engine.testOutputs = true;
     } else if (arg == "--list-devices") {
       listDevices = true;
     } else if (arg == "--protocol") {
@@ -163,6 +171,14 @@ int main(int argc, char** argv) {
   // runtime too old to know the code page answers null and is left as it was.
   std::setlocale(LC_CTYPE, ".UTF8");
 #endif
+  // `--ltc-decode <file.wav> [--channel <n>]`: reads the LTC on one channel of a file and
+  // prints every frame it found — the native timecode test's reader (ltc.h). Handled
+  // before the engine's own flags, because it opens no engine at all.
+  if (argc >= 3 && std::string(argv[1]) == "--ltc-decode") {
+    int channel = 0;
+    if (argc >= 5 && std::string(argv[3]) == "--channel") channel = std::atoi(argv[4]);
+    return ws::printLtcDecode(argv[2], channel);
+  }
   ws::EngineOptions engineOptions;
   std::string socketPath;
   std::string scriptPath;

@@ -136,11 +136,11 @@ describe('migrateWorkspace', () => {
     // sentence says which file it came out of.
     const fromANewerBuild = workspaceWith([
       wait('w1', { duration: 1000 }),
-      { id: 'v1', type: 'video', filePath: 'clip.mp4' }
+      { id: 'v1', type: 'hologram', filePath: 'clip.mp4' }
     ])
     expect(() => migrateWorkspace(fromANewerBuild, SHOW)).toThrow(Refusal)
     expect(() => migrateWorkspace(fromANewerBuild, SHOW)).toThrow(
-      'that show has a cue this version of Cuerunner does not know (video)' +
+      'that show has a cue this version of Cuerunner does not know (hologram)' +
       ` — ${SHOW} was probably saved by a newer version`
     )
   })

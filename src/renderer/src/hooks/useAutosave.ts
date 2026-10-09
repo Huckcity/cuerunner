@@ -19,6 +19,10 @@ export function useAutosave(): void {
         midiSettings,
         showSettings,
         triggerGuard,
+        lighting,
+        timecode,
+        cueLists,
+        oscPatches,
         workspaceId,
         workspaceCreatedAt,
         showHistory,
@@ -36,6 +40,12 @@ export function useAutosave(): void {
         midiSettings,
         showSettings,
         triggerGuard,
+        lighting,
+        timecode,
+        videoOutputs: useStore.getState().videoOutputs,
+        cueLists,
+        pictures: useStore.getState().pictures,
+        oscPatches,
         cues
       })
       // The cue GO would fire next goes with the work: a crash mid-show is exactly when

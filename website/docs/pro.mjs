@@ -37,10 +37,10 @@ export const NOT_YET_PROVED = '(not yet proved on real hardware)'
  * built from this list, so a type that moves across the line moves the words with it, and the
  * guard reads the list against `CUE_TYPES` minus `PRO_CUE_TYPES`.
  */
-const FREE_CUES = ['audio', 'MIDI', 'OSC', 'MSC', 'network', 'script', 'wait', 'fade', 'stop', 'group', 'devamp']
+const FREE_CUES = ['audio', 'MIDI', 'MIDI file', 'OSC', 'MSC', 'network', 'script', 'wait', 'fade', 'stop', 'group', 'devamp', 'memo', 'video', 'image', 'text', 'camera', 'control', 'input']
 
 /** How a count reads at the head of a sentence: "Eleven cue types". Past the last word, the numeral stands. */
-const COUNT = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve']
+const COUNT = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty']
 
 /**
  * The cue stack's sentence: how many types the free app has, said as a reader says a list, and
@@ -138,6 +138,17 @@ export const PRO_ROWS = [
     }
   },
   {
+    label: 'Lighting',
+    free: {
+      prose: `MSC and OSC cues to a lighting desk that runs the lights itself.`
+    },
+    pro: {
+      identifiers: ['dmx'],
+      cues: ['light'],
+      prose: `sACN and Art-Net out of this machine: a fixture patch with clash warnings and identify, fixture types read from Open Fixture Library and GDTF files, groups, faders to build a look and record it, and Light cues that fade it with tracking — latest or highest takes precedence — plus chases and sine effects. A console on the network can be watched or merged in, and Art-Net nodes found.`
+    }
+  },
+  {
     label: 'The script',
     free: {
       identifiers: ['script:readFile'],
@@ -167,6 +178,17 @@ export const PRO_ROWS = [
     pro: {
       identifiers: ['workspace:compare', 'workspace:merge', 'workspace:exportBundle', 'workspace:importBundle'],
       prose: `Comparing this show with another version of it, merging two people's copies, and the <code>.cuerunnerx</code> bundle that carries the show and its media as one file.`
+    }
+  },
+  {
+    label: 'Timecode',
+    free: {
+      prose: '—'
+    },
+    pro: {
+      identifiers: ['timecode', 'timecode:generate'],
+      cues: ['timecode'],
+      prose: `SMPTE timecode in and out: follow MTC, LTC or Art-Net with the cue list firing on its frames and chasing a locate, and run a clock of its own — MTC, LTC and Art-Net at once, or jam-synced to the incoming one.`
     }
   },
   {
@@ -245,6 +267,54 @@ export const PRO_MARKS = [
     page: 'reference/control.html',
     words: 'Mic cue',
     cues: ['mic']
+  },
+  {
+    page: 'guides/cue-list.html',
+    words: 'Light',
+    cues: ['light']
+  },
+  {
+    page: 'guides/lighting.html',
+    words: 'Lighting from the cue list',
+    identifiers: ['dmx'],
+    cues: ['light']
+  },
+  {
+    page: 'reference/cue-types.html',
+    words: 'Light',
+    cues: ['light']
+  },
+  {
+    page: 'reference/control.html',
+    words: 'Light cue',
+    cues: ['light']
+  },
+  {
+    page: 'guides/cue-list.html',
+    words: 'Timecode',
+    cues: ['timecode']
+  },
+  {
+    page: 'guides/console.html',
+    words: 'Following timecode',
+    identifiers: ['timecode'],
+    cues: ['timecode']
+  },
+  {
+    page: 'reference/cue-types.html',
+    words: 'Timecode',
+    cues: ['timecode']
+  },
+  {
+    page: 'reference/control.html',
+    words: 'Timecode',
+    identifiers: ['timecode']
+  },
+  {
+    page: 'reference/control.html',
+    words: 'Timecode cue',
+    cues: ['timecode'],
+    identifiers: ['timecode:generate']
   },
   {
     page: 'reference/formats.html',

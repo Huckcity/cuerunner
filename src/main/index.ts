@@ -1,4 +1,4 @@
-import { app, BrowserWindow, crashReporter, screen, shell, Menu } from 'electron'
+import { app, BrowserWindow, crashReporter, net, protocol, screen, session, shell, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc/handlers'
@@ -8,11 +8,30 @@ import { onMainError, reportMainError } from './errors'
 import { audioEngine } from './audio/AudioEngine'
 import { playbackSafety, recentEngineEvents } from './safety/runtime'
 import { installPlaybackDevHarness } from './safety/devHarness'
+import { midiFiles } from './midi/midiFileRuntime'
 import { keepAwake, keepAwakeHeld } from './safety/keepAwake'
 import { refuseNavigation } from './safety/navigation'
 import { placeWindow, readWindowState, saveWindowState } from './windowState'
 import { FILE_MENU, fileMenuItemId, type MenuAction } from '../shared/fileMenu'
 import { APP_CHANNELS, type RendererCrash } from '../shared/ipc/app'
+import { startUpdates } from './update/main'
+import { MEDIA_SCHEME_PRIVILEGES, installMediaProtocol } from './output/mediaProtocol'
+import { existingOutputManager, registerOutputWindowHandlers, streamAllowance } from './output/ipc'
+import { isOutputWindow } from './output/OutputManager'
+import { STREAM_SCHEME_PRIVILEGES, installStreamProtocol } from './output/streamProtocol'
+import { fakeCameraSwitches, installCameraPermissions } from './output/cameraAccess'
+
+// The schemes pictures are read through have to be privileged before the app is ready —
+// Electron's rule — so they are declared here, at load, and answered once the app is up: the
+// show's media files, and a camera cue's network stream.
+protocol.registerSchemesAsPrivileged([MEDIA_SCHEME_PRIVILEGES, STREAM_SCHEME_PRIVILEGES])
+
+// A development build told to use Chromium's fake camera gets it before Chromium starts; a
+// packaged build never reads the switch (src/main/output/cameraAccess.ts).
+for (const [name, value] of fakeCameraSwitches(app.isPackaged, process.env)) {
+  if (value === undefined) app.commandLine.appendSwitch(name)
+  else app.commandLine.appendSwitch(name, value)
+}
 
 // The last renderer crash, handed to the reloaded renderer so it can say what happened.
 // One shot: the renderer reads it on startup, and it is cleared.
@@ -57,7 +76,11 @@ crashReporter.start({ uploadToServer: false, compress: true })
 // cue history. A programmatic click from a test has no focused window, hence the
 // fallback to the first open window.
 function sendMenuAction(action: MenuAction): void {
-  const target = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  // Never an output: a projector focused by a stray click is not where the show is.
+  const focused = BrowserWindow.getFocusedWindow()
+  const target = focused !== null && !isOutputWindow(focused)
+    ? focused
+    : BrowserWindow.getAllWindows().find(win => !isOutputWindow(win))
   sendToWindow(target, APP_CHANNELS.menuAction, action)
 }
 
@@ -137,6 +160,35 @@ function createMenu(): void {
         { role: 'copy' },
         { role: 'paste' },
         { role: 'selectAll' }
+      ]
+    },
+    {
+      // How the window is drawn. Show mode is the window's to switch, and F5 is answered by
+      // the window itself — the accelerator is printed here and not registered, so a press
+      // is one toggle rather than the menu's and the window's both. The zoom is the
+      // operator's: a booth monitor across a desk reads larger than a laptop in front of them.
+      label: 'View',
+      submenu: [
+        {
+          id: 'view-show-mode',
+          label: 'Show Mode',
+          accelerator: 'F5',
+          registerAccelerator: false,
+          click: () => sendMenuAction('show-mode')
+        },
+        {
+          id: 'view-cart',
+          label: 'Cart',
+          accelerator: 'F6',
+          registerAccelerator: false,
+          click: () => sendMenuAction('cart')
+        },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
       ]
     },
     {
@@ -274,6 +326,9 @@ function createWindow(): void {
   })
 
   win.on('ready-to-show', () => win.show())
+  // The outputs belong to the window the show is run from: when it has gone, so have they,
+  // or the app would stay up with nothing on screen that can close it.
+  win.on('closed', () => existingOutputManager()?.closeAll())
 
   // The event object, not the deprecated positional arguments: Electron logs a deprecation
   // warning for the old form on every message, which on a full E2E run is a hundred and
@@ -321,7 +376,12 @@ app.whenReady().then(() => {
   })
   
   createMenu()
+  installMediaProtocol(protocol)
+  installStreamProtocol(protocol, streamAllowance, (url, init) => net.fetch(url, init))
+  // A capture device is an output's to open, for a Camera cue, and nobody else's.
+  installCameraPermissions(session.defaultSession)
   registerIpcHandlers()
+  registerOutputWindowHandlers()
   // The engine comes up with the app rather than with the first cue, so a device that
   // cannot be opened is a visible error at launch instead of a cue that does nothing.
   void audioEngine.ensureStarted().catch((error: unknown) => {
@@ -337,7 +397,8 @@ app.whenReady().then(() => {
       recentEvents: recentEngineEvents,
       status: () => audioEngine.status(),
       kill: () => audioEngine.crashForTest(),
-      simulateDeviceLoss: () => audioEngine.simulateDeviceLossForTest()
+      simulateDeviceLoss: () => audioEngine.simulateDeviceLossForTest(),
+      simulateOutputLoss: (device: string) => audioEngine.simulateOutputLossForTest(device)
     }
   })
   // A quit the renderer cancels must keep its audio: File→Exit on a dirty workspace
@@ -351,10 +412,16 @@ app.whenReady().then(() => {
   app.on('will-quit', () => {
     playbackSafety.close()
     audioEngine.forceShutdown()
+    // A MIDI file still playing at quit lets go of its notes on the way out: a port outlives
+    // the app that held it, and a synth left with a chord down drones until someone finds it.
+    midiFiles.stopAll()
   })
   createWindow()
+  // The launch check waits for the window and a show; the daily one follows it. Each is
+  // skipped while checks are off or locked out, and none of them downloads anything.
+  startUpdates()
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().every(win => isOutputWindow(win))) createWindow()
   })
 })
 

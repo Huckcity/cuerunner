@@ -89,7 +89,7 @@
             </tr>
             <tr>
               <td>A Stop or Fade cue does nothing</td>
-              <td>The cue it was aimed at has been deleted. Its tab shows <em>— not in this show —</em> where the target was, and a Stop cue fired like that is marked <em>failed</em>. Choose another target.</td>
+              <td>A cue it was aimed at has been deleted. Its tab shows <em>— not in this show —</em> in the target list, and a Stop or Fade cue fired like that is marked <em>failed</em> with how many were gone. Remove it and choose another.</td>
             </tr>
             <tr>
               <td>A show control cue does nothing</td>
@@ -106,6 +106,26 @@
             <tr>
               <td>A script cue never finishes</td>
               <td>Its timeout is 0, which waits for ever. Set one, or check what the script is waiting on in the log.</td>
+            </tr>
+            <tr>
+              <td>A video, image or text cue fails with <em>the show has no video output</em></td>
+              <td>The show has no output, or the cue names one that was removed. Add one in the dock's Outputs tab, or choose another on the cue's Picture tab.</td>
+            </tr>
+            <tr>
+              <td>An output has a red banner across it</td>
+              <td>The display it was placed on is not connected, so it opened as a window. Plug the display in and it moves back; or choose another on its card. A banner naming a camera means that camera is not connected (or another program has it); a banner naming a mask means its file could not be read.</td>
+            </tr>
+            <tr>
+              <td>The camera list says to open an output</td>
+              <td>Only an output window may open a camera, so the list comes from one. Add or open an output. On a Mac, allow Cuerunner under Camera in the Mac's Privacy &amp; Security settings.</td>
+            </tr>
+            <tr>
+              <td>A camera cue fails with <em>RTSP streams are not supported</em></td>
+              <td>Cuerunner reads HTTP video, HLS and MJPEG. Most IP cameras serve one of them too: use that address.</td>
+            </tr>
+            <tr>
+              <td>A video plays with no sound</td>
+              <td>The file has no sound track (its Sound tab says so), or — a WebM or MKV on Windows — the computer has no decoder for its sound. The picture still plays; convert the file to MP4 for sound everywhere.</td>
             </tr>
             <tr>
               <td>A trigger does not fire the cue</td>
@@ -146,12 +166,15 @@
     <section class="panel reveal delay-2" id="limitations">
       <h2>Known limitations</h2>
       <ul class="tight-list">
-        <li>No video or image cues. Video is driven by talking to something that plays it, through a network, OSC or MIDI cue.</li>
+        <li>Video plays what Chromium decodes (H.264, VP8, VP9, AV1 and the rest); ProRes and other professional codecs need converting first. On Windows a WebM's or MKV's sound needs the system's own decoder for it, and plays silent where there is none.</li>
+        <li>One crossfade at a time per output: a second that starts while one is running lands the first at once. Blend modes other than normal are not offered.</li>
         <li>No cue-level audio effects beyond level, pan, rate and fades.</li>
         <li>ASIO runs a single driver at a time and at most 32 channels: a rig that needs two interfaces on two ASIO drivers at once is not covered.</li>
         <li>OSC input is UDP only.</li>
         <li>The channel ceiling a desk model states is the number the console publishes rather than a measurement: a show with more channels than the selected model takes is named under the desk connection, with the number, and every channel is sent as it always was. Only the count control stops at it, and a show already larger than the ceiling keeps its own whole range on the dial rather than being trimmed back to it.</li>
         <li>An SQ's membership is written over the desk's own control service — TCP 51326 outbound, with a keepalive datagram to the desk's UDP 51324 — a protocol Allen &amp; Heath publish nothing about, spoken here from frames measured off an SQ-6 on firmware 1.6.1. The desk's own answer to a membership has never been read, so nothing here says a desk has accepted one: what a recall leaves out is worked out against what Cuerunner last sent, not against the desk. The channel mutes ride the MIDI service beside it, on 51325. The session leaves by the desk's own door when the show stops, and one the desk loses without that goodbye leaves it mute until it is reset — said in the log, on the device row and in an alarm, which is why a lost session is not dialled again in a loop.</li>
+        <li>The lighting is DMX over the network, not a console: a patch, faders, groups and Light cues with tracking — no palettes, no command line, no pixel-matrix fixtures, and no fixture library beyond an Open Fixture Library file or a GDTF file read in — a GDTF fixture split over several DMX breaks is refused rather than patched as one. 64 universes and 2048 fixtures to a show. The packets are held byte for byte to the sACN and Art-Net documents and to a listener on this machine; no hardware node has been part of a run. The tracking sheet reads the Light cues in list order and does not account for what a Stop or Fade cue does at show time.</li>
+        <li>A redundant pair both send their lights when both are licensed and both have outputs: the standby's levels are not the live machine's, and receivers merging two sources at one priority take the higher of each slot. Give the standby no outputs, or a lower sACN priority.</li>
         <li>The tablet view is read-only by design.</li>
         <li>Cuerunner is distributed outside the app stores, and the release notes say whether a build is signed: Windows warns when an unsigned installer is run, and macOS warns about an unidentified developer at first launch — Gatekeeper refuses such an app on a machine that has not seen it. Each release publishes its digests twice: a <code>SHA256SUMS</code> beside the assets on its release page, naming the files that page carries, and <code>latest/SHA256SUMS</code> on the download host, naming the files the cards link.</li>
         <li>The Linux AppImage is experimental: MIDI needs ALSA development headers present when dependencies are installed.</li>

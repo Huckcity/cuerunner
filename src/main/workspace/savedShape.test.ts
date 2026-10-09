@@ -25,6 +25,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { serialiseWorkspace } from './serialise'
 import { defaultRfSettings, defaultShowSettings } from '../../shared/show'
+import { createOutput } from '../../shared/visual'
 import { diffWorkspaces } from '../../shared/showfile'
 import { mergeWorkspaces } from '../../shared/showfileMerge'
 import {
@@ -39,6 +40,10 @@ import {
 import { CUE_TYPES, type AudioCue, type Cue, type CueBase } from '../../shared/cue'
 import type { ShowSettings } from '../../shared/show'
 import type { Workspace } from '../../shared/workspace'
+import { builtinFixtureTypes, defaultLightingSettings, type LightingSettings } from '../../shared/dmx'
+import { LIGHTING_SHAPE } from '../../shared/dmxShape'
+import { TIMECODE_SHOW_SHAPE } from '../../shared/timecodeShape'
+import { CUE_LIST_SHAPE } from '../../shared/cueListsShape'
 
 vi.mock('electron', () => ({
   // Nothing here touches the user-data folder; the serialiser needs no Electron at all.
@@ -79,6 +84,32 @@ function cue(id: string, name: string): AudioCue {
 }
 
 /**
+ * A rig with something in every list, so the walk reaches every field the lighting declares:
+ * a 16-bit moving head (a fine offset that is a number) and a dimmer (one that is `null`), a
+ * group, an output each way and an input.
+ */
+const lighting: LightingSettings = {
+  ...defaultLightingSettings(),
+  types: builtinFixtureTypes().filter(type => type.id === 'builtin:moving-head' || type.id === 'builtin:dimmer'),
+  fixtures: [
+    { id: 'fx-1', name: 'Spot 1', typeId: 'builtin:moving-head', mode: '16-bit, 6 channel', universe: 1, address: 1 },
+    { id: 'fx-2', name: 'House', typeId: 'builtin:dimmer', mode: '1 channel', universe: 1, address: 7 }
+  ],
+  groups: [{ id: 'gr-1', name: 'Everything', fixtureIds: ['fx-1', 'fx-2'] }],
+  outputs: [
+    {
+      id: 'out-1', universe: 1, protocol: 'sacn', transport: 'multicast', address: '',
+      wireUniverse: 1, priority: 100, enabled: true
+    },
+    {
+      id: 'out-2', universe: 1, protocol: 'artnet', transport: 'unicast', address: '10.0.0.40',
+      wireUniverse: 0, priority: 100, enabled: false
+    }
+  ],
+  inputs: [{ id: 'in-1', protocol: 'sacn', wireUniverse: 2, universe: 2, merge: false, enabled: true }]
+}
+
+/**
  * The whole shape, every optional section set: the walk needs a value it can move in every
  * section, including the ones a file need not carry, and `Required` keeps the fixture
  * honest if the `Workspace` type gains a key.
@@ -93,7 +124,24 @@ const fixture: Required<Workspace> = {
   midiSettings: { outputPortName: 'Desk' },
   showSettings: defaultShowSettings(),
   triggerGuard: { windowMs: 300 },
-  cues: [cue('a1', 'Walk-in'), cue('a2', 'Interval')]
+  lighting,
+  // Moved from its defaults, as a show that chases a clock carries it.
+  timecode: { rate: '29.97df', holdMs: 1500, chase: true, offsetFrames: -108000, onStop: 'continue', toleranceFrames: 12 },
+  videoOutputs: [createOutput('out-1', 'Stage left')],
+  // A second list with every optional field a list can carry, so the walk reaches all of them.
+  cueLists: [
+    { id: 'main', name: 'Main Cue List' },
+    {
+      id: 'sfx', name: 'Effects', color: 'blue', cart: true, disarmed: true,
+      timecode: { enabled: false, offsetFrames: 250 },
+      tileKeys: [{ cueId: 'a2', key: 'q' }]
+    }
+  ],
+  // Moved from its defaults: a show whose pictures go on the next GO.
+  pictures: { stopOnNextGo: true },
+  // A destination the show's OSC cues name, as a show that sends to a desk carries it.
+  oscPatches: [{ id: 'p-desk', name: 'Lighting desk', host: '10.0.0.30', port: 8000 }],
+  cues: [cue('a1', 'Walk-in'), { ...cue('a2', 'Interval'), listId: 'sfx' }]
 }
 
 /**
@@ -144,6 +192,12 @@ const declared: readonly WorkspaceKey[] = [
   'midiSettings',
   'showSettings',
   'triggerGuard',
+  'lighting',
+  'timecode',
+  'videoOutputs',
+  'cueLists',
+  'pictures',
+  'oscPatches',
   'cues'
 ]
 
@@ -162,12 +216,18 @@ describe('the saved shape', () => {
 
   it('leaves an unset section out of the file rather than writing an empty one', () => {
     const bare = serialiseWorkspace(
-      { ...fixture, history: undefined, showSettings: undefined, triggerGuard: undefined },
+      {
+        ...fixture, history: undefined, showSettings: undefined, triggerGuard: undefined, lighting: undefined,
+        timecode: undefined, videoOutputs: undefined, cueLists: undefined, pictures: undefined, oscPatches: undefined
+      },
       SHOWS
     )
 
     expect(Object.keys(JSON.parse(bare))).toEqual(
-      declared.filter(key => key !== 'history' && key !== 'showSettings' && key !== 'triggerGuard')
+      declared.filter(
+        key => key !== 'history' && key !== 'showSettings' && key !== 'triggerGuard' && key !== 'lighting' && key !== 'timecode' &&
+          key !== 'videoOutputs' && key !== 'cueLists' && key !== 'pictures' && key !== 'oscPatches'
+      )
     )
   })
 
@@ -402,7 +462,7 @@ describe('the settings-field shape', () => {
 })
 
 /** One cue's own fields, from `CueBase`: what every cue carries, without the optionals. */
-function cueBase(id: string): Omit<CueBase, 'triggers' | 'refire' | 'scriptLine'> {
+function cueBase(id: string): Omit<CueBase, 'triggers' | 'refire' | 'scriptLine' | 'listId'> {
   return {
     id,
     number: id,
@@ -454,8 +514,18 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     triggers: [{ id: 't-a1', kind: 'osc', address: '/go' }],
     refire: 'restart',
     scriptLine: 12,
+    // A cue at the top level of a list other than the main one names it.
+    listId: 'sfx',
     trimSilence: true,
-    soundRegion: { startMs: 0, endMs: 4000, durationMs: 5200, silent: false }
+    soundRegion: { startMs: 0, endMs: 4000, durationMs: 5200, silent: false },
+    fadeOutDuration: 1500,
+    // The audio work's own optional fields: a patch, both fade shapes (one of each variant),
+    // slices with a vamp, and the loudness a normalise wrote down.
+    outputPatchId: 'patch-1',
+    fadeInShape: { kind: 'preset', preset: 'equalPower' },
+    fadeOutShape: { kind: 'bezier', x1: 0.2, y1: 0.8, x2: 0.6, y2: 1 },
+    slices: { markers: [1000, 2000], playCounts: [1, -1, 2] },
+    loudness: { filePath: '', integratedLufs: -18.2, truePeakDb: -0.4, silent: false }
   },
   midi: {
     ...cueBase('m1'),
@@ -484,6 +554,10 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
       { type: 'f', value: 3.5 },
       { type: 's', value: '/lx/12' },
       { type: 'T', value: true }
+    ],
+    // The list a cue that sends several carries: a message to a patch, with its own arguments.
+    messages: [
+      { patchId: 'p-desk', host: '', port: 0, address: '/eos/cue/12/fire', args: [{ type: 'f', value: 1 }] }
     ]
   },
   wait: { ...cueBase('w1'), type: 'wait' },
@@ -491,8 +565,11 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     ...cueBase('f1'),
     type: 'fade',
     targetCueId: '',
+    targetCueIds: ['a1', 'g1'],
     fadeProperty: 'volume',
     targetValue: 1,
+    panTargetValue: -0.5,
+    geometryTarget: { x: 0.25, scale: 0.5, crop: { top: 0, right: 0.1, bottom: 0, left: 0.1 } },
     curve: 'linear',
     stopTargetWhenDone: false
   },
@@ -500,6 +577,7 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     ...cueBase('s1'),
     type: 'stop',
     targetCueId: 'all',
+    targetCueIds: ['a1'],
     fadeOut: false,
     fadeOutDuration: 0,
     waitForFade: false
@@ -536,8 +614,171 @@ const CUE_OF_TYPE: { readonly [K in (typeof CUE_TYPES)[number]]: Extract<Cue, { 
     channelId: 'ew-dx:5364000906:0',
     label: 'Aldonza (37)',
     action: 'mute'
+  },
+  memo: { ...cueBase('me1'), type: 'memo' },
+  midiFile: {
+    ...cueBase('mf1'),
+    type: 'midiFile',
+    filePath: '/shows/click.mid',
+    portName: '',
+    playbackRate: 1,
+    startTime: 0,
+    // The `null` its end is allowed; the channel map carries a channel that is not sent.
+    endTime: null,
+    loopCount: -1,
+    channelMap: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0],
+    transpose: -2,
+    transposeDrums: false
+  },
+  light: {
+    ...cueBase('l1'),
+    type: 'light',
+    look: [
+      { target: 'fixture', id: 'fx-1', param: 'pan', value: 0.25 },
+      { target: 'group', id: 'gr-1', param: 'dimmer', value: 1 }
+    ],
+    effects: [
+      { target: 'group', id: 'gr-1', param: 'dimmer', shape: 'sine', rate: 0.5, low: 0.2, high: 1, spread: 1 }
+    ],
+    curve: 'sCurve',
+    intensity: 'ltp'
+  },
+  timecode: {
+    ...cueBase('tc1'),
+    type: 'timecode',
+    rate: '29.97df',
+    startTimecode: '01:00:00;00',
+    endTimecode: '01:10:00;00',
+    jamSync: false,
+    mtc: true,
+    mtcPortName: '',
+    ltc: true,
+    ltcChannel: 2,
+    ltcLevelDb: -12,
+    artnet: false,
+    artnetHost: '255.255.255.255',
+    triggers: [{ id: 'tr-tc', kind: 'timecode', timecode: '00:59:50:00' }]
+  },
+  // The picture cues carry their geometry — an object with an object inside it, the crop — and
+  // the video its sound's crosspoints, so both nestings are walked.
+  video: {
+    ...cueBase('v1'),
+    type: 'video',
+    filePath: '',
+    outputId: 'out-1',
+    layer: 2,
+    opacity: 1,
+    fadeInDuration: 500,
+    fadeOutDuration: 500,
+    crossfade: true,
+    geometry: { fit: 'fill', x: 0.1, y: -0.1, scale: 0.5, rotation: 12, crop: { top: 0.1, right: 0, bottom: 0, left: 0.2 } },
+    startTime: 0,
+    endTime: null,
+    loopCount: -1,
+    holdLastFrame: true,
+    volume: 0.8,
+    pan: 0,
+    outputs: [{ inputChannel: 0, outputChannel: 0, gain: 1 }],
+    // The optional picture fields, set, so the walk reads them: a blend, a keyframe list (a list
+    // of objects with an object inside each), and a cue's own stop-on-next-GO.
+    blendMode: 'screen',
+    keyframes: [{ atMs: 2000, x: 0.2, y: 0, scale: 0.8, rotation: 0, crop: { top: 0, right: 0, bottom: 0, left: 0 }, easing: 'ease-in-out' }],
+    stopOnNextGo: true
+  },
+  image: {
+    ...cueBase('i1'),
+    type: 'image',
+    filePath: '',
+    outputId: '',
+    layer: 1,
+    opacity: 0.5,
+    fadeInDuration: 0,
+    fadeOutDuration: 0,
+    crossfade: false,
+    geometry: { fit: 'fit', x: 0, y: 0, scale: 1, rotation: 0, crop: { top: 0, right: 0, bottom: 0, left: 0 } }
+  },
+  text: {
+    ...cueBase('t1'),
+    type: 'text',
+    outputId: '',
+    layer: 3,
+    opacity: 1,
+    fadeInDuration: 0,
+    fadeOutDuration: 0,
+    crossfade: false,
+    geometry: { fit: 'native', x: 0, y: 0, scale: 1, rotation: 0, crop: { top: 0, right: 0, bottom: 0, left: 0 } },
+    text: 'Act One',
+    fontFamily: 'IBM Plex Sans',
+    fontSize: 96,
+    color: '#ffffff',
+    bold: true,
+    italic: false,
+    position: 'bottom',
+    stopOnNextGo: null
+  },
+  camera: {
+    ...cueBase('c1'),
+    type: 'camera',
+    outputId: '',
+    layer: 1,
+    opacity: 1,
+    fadeInDuration: 0,
+    fadeOutDuration: 0,
+    crossfade: false,
+    geometry: { fit: 'fill', x: 0, y: 0, scale: 1, rotation: 0, crop: { top: 0, right: 0, bottom: 0, left: 0 } },
+    source: 'device',
+    deviceName: 'HD Webcam',
+    url: ''
+  },
+  control: {
+    ...cueBase('ct1'),
+    type: 'control',
+    action: 'load',
+    targetCueIds: ['a1', 'g1'],
+    loadToMs: 12_000,
+    // The two triggers a control cue is as likely as any to carry: a key and a time of day.
+    triggers: [
+      { id: 'tr-key', kind: 'hotkey', key: 'Shift+F7' },
+      { id: 'tr-clock', kind: 'clock', time: '19:30', days: [5, 6], missed: 'fire', graceMinutes: 5 }
+    ]
+  },
+  input: {
+    ...cueBase('in1'),
+    type: 'input',
+    device: 'test:tone',
+    inputChannels: [0, 1],
+    volume: 0.8,
+    pan: 0,
+    fadeInDuration: 50,
+    fadeOutDuration: 200,
+    outputs: [{ inputChannel: 0, outputChannel: 0, gain: 1 }],
+    outputPatchId: null,
+    fadeInShape: null
   }
 }
+
+describe('the lighting shape', () => {
+  it('declares every field a rig carries, with the kind it is written as', () => {
+    // The rig is walked beside its declaration the way a show's settings are: a field the rig
+    // carries and the declaration has not learned fails here, and so does a declared field the
+    // rig has not got.
+    expect(shapeDifferences(lighting, LIGHTING_SHAPE, 'lighting')).toEqual([])
+  })
+})
+
+describe('the cue lists shape', () => {
+  it('declares every field a cue list carries, with the kind it is written as', () => {
+    for (const list of fixture.cueLists) {
+      expect(shapeDifferences(list, CUE_LIST_SHAPE, `cueLists.${list.id}`)).toEqual([])
+    }
+  })
+})
+
+describe('the timecode shape', () => {
+  it('declares every field a show’s timecode carries, with the kind it is written as', () => {
+    expect(shapeDifferences(fixture.timecode, TIMECODE_SHOW_SHAPE, 'timecode')).toEqual([])
+  })
+})
 
 describe('the cue-field shape', () => {
   it('declares every field a cue of every type carries, with the kind it is written as', () => {

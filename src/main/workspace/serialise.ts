@@ -12,6 +12,7 @@ import { savedShape } from '../../shared/workspaceSections.ts'
 import type { AudioCue, Cue } from '../../shared/cue.ts'
 import type { MediaReference } from '../../shared/media.ts'
 import type { Workspace } from '../../shared/workspace.ts'
+import { carriesMediaFile } from '../../shared/visual.ts'
 
 // ─── The route a save writes for one cue ──────────────────────────────────────
 
@@ -160,7 +161,7 @@ export function serialiseWorkspace(
     // A recorded pair is the bundle's own route to the file, so it is the cue's written
     // path too: no caller has to have set one first for the rule to hold.
     if (recorded) return { ...cue, filePath: recorded.path, media: recorded }
-    if (cue.type !== 'audio' || cue.filePath === '') {
+    if (!carriesMediaFile(cue) || cue.filePath === '') {
       // A cue with no file has no route to record. A pair a file left on one — a
       // hand-edited show, where the path was blanked but the record was not — names a
       // file this cue does not play, so it is not written back.
@@ -168,7 +169,7 @@ export function serialiseWorkspace(
       delete pairless.media
       return pairless
     }
-    const media = savedMedia(cue, workspaceDir)
+    const media = savedMedia(cue as unknown as AudioCue, workspaceDir)
     // The written `filePath` is the route, never the path this machine resolved: a path
     // a workspace-relative route can describe has no business on disk (AD-10).
     return { ...cue, filePath: media.path, media }

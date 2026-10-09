@@ -13,9 +13,11 @@ export function currentPlatform(): string {
 }
 
 export function formatShortcut(combo: string, platform: string = currentPlatform()): string {
-  const parts = combo.split('+')
-  const key = parts[parts.length - 1]
-  const modifiers = parts.slice(0, -1).filter(part => MODIFIERS.has(part))
+  // A key can be the plus key itself — the keypad's `Num+` — which a split on "+" would lose.
+  const plus = combo.endsWith('Num+')
+  const parts = (plus ? combo.slice(0, -'Num+'.length) : combo).split('+').filter(part => part !== '')
+  const key = plus ? 'Num+' : parts.pop() ?? ''
+  const modifiers = parts.filter(part => MODIFIERS.has(part))
   if (platform === 'darwin') {
     const ordered = MAC_ORDER.filter(modifier => modifiers.includes(modifier))
     return ordered.map(modifier => MAC_SYMBOLS[modifier]).join('') + key

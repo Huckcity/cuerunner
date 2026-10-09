@@ -16,9 +16,10 @@
 // measurement the app wrote on an audio cue and an operator's own timing on a wait or a
 // fade. `isEdit` below is that rule.
 
-import type { Cue, CueType } from './cue'
+import type { Cue, CueType, FadeCue, OscCue, StopCue } from './cue'
 import type { Workspace } from './workspace'
 import { WORKSPACE_SECTIONS } from './workspaceSections'
+import { fadeTargetIds, oscMessages, STOP_ALL, stopTargetIds } from './cueTargets'
 
 /** A cue named the way the cue list names it: "12 Walk-in". */
 export function cueLabel(cue: { number?: string; name?: string }): string {
@@ -45,6 +46,11 @@ export interface FieldChange {
   field: string
   from: unknown
   to: unknown
+  /**
+   * The two values as a person reads them, where the values themselves are ids nobody reads:
+   * the cues a fade or a stop acts on, named the way the list names them.
+   */
+  shown?: { from: string; to: string }
 }
 
 export interface CueChange {
@@ -118,6 +124,14 @@ const MAX_SETTING_DEPTH = 2
  * keeps a later version's field from going silently unrecorded.
  */
 function isEdit(type: CueType, field: string): boolean {
+  // A fade's or a stop's targets are compared as the one list they mean (`TARGETS_FIELD`), and
+  // an OSC cue's messages as the one list they mean (`MESSAGES_FIELD`): the spelling a show
+  // saved before lists wrote is the same targets, the same message, and not an edit.
+  if ((type === 'fade' || type === 'stop') && (field === 'targetCueId' || field === 'targetCueIds')) return false
+  if (type === 'osc' && (field === 'host' || field === 'port' || field === 'address' || field === 'args')) return false
+  // A MIDI File cue's length is what main read its file's tempo map to come to, written
+  // when the file is chosen or played: a measurement, like an audio cue's.
+  if (type === 'midiFile' && field === 'duration') return false
   switch (field) {
     // A cue's identity, where it sits, and the route to its file on this machine are the
     // app's own bookkeeping, at every type. `media` — the saved route to the file — is
@@ -134,7 +148,9 @@ function isEdit(type: CueType, field: string): boolean {
     // through the same store writer. Every other type's duration is the operator's own —
     // a wait holds for it, a fade runs for it — and the app has no writer for it.
     case 'duration':
-      return type !== 'audio'
+      // A video's length is measured the same way, from its file; an image's or a text's is
+      // how long the operator shows it.
+      return type !== 'audio' && type !== 'video'
     default:
       return true
   }
@@ -148,6 +164,35 @@ function isEdit(type: CueType, field: string): boolean {
  * at a different file from reading as unchanged in a file that has not been saved since.
  */
 const MEDIA_FIELD = 'media'
+
+/**
+ * The cues a fade or a stop acts on, compared as what they mean rather than as the field they
+ * are written in: `['a1']` in the list and `'a1'` in a show saved before lists are one target.
+ * The order a stop or a fade names them in does nothing, so it is not compared either.
+ */
+export const TARGETS_FIELD = 'targets'
+
+/** An OSC cue's messages, compared the same way: one message written on the cue, or a list. */
+export const MESSAGES_FIELD = 'messages'
+
+/** The logical fields a cue of this type is compared under, beside its own. */
+function logicalFields(type: CueType): string[] {
+  if (type === 'fade' || type === 'stop') return [TARGETS_FIELD]
+  if (type === 'osc') return [MESSAGES_FIELD]
+  return []
+}
+
+/** A fade's or a stop's targets: `'all'`, or the ids in the order the cue names them. */
+function targetsValue(cue: Cue): unknown {
+  if (cue.type === 'stop') return stopTargetIds(cue as StopCue)
+  if (cue.type === 'fade') return fadeTargetIds(cue as FadeCue)
+  return null
+}
+
+/** A logical value as it is compared: targets as a set, since the order they are named in does nothing. */
+function comparable(field: string, value: unknown): unknown {
+  return field === TARGETS_FIELD && Array.isArray(value) ? [...value].map(String).sort() : value
+}
 
 /**
  * A value as an equality test sees it: object keys in a fixed order, undefined folded
@@ -190,19 +235,37 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * keys is what is walked, so a field this version has never heard of still diffs: a
  * change is what is in the file, not what the code that reads it knows about.
  */
-function fieldChanges(before: Cue, after: Cue): FieldChange[] {
+function fieldChanges(before: Cue, after: Cue, label: (id: string) => string = id => id): FieldChange[] {
   const a = before as unknown as Record<string, unknown>
   const b = after as unknown as Record<string, unknown>
   const changes: FieldChange[] = []
-  const fields = [...new Set([...Object.keys(a), ...Object.keys(b), MEDIA_FIELD])].sort()
+  const logical = before.type === after.type ? logicalFields(after.type) : []
+  const fields = [...new Set([...Object.keys(a), ...Object.keys(b), MEDIA_FIELD, ...logical])].sort()
   for (const field of fields) {
-    if (!isEdit(after.type, field)) continue
-    const from = fieldValue(a, field)
-    const to = fieldValue(b, field)
-    if (sameValue(from, to)) continue
-    changes.push({ field, from, to })
+    const isLogical = logical.includes(field)
+    if (!isLogical && !isEdit(after.type, field)) continue
+    const from = isLogical ? logicalValue(before, field) : fieldValue(a, field)
+    const to = isLogical ? logicalValue(after, field) : fieldValue(b, field)
+    if (sameValue(comparable(field, from), comparable(field, to))) continue
+    changes.push(field === TARGETS_FIELD
+      ? { field, from, to, shown: { from: targetsText(from, label), to: targetsText(to, label) } }
+      : { field, from, to })
   }
   return changes
+}
+
+function logicalValue(cue: Cue, field: string): unknown {
+  if (field === TARGETS_FIELD) return targetsValue(cue)
+  if (field === MESSAGES_FIELD && cue.type === 'osc') return oscMessages(cue as OscCue)
+  return null
+}
+
+/** Targets as a person reads them: `everything`, `nothing`, or the cues by number and name. */
+function targetsText(value: unknown, label: (id: string) => string): string {
+  if (value === STOP_ALL) return 'everything'
+  if (!Array.isArray(value) || value.length === 0) return 'nothing'
+  const named = value.slice(0, 3).map(id => label(String(id)))
+  return value.length > 3 ? `${named.join(', ')} +${value.length - 3} more` : named.join(', ')
 }
 
 /**
@@ -351,6 +414,11 @@ export function diffWorkspaces(from: Workspace, to: Workspace): WorkspaceDiff {
   const after = new Map(to.cues.map(cue => [cue.id, cue]))
   const placeBefore = cuePlaces(from.cues)
   const placeAfter = cuePlaces(to.cues)
+  // A target named by the file that has it — the later one first, where a cue was renamed.
+  const targetLabel = (id: string): string => {
+    const cue = after.get(id) ?? before.get(id)
+    return cue === undefined ? 'a cue in neither file' : cueLabel(cue)
+  }
   const moved = movedCues(from.cues, to.cues)
 
   const added: CueArrival[] = []
@@ -380,7 +448,7 @@ export function diffWorkspaces(from: Workspace, to: Workspace): WorkspaceDiff {
   for (const cue of to.cues) {
     const was = before.get(cue.id)
     if (!was) continue
-    const fields = fieldChanges(was, cue)
+    const fields = fieldChanges(was, cue, targetLabel)
     const reparented = was.parentId !== cue.parentId
     const repositioned = moved.has(cue.id)
     if (fields.length === 0 && !reparented && !repositioned) {
@@ -543,6 +611,7 @@ export function describeValue(value: unknown): string {
 
 /** One changed field, as a line: "volume 0.6 → 0.75". */
 export function describeField(change: FieldChange): string {
+  if (change.shown !== undefined) return `${change.field} ${change.shown.from} → ${change.shown.to}`
   return `${change.field} ${describeValue(change.from)} → ${describeValue(change.to)}`
 }
 

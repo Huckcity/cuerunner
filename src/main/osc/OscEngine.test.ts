@@ -3,6 +3,7 @@
 // the cues that are waiting on a socket that broke.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { OscEngine } from './OscEngine'
+import { decodePacket } from './codec'
 
 interface SentDatagram {
   address: string
@@ -17,13 +18,14 @@ class FakeClient {
   readonly closed = vi.fn()
   private listeners: Array<(error: Error) => void> = []
 
-  constructor(readonly host: string, readonly port: number) {
+  constructor(readonly host: string, readonly port: number, readonly localAddress: string | null = null) {
     FakeClient.created.push(this)
   }
 
-  send(address: string, ...rest: unknown[]): void {
-    const reply = rest[rest.length - 1] as (error?: Error) => void
-    this.sent.push({ address, args: rest.slice(0, -1), reply })
+  /** The packet as it would leave, read back the way the listener reads one. */
+  send(packet: Buffer, reply: (error?: Error | null) => void): void {
+    const [message] = decodePacket(packet)
+    this.sent.push({ address: message.address, args: message.args, reply: error => reply(error ?? null) })
   }
 
   close(callback?: () => void): void {
@@ -50,7 +52,7 @@ describe('OscEngine.send', () => {
 
   beforeEach(() => {
     FakeClient.created = []
-    engine = new OscEngine((host, port) => new FakeClient(host, port))
+    engine = new OscEngine((host, port, local) => new FakeClient(host, port, local))
   })
 
   afterEach(() => {
@@ -104,7 +106,14 @@ describe('OscEngine.send', () => {
     await vi.waitFor(() => expect(FakeClient.created[0]?.sent).toHaveLength(1))
 
     expect(FakeClient.created[0].sent[0].address).toBe('/lights')
-    expect(FakeClient.created[0].sent[0].args).toEqual([3, 0.5, 'warm', true, false])
+    // The tags the cue wrote, not the ones a number would be guessed as.
+    expect(FakeClient.created[0].sent[0].args).toEqual([
+      { type: 'i', value: 3 },
+      { type: 'f', value: 0.5 },
+      { type: 's', value: 'warm' },
+      { type: 'T', value: true },
+      { type: 'F', value: false }
+    ])
 
     FakeClient.created[0].answer()
     await sent
@@ -142,6 +151,34 @@ describe('OscEngine.send', () => {
 
     expect(await first).toEqual({ ok: false, error: 'socket hung up' })
     expect(await second).toEqual({ ok: false, error: 'socket hung up' })
+  })
+
+  it('sends a float the cue wrote as a whole number as a float, not an int', async () => {
+    const sent = engine.send('10.0.0.5', 9000, '/fader', [{ type: 'f', value: 1 }])
+    await vi.waitFor(() => expect(FakeClient.created[0]?.sent).toHaveLength(1))
+    expect(FakeClient.created[0].sent[0].args).toEqual([{ type: 'f', value: 1 }])
+    FakeClient.created[0].answer()
+    await sent
+  })
+
+  it('opens its sockets on the interface this machine pinned OSC to, and again after a change', async () => {
+    let pinned: string | null = '10.0.0.2'
+    engine.close()
+    engine = new OscEngine((host, port, local) => new FakeClient(host, port, local), () => pinned)
+    const first = engine.send('10.0.0.5', 9000, '/a', [])
+    await vi.waitFor(() => expect(FakeClient.created).toHaveLength(1))
+    FakeClient.created[0].answer()
+    await first
+    expect(FakeClient.created[0].localAddress).toBe('10.0.0.2')
+
+    pinned = null
+    engine.rebind()
+    expect(FakeClient.created[0].closed).toHaveBeenCalled()
+    const second = engine.send('10.0.0.5', 9000, '/b', [])
+    await vi.waitFor(() => expect(FakeClient.created).toHaveLength(2))
+    FakeClient.created[1].answer()
+    await second
+    expect(FakeClient.created[1].localAddress).toBeNull()
   })
 
   it('closes its sockets on the way out', async () => {

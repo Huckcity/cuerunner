@@ -15,8 +15,24 @@ const startTicker = (): void => {
   }, 25) as unknown as number
 }
 
+// The held show clock, faked the way the real client does it: a hold freezes the reading,
+// and a release takes the time held out of every reading after it.
+const clock = { heldAt: null as number | null, offset: 0 }
+
 export const audioEngine = {
-  nowMs: () => Date.now(),
+  nowMs: () => clock.heldAt ?? Date.now() - clock.offset,
+  // The fake engine's clock is the show's: one epoch, no restart.
+  engineTime: (showMs: number) => showMs,
+  showTime: (engineMs: number) => engineMs,
+  holdClock: vi.fn(() => {
+    if (clock.heldAt === null) clock.heldAt = Date.now() - clock.offset
+  }),
+  releaseClock: vi.fn(() => {
+    if (clock.heldAt === null) return
+    clock.offset += (Date.now() - clock.offset) - clock.heldAt
+    clock.heldAt = null
+  }),
+  clockHeld: vi.fn(() => clock.heldAt !== null),
   syncClock: vi.fn(async () => Date.now()),
   onTick: (cb: () => void) => {
     subscribers.add(cb)
@@ -51,6 +67,30 @@ export const audioEngine = {
     state: 'playing' as const,
     startAtMs
   })),
+  startInput: vi.fn(async (cueId: string, startAtMs: number) => ({
+    cueId,
+    runId: `run-${cueId}`,
+    state: 'playing' as const,
+    startAtMs
+  })),
+  inputs: vi.fn(async () => []),
+  inputOpen: vi.fn(async () => {
+    throw new Error('no inputs in this test')
+  }),
+  inputClose: vi.fn(async () => ({ closed: false })),
+  inputStatus: vi.fn(async () => []),
+  patch: vi.fn(async () => ({ ok: true as const, at: Date.now(), applied: true, device: null, fallback: false, reason: null })),
+  outputs: vi.fn(async () => []),
+  outputOpen: vi.fn(async () => {
+    throw new Error('no output devices in this test')
+  }),
+  outputClose: vi.fn(async () => ({ closed: false })),
+  outputStatus: vi.fn(async () => []),
+  outputGains: vi.fn(async () => ({ ok: true as const, at: Date.now(), applied: true })),
+  loudness: vi.fn(async (filePath: string) => ({
+    filePath, integratedLufs: -18, truePeakDb: -3, samplePeakDb: -3, silent: false,
+    durationMs: 1000, sampleRate: 48000, channels: 2
+  })),
   stop: vi.fn(async (at: number) => ({ ok: true as const, at, applied: true })),
   stopAll: vi.fn(async (at: number) => ({ ok: true as const, at, applied: true })),
   seek: vi.fn(async (positionMs: number) => ({
@@ -60,6 +100,10 @@ export const audioEngine = {
     state: 'playing' as const
   })),
   cancel: vi.fn(async (at: number) => ({ ok: true as const, at, canceled: 0 })),
+  pause: vi.fn(async () => ({ ok: true as const, at: Date.now(), applied: true })),
+  resume: vi.fn(async () => ({ ok: true as const, at: Date.now(), applied: true })),
+  master: vi.fn(async () => ({ ok: true as const, at: Date.now(), applied: true })),
+  meters: vi.fn(async () => ({ at: Date.now(), master: 1, peaks: [0, 0] })),
   routing: vi.fn(async (at: number) => ({ ok: true as const, at, applied: true })),
   fade: vi.fn(async (at: number) => ({ ok: true as const, at, applied: true })),
   progress: vi.fn(async () => null),

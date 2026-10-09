@@ -208,6 +208,19 @@ describe('the showfile on disk', () => {
     expect(after).toBe(settled)
   })
 
+  it('carries a show’s own timecode section through a save unchanged, and writes it nowhere else', async () => {
+    const timecode = { rate: '25', holdMs: 1500, chase: true, offsetFrames: -90000, onStop: 'continue', toleranceFrames: 8 }
+    const withTimecode = JSON.stringify({ ...JSON.parse(LEGACY_SHOW), timecode }, null, 2) + '\n'
+    writeFileSync(file, withTimecode)
+
+    const first = await openAndSave()
+    expect(JSON.parse(first).timecode).toEqual(timecode)
+    // In the declared place: after the trigger guard, before the cues.
+    const keys = Object.keys(JSON.parse(first))
+    expect(keys.indexOf('timecode')).toBe(keys.indexOf('cues') - 1)
+    expect(await openAndSave()).toBe(first)
+  })
+
   it('keeps a field this version does not know about', async () => {
     const after = await openAndSave()
 

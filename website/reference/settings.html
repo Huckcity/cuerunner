@@ -58,6 +58,7 @@
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
             <tr><td>Repeat guard</td><td>300 ms</td><td>Ignores a second GO arriving this soon after the first, from the space bar, a trigger or a console. 0 turns it off.</td></tr>
+            <tr><td>STOP fade</td><td>0 ms</td><td>How long STOP — <kbd>Esc</kbd>, the button, a remote's <code>/stop</code> — fades everything over. 0 cuts at once. With a fade, the show lets go at once and the sound fades; a second STOP during the fade cuts what is left. Saved with the show.</td></tr>
           </tbody>
         </table>
       </div>
@@ -75,6 +76,11 @@
             <tr><td>Buffer</td><td>engine default</td><td>Frames per block: lower is tighter, higher is safer.</td></tr>
             <tr><td>Channels</td><td>device default</td><td>How many outputs the device offers the routing matrix.</td></tr>
             <tr><td>Exclusive</td><td>off</td><td>Keeps other apps off the device, for every channel it has and steadier timing. A driver that refuses says why.</td></tr>
+            <tr><td>Output patches</td><td>none</td><td>Named sets of outputs — "Mains" is <code>1-2</code>, "Foldback" <code>5, 6</code> — that cues play through by name. Each has a name, the device it plays on and its outputs; <strong>Add patch</strong> takes the next free pair. The device is the show's own or any other output device on the machine: the engine plays every device the show's patches name at once, each opened when the show loads and kept open, each held to the show's device's clock (see <strong>Output devices</strong>). A patch whose device this machine has not got, or one lost mid-show, plays on the show's device's outputs of the same numbers; the window says which patch, where to and why, across the top and in the log, and the patch keeps its device, so the show taken back to the machine it was made on plays as made. <strong>Look for devices</strong> lists them again and reopens any that came back. Up to 16. Saved with the show.</td></tr>
+            <tr><td>Output devices</td><td>the show's own</td><td>A line for each device the show plays on: the show's own device, whose clock the others follow, then each one a patch names — <strong>Playing</strong>, its rate and channels, how far its clock runs from the show's device in parts per million as the engine measures it, and how far behind the show's device it sounds (the buffer the engine holds plus the device's own) — or <strong>Lost</strong> and why, with <strong>Reconnect</strong> beside it. Two devices never share a clock, and a few hundred parts per million apart is ordinary: left alone, a cue sent to both would drift 18 ms apart a minute. The engine resamples each extra device to the show's device's timeline instead and holds it there: the engine's own test fails if, over five minutes of a 300 ppm clock error, the two devices move more than a tenth of a millisecond either side of where the engine holds them. A cue on two devices stays in phase for the whole show. A lost device ends only the cues on its patches; everything else plays on.</td></tr>
+            <tr><td>Audition output</td><td>none</td><td>The patch <strong>Audition</strong> plays on — headphones at the desk, a booth monitor. With none chosen, audition is off rather than playing into the house.</td></tr>
+            <tr><td>Normalize to</td><td>−23 LUFS</td><td>The integrated loudness (EBU R128) <strong>Normalize</strong> sets a cue's trim for. −23 is broadcast; −16 to −18 suits a show's music.</td></tr>
+            <tr><td>True-peak ceiling</td><td>−1 dBTP</td><td>A normalised cue is never set louder than its true peak allows under this.</td></tr>
             <tr><td>Trim silence</td><td>off</td><td>A default for new audio cues, not a switch over the show. Cues already in the list keep the trim they were made with.</td></tr>
           </tbody>
         </table>
@@ -82,7 +88,10 @@
       <p>
         Under them, what the engine is actually doing: backend, rate, device, latency,
         voices playing, media memory, and any dropouts. That block is a reading, not a
-        setting. Under it sits <strong>Reconnect device</strong>, which sends the show's
+        setting. The <strong>Mixer</strong>, beside the master in the transport, has a strip for every output
+        patch and every device output — each a fader (double-click for 0 dB), a mute and a meter read after
+        them — and the master. The patch and output faders are saved with the show; the master is this
+        computer's. Under the engine reading sits <strong>Reconnect device</strong>, which sends the show's
         settings to the engine again so a device it lost is reopened — a no-op while the
         device is already running them, and the way back once the interface is plugged in
         again. It is disabled while the engine runs a backend with no device at all, where
@@ -109,7 +118,12 @@
         <table>
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
-            <tr><td>OSC control</td><td>on, port 53000</td><td>Takes cues and commands from consoles, desks and tablets. A port another program holds is reported rather than taken.</td></tr>
+            <tr><td>OSC control</td><td>on, port 53000</td><td>Takes cues and commands from consoles, desks and tablets. The port is Cuerunner's alone: one another program holds — QLab, a second Cuerunner — is refused and said here and once in the log (<code>EADDRINUSE</code>), rather than shared with it in silence. It is a status, not an alarm: a second show on the machine is not the stage going wrong.</td></tr>
+            <tr><td>↳ Network interface</td><td>any</td><td>This machine's, not the show's. <strong>Listen on</strong> binds the port to one interface; <strong>Send from</strong> sends OSC cues out of one. An interface that has gone is said, and the port opens on every interface until it is back.</td></tr>
+            <tr><td>↳ Feedback</td><td>off, 127.0.0.1:53001, 10 Hz</td><td><strong>Push state</strong> sends the playhead, what is running and its progress to <strong>Send to</strong> : <strong>Port</strong>, progress <strong>Progress (Hz)</strong> times a second (0–30). Remotes can also ask for it themselves. See <a href="control.html#feedback">feedback</a>.</td></tr>
+            <tr><td>↳ OSC patches</td><td>none</td><td>Named destinations — a name, a host, a port — that an OSC cue's messages choose by name, so a show moved to another venue changes one address. Removing one that cues send through asks first.</td></tr>
+            <tr><td>↳ Remote</td><td>on</td><td>Answers the transport addresses — <code>/go</code>, <code>/stop</code>, <code>/cue/12/start</code> and the rest, in Cuerunner's namespace and QLab's. See <a href="control.html#remote">the remote</a>.</td></tr>
+            <tr><td>↳ Allow from</td><td>anyone</td><td>Addresses or IPv4 ranges (<code>10.0.0.5, 192.168.1.0/24</code>). Anyone else's datagrams are dropped before a trigger, the remote or the Monitor sees them, and each refused sender is named once in the log.</td></tr>
             <tr><td>Find devices<span class="pro">Pro</span></td><td>off</td><td>Lists gear that announces itself on the network — Dante endpoints among them — in the Monitor, and warns when one drops off.</td></tr>
             <tr><td>↳ Service types</td><td><code>_netaudio-arc._udp.local</code>, <code>_netaudio-cmc._udp.local</code></td><td>Under Advanced. What to browse for.</td></tr>
             <tr><td>↳ Gone after</td><td>30 s</td><td>Under Advanced. How long a device can go unseen before it counts as gone.</td></tr>
@@ -153,6 +167,56 @@
       </div>
     </section>
 
+    <section class="panel reveal delay-3" id="outputs">
+      <h2>Outputs</h2>
+      <p>
+        In the dock's <strong>Outputs</strong> tab. What an output <em>is</em> is kept with
+        <strong>this show</strong>; where it goes is kept on <strong>this computer</strong>, by
+        output, so a show opened on another machine keeps its outputs and finds them places of
+        that machine's own.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>Kept</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Name</td><td>show</td><td>Output 1, 2…</td><td>What the cues and the card call it, and what Identify draws.</td></tr>
+            <tr><td>Display</td><td>computer</td><td>A window</td><td>A window you can move and size, or one of this computer's displays. A display that is not connected opens it as a window with a banner saying which.</td></tr>
+            <tr><td>Fullscreen</td><td>computer</td><td>off</td><td>Fills the display chosen. A fullscreen output never takes the keyboard.</td></tr>
+            <tr><td>Size</td><td>show</td><td>1920 × 1080</td><td>The size it composes at in a window, or when its display cannot say. Fullscreen, the display's own pixels are used.</td></tr>
+            <tr><td>Timer</td><td>show</td><td>No timer</td><td>Time of day, the show clock (from the first GO), or the time left on the cue with an end that started last — and where on the output.</td></tr>
+            <tr><td>Test pattern</td><td>—</td><td>off</td><td>Grid, centre, corners and colour bars over the output, at its own resolution.</td></tr>
+            <tr><td>Corner pin</td><td>show</td><td>0%</td><td>Moves each corner of the finished frame by a share of the output; the frame is laid on that shape in perspective. Needs the GPU.</td></tr>
+            <tr><td>Soft edge</td><td>show</td><td>0%</td><td>Fades each edge to black over a share of the frame, for overlapping projectors. <strong>Edge curve</strong> (1) bends the ramp.</td></tr>
+            <tr><td>Identify</td><td>—</td><td>—</td><td>Draws every output's name across it for three seconds.</td></tr>
+            <tr><td>Floating timer</td><td>computer</td><td>Off</td><td>A small always-on-top window counting the time of day, the show clock or the cue remaining.</td></tr>
+            <tr><td>Shows</td><td>show</td><td>Its own pictures</td><td>Or <strong>the same as</strong> another output: a mirror, showing that output's pictures as it composes them, at its size — a confidence monitor, a stacked projector. It keeps its own display, timer and corner pin; a picture cue cannot name a mirror.</td></tr>
+            <tr><td>Mask</td><td>show</td><td>none</td><td>An image laid over the output's pictures, stretched to it: <strong>Mask reads</strong> its brightness (white shows) or its transparency (opaque shows), and <strong>Invert</strong> turns it round. Drawn before the corner pin, under the timer and test pattern. A mirror with no mask of its own shows its source's. Its file is kept by its path, and is not carried into a bundle.</td></tr>
+            <tr><td>Next GO</td><td>show</td><td>off</td><td>On, every picture whose cue leaves it to the show is taken down on the next GO.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-3" id="timecode">
+      <h2>Timecode</h2>
+      <p>Two halves. <strong>Source</strong> and where it arrives — the MIDI input, the audio input and channel, the UDP port — are kept on the computer: which port the clock is on is a fact about this rack. Everything under <strong>This show</strong> — rate, freewheel, chase, what happens when it stops, offset and tolerance — is saved in the show file, so the show follows its clock the same way on any machine that opens it; a show that leaves them all at their defaults carries nothing for them, and an edit to them goes back with undo. The receiver is part of Cuerunner Pro. The <a href="../guides/console.html#timecode">guide</a> shows it in use.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Source</td><td>None</td><td>Where the clock comes from: <strong>MTC</strong> on a MIDI input (the first one there is, if none is chosen; a port MIDI input already has open is shared with it), <strong>LTC</strong> on a channel of an audio input, read by the audio engine, or <strong>Art-Net</strong> ArtTimeCode on a UDP port (6454).</td></tr>
+            <tr><td>Rate</td><td>Detect from the stream</td><td>Takes the rate MTC and ArtTimeCode declare, and measures the rest: 29.97 non-drop is told from 30 by timing the stream (a few seconds of it), and LTC's 24, 25 and 30 by its frame numbers. A fixed rate reads every label at that rate instead.</td></tr>
+            <tr><td>Freewheel</td><td>1000 ms</td><td>How long a clock that stops arriving is carried on at its own rate before it counts as lost (0–10000). A cue on a frame inside the gap still fires.</td></tr>
+            <tr><td>Chase</td><td>off</td><td>The cue list goes where the clock goes: a locate starts each audio or wait cue whose trigger is behind the clock and whose length reaches past it, that far into itself, and stops what the clock started and has left behind. Off, a locate only arms again what the clock is now before.</td></tr>
+            <tr><td>When it stops</td><td>Hold</td><td>With chase on, what the cues the clock started do when it stops or is lost: <strong>Hold</strong> stops them and picks them up again where the clock comes back; <strong>Stop</strong> stops them; <strong>Let them run on</strong>.</td></tr>
+            <tr><td>Offset</td><td>00:00:00:00</td><td>Added to the incoming clock before any cue reads it, written in 30 fps labels; a leading minus subtracts. How a show written at 10:00:00:00 runs against a clock that starts at 01:00:00:00.</td></tr>
+            <tr><td>Tolerance</td><td>10 frames</td><td>How far the clock may skip forward and still fire the triggers it skipped (0–300). A jump further than that is a locate.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The panel under the source reads back the clock as it is heard: position, <strong>Locked</strong>, <strong>Freewheel</strong>, <strong>Stopped</strong>, <strong>Lost</strong> or <strong>Waiting</strong>, the rate and whether it was detected, and what the timecode cues are sending. The same readout is in the transport bar and the show monitor.</p>
+    </section>
+
     <section class="panel reveal delay-3" id="license">
       <h2>License</h2>
       <p>
@@ -186,6 +250,55 @@
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section class="panel reveal delay-3" id="updates">
+      <h2>Updates</h2>
+      <p>
+        Newer versions of Cuerunner, and when this machine may look for them. Kept on the computer,
+        not in the show, and free. A check only asks whether there is something newer; nothing is
+        downloaded until you press <strong>Download</strong>, nothing is installed until you press
+        <strong>Restart now</strong> or quit, and neither happens while anything in the show is
+        running. The <a href="../guides/running.html#updates">guide</a> walks it through.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>This version</td><td>—</td><td>The version running, and how it was installed: Windows installer, macOS app, AppImage, .deb package, or a development build run from source.</td></tr>
+            <tr><td>Check now</td><td>—</td><td>Asks the update feed now, and says what it found beside the button: up to date, a newer version with its notes, or that the server could not be reached. Refused, with the reason, during the show hours or in Show Mode with a show open.</td></tr>
+            <tr><td>Check automatically</td><td>on</td><td>Checks twenty seconds after launch and then once a day. A check that cannot reach the server says nothing at all — a show machine with no network is an ordinary machine. Off, only <strong>Check now</strong> checks.</td></tr>
+            <tr><td>Show hours</td><td>off, 18:00–23:30</td><td>No checks and no downloads between <strong>From</strong> and <strong>To</strong>, by this computer's clock. A window that ends before it starts runs past midnight.</td></tr>
+            <tr><td>In Show Mode</td><td>on</td><td>No checks while a show file is open in Show Mode.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>What an update offered on this machine can say:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>It says</th><th>What it means</th></tr></thead>
+          <tbody>
+            <tr><td>Cuerunner <em>x.y.z</em> is available.</td><td>A newer release is published. <strong>Release notes</strong> shows every version between this one and it; <strong>Download</strong> fetches it; <strong>Later</strong> puts the bar away until the next launch. The bar is never drawn in Show Mode.</td></tr>
+            <tr><td>Held: something in the show is running.</td><td>A download or a restart was asked for while a cue was running, paused or waiting, or while sound or a MIDI file was playing. Nothing was fetched or installed; ask again once the show is idle. A cue started while a download is under way stops the download the same way.</td></tr>
+            <tr><td>Refused: the download did not match the checksum its release published…</td><td>The bytes that arrived are not the bytes the release's feed names (SHA-512). They were deleted, and nothing was installed.</td></tr>
+            <tr><td>Refused: the update is not signed by the publisher…</td><td>Windows checks that the new installer is signed by the publisher this copy was signed by, and macOS that the new app carries a valid signature. A download that fails either is deleted, and nothing was installed.</td></tr>
+            <tr><td>Cuerunner <em>x.y.z</em> is ready.</td><td>Downloaded and checked. It installs when Cuerunner quits — the one thing that happens without a press — or now with <strong>Restart now</strong>, which asks you to save the show first. The installer runs silently and starts the new version.</td></tr>
+            <tr><td>…installed from the .deb package, which cannot replace itself</td><td>A <code>.deb</code> belongs to the package manager that installed it: the app says when there is a newer version and <strong>Open the download page</strong> takes you to it. Install the new <code>.deb</code> over the old one; your settings stay.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The feed is <code>pub.cuerunner.app/latest/</code> — <code>latest.yml</code> for Windows,
+        <code>latest-mac.yml</code> for macOS (a Mac updates from a zip of the app rather than
+        the dmg) and <code>latest-linux.yml</code> for the AppImage — and each one names the
+        release's own files under <code>versions/</code>. The settings and the version this
+        machine last ran are kept in <code>updates.json</code> in the app's data folder.
+      </p>
+      <p>
+        After an update, the first launch shows <strong>What's new</strong>: the notes of every
+        version installed since this machine last ran Cuerunner, newest first — skip two releases
+        and you read both. It is shown once.
+      </p>
     </section>
 
     <section class="panel reveal delay-3" id="show">

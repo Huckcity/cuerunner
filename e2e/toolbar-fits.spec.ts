@@ -51,9 +51,9 @@ async function toolbarEdges(): Promise<{ windowWidth: number; controls: Edge[] }
 async function expectEveryControlOnScreen(): Promise<void> {
   const { windowWidth, controls } = await toolbarEdges()
   // The whole row is there to be measured: the file menu, five cue types and More, the
-  // list's two, and both views.
+  // list's two, and all three views.
   expect(controls.map(control => control.what)).toEqual(expect.arrayContaining(['Audio', 'Stop', 'Collapse', 'Cues']))
-  expect(controls).toHaveLength(11)
+  expect(controls).toHaveLength(12)
   for (const control of controls) {
     expect(control.left, `${control.what} starts inside the window`).toBeGreaterThanOrEqual(0)
     expect(control.right, `${control.what} ends inside a window ${windowWidth}px wide`).toBeLessThanOrEqual(windowWidth)

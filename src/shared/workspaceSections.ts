@@ -39,6 +39,7 @@
 // this build's own whole, so there a field it does not name refuses.
 
 import type { Cue, CueBase, CueType } from './cue'
+import type { VisualCueBase } from './visual'
 import type { ShowSettings } from './show'
 import type { Workspace } from './workspace'
 
@@ -84,6 +85,12 @@ export const WORKSPACE_SECTIONS = [
   { key: 'midiSettings', route: 'midi', merge: 'section' },
   { key: 'showSettings', route: 'show', merge: 'keys' },
   { key: 'triggerGuard', route: 'guard', merge: 'section' },
+  { key: 'lighting', route: 'lighting', merge: 'section' },
+  { key: 'timecode', route: 'timecode', merge: 'section' },
+  { key: 'videoOutputs', route: 'outputs', merge: 'section' },
+  { key: 'cueLists', route: 'lists', merge: 'section' },
+  { key: 'pictures', route: 'pictures', merge: 'section' },
+  { key: 'oscPatches', route: 'oscPatches', merge: 'section' },
   { key: 'cues', route: null, merge: 'cue' }
 ] as const satisfies readonly WorkspaceSection[]
 
@@ -292,7 +299,16 @@ export type BoundedNumber = { readonly bounded: readonly [min: number, max: numb
  * holds the declaration against a value of the whole of `ShowSettings`.
  */
 export const SHOW_SETTINGS_SHAPE = {
-  oscIn: { enabled: 'boolean', port: 'number' },
+  oscIn: {
+    enabled: 'boolean',
+    port: 'number',
+    remote: { absent: true, of: 'boolean' },
+    allowFrom: { absent: true, of: { items: 'string' } },
+    feedback: {
+      absent: true,
+      of: { enabled: 'boolean', host: 'string', port: { bounded: [1, 65535] }, rateHz: { bounded: [0, 30] } }
+    }
+  },
   midiIn: { enabled: 'boolean', portNames: { items: 'string' } },
   desk: {
     kind: 'string',
@@ -395,7 +411,7 @@ export const SHOW_SETTINGS_SHAPE = {
  * guard of the wrong kind is read as the default rather than refused — or `version`, whose
  * one value the check reads as the literal it is.
  */
-type KindOnlySectionKey = 'id' | 'name' | 'createdAt' | 'history' | 'audioSettings' | 'midiSettings'
+type KindOnlySectionKey = 'id' | 'name' | 'createdAt' | 'history' | 'audioSettings' | 'midiSettings' | 'videoOutputs' | 'pictures'
 
 /**
  * The kind a section of the form is read as, from the field's own type: the leaf a primitive
@@ -427,7 +443,12 @@ export const WORKSPACE_SECTION_SHAPE = {
   createdAt: 'string',
   history: { items: 'object' },
   audioSettings: 'object',
-  midiSettings: 'object'
+  midiSettings: 'object',
+  // A list of outputs; the window reads each one through `normalizeVideoOutputs`, which
+  // holds its numbers to their ranges.
+  videoOutputs: { items: 'object' },
+  // The show's picture settings; the window reads them through `normalizePictureSettings`.
+  pictures: 'object'
 } as const satisfies {
   readonly [K in KindOnlySectionKey]: SectionKindOf<NonNullable<Workspace[K]>>
 }
@@ -442,6 +463,12 @@ export const WORKSPACE_SECTION_SHAPE = {
  * which a field may carry both of.
  */
 export type DeclaredFields = { readonly [field: string]: unknown }
+
+/** What a cue that sounds may carry of its patch and its fade-in's drawn shape (src/shared/audioRouting.ts). */
+const AUDIO_IO_CUE_SHAPE = {
+  outputPatchId: { absent: true, of: { nothing: true, of: 'string' } },
+  fadeInShape: { absent: true, of: { nothing: true, of: 'object' } }
+} as const
 
 /** The fields every cue carries, from `CueBase`, with the kind each is written as. */
 const CUE_BASE_SHAPE = {
@@ -462,8 +489,48 @@ const CUE_BASE_SHAPE = {
   // being an object and the clauses' own fields are not declared.
   triggers: { absent: true, of: { items: 'object' } },
   refire: { absent: true, of: 'string' },
-  scriptLine: { absent: true, of: { nothing: true, of: 'number' } }
+  scriptLine: { absent: true, of: { nothing: true, of: 'number' } },
+  listId: { absent: true, of: 'string' }
 } as const satisfies ShapeFields<CueBase>
+
+/**
+ * The fields every picture cue carries besides the base: its output, its layer and level, its
+ * fades and where it sits. The geometry is a shape of its own, and so is its crop.
+ */
+const VISUAL_CUE_SHAPE = {
+  ...CUE_BASE_SHAPE,
+  outputId: 'string',
+  layer: 'number',
+  opacity: { bounded: [0, 1] },
+  fadeInDuration: 'number',
+  fadeOutDuration: 'number',
+  crossfade: 'boolean',
+  geometry: {
+    fit: 'string',
+    x: 'number',
+    y: 'number',
+    scale: 'number',
+    rotation: 'number',
+    crop: { top: 'number', right: 'number', bottom: 'number', left: 'number' }
+  },
+  // The fields the types mark `?:` — a show saved before them has none of them.
+  blendMode: { absent: true, of: 'string' },
+  keyframes: {
+    absent: true,
+    of: {
+      elements: {
+        atMs: 'number',
+        x: 'number',
+        y: 'number',
+        scale: 'number',
+        rotation: 'number',
+        crop: { top: 'number', right: 'number', bottom: 'number', left: 'number' },
+        easing: 'string'
+      }
+    }
+  },
+  stopOnNextGo: { absent: true, of: { nothing: true, of: 'boolean' } }
+} as const satisfies ShapeFields<VisualCueBase>
 
 /**
  * A cue's fields, by type, with the kind each is written as: the base every cue carries, the
@@ -491,6 +558,7 @@ export const CUE_FIELD_SHAPE = {
     startTime: 'number',
     endTime: { nothing: true, of: 'number' },
     fadeInDuration: 'number',
+    fadeOutDuration: { absent: true, of: 'number' },
     // Bounded where the app's own controls bound them: the inspector's sliders are min={0}
     // max={1} and min={-1} max={1}, and a hand-edited file reached the engine as a gain of
     // five before this was declared.
@@ -514,6 +582,15 @@ export const CUE_FIELD_SHAPE = {
         nothing: true,
         of: { startMs: 'number', endMs: 'number', durationMs: 'number', silent: 'boolean' }
       }
+    },
+    ...AUDIO_IO_CUE_SHAPE,
+    // A fade shape is a union of a preset and a Bézier, so each is held to being an object and
+    // read through `normalizeFadeShape`; slices and the loudness record are shapes of their own.
+    fadeOutShape: { absent: true, of: { nothing: true, of: 'object' } },
+    slices: { absent: true, of: { nothing: true, of: { markers: { items: 'number' }, playCounts: { items: 'number' } } } },
+    loudness: {
+      absent: true,
+      of: { nothing: true, of: { filePath: 'string', integratedLufs: 'number', truePeakDb: 'number', silent: 'boolean' } }
     }
   },
   // A message is one of five variants — note on, note off, cc, program change, sysex — so the
@@ -522,15 +599,37 @@ export const CUE_FIELD_SHAPE = {
   osc: {
     ...CUE_BASE_SHAPE,
     type: 'string',
-    host: 'string',
-    port: 'number',
-    address: 'string',
+    // The one message a cue written before a cue could send several carries on itself; a cue
+    // that carries `messages` has none of these.
+    host: { absent: true, of: 'string' },
+    port: { absent: true, of: 'number' },
+    address: { absent: true, of: 'string' },
     // An argument is an object of two fields, and its value is the one field in the saved
     // form whose type allows more than one kind: a number, a string or a boolean.
     args: {
-      elements: {
-        type: 'string',
-        value: { oneOf: ['number', 'string', 'boolean'] }
+      absent: true,
+      of: {
+        elements: {
+          type: 'string',
+          value: { oneOf: ['number', 'string', 'boolean'] }
+        }
+      }
+    },
+    messages: {
+      absent: true,
+      of: {
+        elements: {
+          patchId: 'string',
+          host: 'string',
+          port: 'number',
+          address: 'string',
+          args: {
+            elements: {
+              type: 'string',
+              value: { oneOf: ['number', 'string', 'boolean'] }
+            }
+          }
+        }
       }
     }
   },
@@ -538,16 +637,36 @@ export const CUE_FIELD_SHAPE = {
   fade: {
     ...CUE_BASE_SHAPE,
     type: 'string',
-    targetCueId: 'string',
+    // One target as a show saved before lists wrote it, or the list: `fadeTargetIds` reads both.
+    targetCueId: { absent: true, of: 'string' },
+    targetCueIds: { absent: true, of: { items: 'string' } },
     fadeProperty: 'string',
     targetValue: 'number',
+    panTargetValue: { absent: true, of: { nothing: true, of: { bounded: [-1, 1] } } },
+    // A picture fade's geometry: each property optional, the crop moved as one.
+    geometryTarget: {
+      absent: true,
+      of: {
+        nothing: true,
+        of: {
+          x: { absent: true, of: 'number' },
+          y: { absent: true, of: 'number' },
+          scale: { absent: true, of: 'number' },
+          rotation: { absent: true, of: 'number' },
+          crop: { absent: true, of: { top: 'number', right: 'number', bottom: 'number', left: 'number' } }
+        }
+      }
+    },
     curve: 'string',
-    stopTargetWhenDone: 'boolean'
+    stopTargetWhenDone: 'boolean',
+    shape: { absent: true, of: { nothing: true, of: 'object' } }
   },
   stop: {
     ...CUE_BASE_SHAPE,
     type: 'string',
-    targetCueId: 'string',
+    // `'all'` or one target, or the list: `stopTargetIds` reads them.
+    targetCueId: { absent: true, of: 'string' },
+    targetCueIds: { absent: true, of: { items: 'string' } },
     fadeOut: 'boolean',
     fadeOutDuration: 'number',
     waitForFade: 'boolean'
@@ -572,8 +691,9 @@ export const CUE_FIELD_SHAPE = {
     timeout: 'number'
   },
   scene: { ...CUE_BASE_SHAPE, type: 'string', sceneId: 'string' },
-  devamp: { ...CUE_BASE_SHAPE, type: 'string', targetCueId: 'string' },
+  devamp: { ...CUE_BASE_SHAPE, type: 'string', targetCueId: 'string', devampMode: { absent: true, of: 'string' } },
   mic: { ...CUE_BASE_SHAPE, type: 'string', channelId: 'string', label: 'string', action: 'string' },
+  memo: { ...CUE_BASE_SHAPE, type: 'string' },
   msc: {
     ...CUE_BASE_SHAPE,
     type: 'string',
@@ -584,6 +704,118 @@ export const CUE_FIELD_SHAPE = {
     cueList: 'string',
     destination: 'string',
     portName: 'string'
+  },
+  midiFile: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    filePath: 'string',
+    portName: 'string',
+    playbackRate: 'number',
+    startTime: 'number',
+    endTime: { nothing: true, of: 'number' },
+    loopCount: 'number',
+    // Sixteen output channels, one per channel of the file; the bounds are the player's to
+    // refuse, where a channel map that is not one is a sentence rather than a load failure.
+    channelMap: { items: 'number' },
+    transpose: 'number',
+    transposeDrums: 'boolean'
+  },
+  // A look is a list of levels and an effect list beside it: each element is one shape, and a
+  // value is bounded the way the window's own faders bound it.
+  light: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    look: {
+      elements: { target: 'string', id: 'string', param: 'string', value: { bounded: [0, 1] } }
+    },
+    effects: {
+      elements: {
+        target: 'string',
+        id: 'string',
+        param: 'string',
+        shape: 'string',
+        rate: { bounded: [0.01, 25] },
+        low: { bounded: [0, 1] },
+        high: { bounded: [0, 1] },
+        spread: { bounded: [0, 1] }
+      }
+    },
+    curve: 'string',
+    intensity: 'string',
+    shape: { absent: true, of: { nothing: true, of: 'object' } }
+  },
+  timecode: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    rate: 'string',
+    startTimecode: 'string',
+    endTimecode: 'string',
+    jamSync: 'boolean',
+    mtc: 'boolean',
+    mtcPortName: 'string',
+    ltc: 'boolean',
+    ltcChannel: 'number',
+    ltcLevelDb: 'number',
+    artnet: 'boolean',
+    artnetHost: 'string'
+  },
+  // The picture cues (src/shared/visual.ts): what every one of them carries, then its own.
+  video: {
+    ...VISUAL_CUE_SHAPE,
+    type: 'string',
+    filePath: 'string',
+    startTime: 'number',
+    endTime: { nothing: true, of: 'number' },
+    loopCount: 'number',
+    holdLastFrame: 'boolean',
+    // The sound is an audio cue's in all but name, and bounded the same way.
+    volume: { bounded: [0, 1] },
+    pan: { bounded: [-1, 1] },
+    outputs: {
+      nothing: true,
+      of: { elements: { inputChannel: 'number', outputChannel: 'number', gain: 'number' } }
+    },
+    ...AUDIO_IO_CUE_SHAPE,
+    fadeOutShape: { absent: true, of: { nothing: true, of: 'object' } }
+  },
+  image: { ...VISUAL_CUE_SHAPE, type: 'string', filePath: 'string' },
+  text: {
+    ...VISUAL_CUE_SHAPE,
+    type: 'string',
+    text: 'string',
+    fontFamily: 'string',
+    fontSize: { bounded: [1, 2000] },
+    color: 'string',
+    bold: 'boolean',
+    italic: 'boolean',
+    position: 'string'
+  },
+  // A live picture: its source, by the name the show carries — the machine's own id for a device
+  // is userData's, never the file's.
+  camera: { ...VISUAL_CUE_SHAPE, type: 'string', source: 'string', deviceName: 'string', url: 'string' },
+  control: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    action: 'string',
+    targetCueIds: { items: 'string' },
+    loadToMs: 'number'
+  },
+  // A live input (src/shared/cue.ts): its device and channels, then an audio cue's level,
+  // pan, fades and routing, bounded the same way.
+  input: {
+    ...CUE_BASE_SHAPE,
+    type: 'string',
+    device: 'string',
+    inputChannels: { items: 'number' },
+    volume: { bounded: [0, 1] },
+    pan: { bounded: [-1, 1] },
+    fadeInDuration: 'number',
+    fadeOutDuration: 'number',
+    outputs: {
+      nothing: true,
+      of: { elements: { inputChannel: 'number', outputChannel: 'number', gain: 'number' } }
+    },
+    ...AUDIO_IO_CUE_SHAPE
   }
 } as const satisfies { readonly [K in CueType]: ShapeFields<Extract<Cue, { type: K }>> }
 

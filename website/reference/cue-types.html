@@ -42,7 +42,7 @@
     <section class="panel reveal">
       <h1>Cue types</h1>
       <p class="doc-lede">
-        Twelve types. Every one of them carries the common fields below, and then its own.
+        Every type carries the common fields below, and then its own.
       </p>
     </section>
 
@@ -61,7 +61,7 @@
             <tr><td>Advance</td><td>None</td><td><strong>None</strong>, <strong>On start</strong> (fire the next cue as soon as this one starts) or <strong>On end</strong> (when it finishes).</td></tr>
             <tr><td>If fired again</td><td>Leave it running</td><td>What a second GO does while the cue runs: leave it, or restart it.</td></tr>
             <tr><td>Armed</td><td>on</td><td>A disarmed cue is skipped by GO and ignores its triggers.</td></tr>
-            <tr><td>Triggers</td><td>none</td><td>OSC, MIDI or show-control messages that fire this cue. See <a href="./control.html">control</a>.</td></tr>
+            <tr><td>Triggers</td><td>none</td><td>OSC, MIDI or show-control messages, a key on this machine or a time of day that fire this cue. See <a href="./control.html#triggers">control</a>.</td></tr>
           </tbody>
         </table>
       </div>
@@ -76,19 +76,24 @@
             <tr><td>File</td><td>—</td><td>WAV, AIFF, FLAC, MP3, M4A, OGG. A file at another sample rate is resampled as it plays; pitch and tempo are unchanged.</td></tr>
             <tr><td>Start time / End time</td><td>0 / end of file</td><td>The part of the file this cue plays. Draggable on the waveform.</td></tr>
             <tr><td>Trim silence</td><td>off</td><td>Starts at the first sound in the file and ends at the last, where silence is anything below −60 dBFS. Never rewrites the region you set: turning it off plays the whole region again.</td></tr>
-            <tr><td>Fade in</td><td>0 s</td><td>Ramps up from silence over this long when the cue starts.</td></tr>
+            <tr><td>Fade in</td><td>0 s</td><td>Ramps up from silence over this long when the cue starts. <strong>Fade-in shape</strong>: the default straight line, a preset (linear, S-curve, logarithmic, exponential, equal power) or <strong>Custom</strong> — a curve drawn by dragging its two handles. The engine plays exactly the curve drawn.</td></tr>
+            <tr><td>Fade out</td><td>0 s</td><td>Ramps down to silence over this long so that the ramp ends where the cue does: the end of its region, or of its last loop. The engine times it from the cue's planned end, and a seek or a rate change moves it with the end. A cue that loops for ever has no end to land on; fade it with a fade or stop cue. STOP still cuts at once. <strong>Fade-out shape</strong>: the default S-curve, a preset or a drawn curve, as the fade in.</td></tr>
             <tr><td>Volume</td><td>100%</td><td>The cue's own level, applied to every output.</td></tr>
             <tr><td>Pan</td><td>centre</td><td>−1 to 1. Automatic routing spreads it across the pair.</td></tr>
             <tr><td>Rate</td><td>1.00×</td><td>Playback speed, 0.25× to 4×.</td></tr>
             <tr><td>Loop count</td><td>0</td><td><code>0</code> plays once, <code>n</code> repeats n more times, <code>-1</code> loops for ever — a vamp, released by a devamp cue.</td></tr>
             <tr><td>Routing</td><td>Automatic</td><td><strong>Automatic</strong> (channels in order), <strong>Matrix</strong> (crosspoints with gains) or <strong>Silent</strong> (runs, sends nothing).</td></tr>
+            <tr><td>Output patch</td><td>Device channels</td><td>Plays through one of the show's <strong>output patches</strong> (Settings → Audio) instead of naming device outputs: the routing then addresses the patch's own channels, on the device the patch names, and the patch's fader and mute in the <strong>Mixer</strong> apply. A cue whose patch is deleted plays on the device's channels.</td></tr>
+            <tr><td>Loudness</td><td>not measured</td><td><strong>Normalize</strong> measures the file (EBU R128 integrated loudness and true peak) and sets the <strong>Trim</strong> so the cue plays at the show's target (−23 LUFS unless Settings → Audio says otherwise), its true peak held under the ceiling (−1 dBTP) and the trim inside its range. The reading stays on the cue. Select several cues and choose <strong>Normalize loudness</strong> from the right-click menu to do them all as one undo step.</td></tr>
+            <tr><td>Audition</td><td>—</td><td><strong>Audition cue</strong> plays the cue as the show would — region, loops, slices, level, fades — and <strong>Whole file</strong> plays the file from its start, both on the show's <strong>audition output</strong> only. Nothing in the show moves: no row lights and nothing advances. Press again to stop. The right-click menu auditions a selection, one cue after another. With no audition output chosen it says so and plays nothing.</td></tr>
+            <tr><td>Slices</td><td>none</td><td>On the <strong>Slices</strong> tab: markers cut the region into slices, and each plays a number of times or is a <strong>Vamp</strong> that loops until a devamp cue moves it on. Playback follows the slices to the sample. With slices the loop count is not used; with none the cue is its region and its loop count, as it always was.</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
     <section class="panel reveal delay-2" id="timing">
-      <h2>Wait, Fade, Stop and Devamp</h2>
+      <h2>Wait, Fade, Stop, Devamp and Control</h2>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Type</th><th>Fields</th></tr></thead>
@@ -99,15 +104,73 @@
             </tr>
             <tr>
               <td><strong>Fade</strong></td>
-              <td><strong>Target</strong> (an audio cue), <strong>Property</strong> (volume or pan), <strong>Target value</strong>, <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic) and <strong>Stop when done</strong> — which makes it a fade-out.</td>
+              <td><strong>Targets</strong> — any number of audio, video, image, text, camera, Light or group cues, all faded together on one time and curve; a group's fade reaches every cue inside it, however deep. <strong>Property</strong> (volume, pan, or volume and pan together — a <strong>Target pan</strong> beside the volume, both on the one time and curve; <strong>opacity</strong> or <strong>geometry only</strong> for a picture — a video has all of them, an image, text or camera only the picture's; a Light cue's is its intensity; a picture fade's <strong>Move the picture</strong> ticks the position, scale, rotation and crop it moves, each to its own target, from wherever each picture is when the fade starts), <strong>Target value</strong> (0 to 1 for a volume or an opacity, −1 left to 1 right for a pan), <strong>Duration</strong>, <strong>Curve</strong> (linear, S-curve, logarithmic), <strong>Shape</strong> (a preset or a drawn curve that plays in place of the curve — on every target and every route: a sound, a light, a picture's opacity and its geometry alike) and <strong>Stop when done</strong> — which makes it a fade-out. On a Light cue the target value is a share of the intensity the cue set: 0 is out, 1 is where the cue put it, and stopping it when done releases the cue. A show saved when a fade named one cue opens with that cue as its one target, and is saved as it was until its targets are edited.</td>
             </tr>
             <tr>
               <td><strong>Stop</strong></td>
-              <td><strong>Target</strong> (a cue, or All cues), <strong>Fade out</strong> with a <strong>duration</strong>, and <strong>Wait for fade</strong>, which holds the show until the fade has finished instead of completing as soon as the target is told to stop.</td>
+              <td><strong>Target</strong> — <strong>All cues</strong>, or <strong>These cues</strong>: any set of cues, a group stopped whole and before the rest — <strong>Fade out</strong> with a <strong>duration</strong>, and <strong>Wait for fade</strong>, which holds the show until the fade has finished instead of completing as soon as the target is told to stop. A Light cue stopped without a fade-out stays on where its fade had got to; with one, what it holds fades home over the fade-out.</td>
             </tr>
             <tr>
               <td><strong>Devamp</strong></td>
-              <td><strong>Target</strong> — a looping audio cue. It finishes the lap it is on and plays out to the end of its file.</td>
+              <td><strong>Target</strong> — a looping audio or video cue. It lets go of the lap it is on and plays out to the end of its file; a video's picture with its sound. A sliced cue finishes the pass of the slice it is in and goes on into the next slice. <strong>Then</strong>: <strong>Play on into the next slice</strong>, or <strong>Stop at the end of the slice</strong> — which also ends a plain loop at the end of its lap.</td>
+            </tr>
+            <tr>
+              <td><strong>Control</strong></td>
+              <td><strong>Action</strong> and <strong>Targets</strong>: <strong>Start</strong> (each target where it is, as its own GO would; a disarmed one, or one in a disarmed list, is not started and the log says so), <strong>Stop</strong> (at once, a group whole), <strong>Pause</strong> / <strong>Resume</strong> (each playing audio, video or MIDI file cue, and those inside a group), <strong>Load</strong> (readies each target to start <strong>Load to</strong> seconds into itself the next time it fires — its file decoded, a picture opened on its output — or moves a playing audio, video or MIDI file cue there now), <strong>Reset</strong> (stops it, forgets its load, puts a playlist back at its first child and a random group's draw afresh), <strong>Go to</strong> (the playhead of the first target's own list to it — that list's, whichever list is in front; nothing fires) and <strong>Arm</strong> / <strong>Disarm</strong> (an edit of the show, with an undo). Targets may be in any cue list. It completes at once, never acts on itself, and with no target does nothing and says so. QLab's Start, Pause, Load, Reset, GoTo, Arm and Disarm cues import as Control cues.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-2" id="pictures">
+      <h2>Video, Image, Text and Camera</h2>
+      <p>
+        The picture cues. Each shows on a video output (see <a href="./settings.html#outputs">Outputs</a>)
+        and carries the <strong>Picture</strong> fields; each has its own tab for what it shows,
+        and a video has a <strong>Sound</strong> tab. How they behave together is in the
+        <a href="../guides/video.html">video guide</a>.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Picture field</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Output</td><td>the first output</td><td>Which output the picture goes to. A cue naming an output the show no longer has fails and says so.</td></tr>
+            <tr><td>Layer</td><td>1</td><td>Stacking order, −1000 to 1000: higher is in front. On one layer the later firing is in front.</td></tr>
+            <tr><td>Opacity</td><td>100%</td><td>The level the picture rests at. Applies at once while it is up; a fade cue moves it over time.</td></tr>
+            <tr><td>Fade in</td><td>0 s</td><td>From the picture's first frame on screen to its opacity.</td></tr>
+            <tr><td>Fade out</td><td>0 s</td><td>Lands on the picture's own end: a video's last pass, an image's or text's display time. Nothing to land on — a video looping for ever, a picture held until stopped — and it does nothing.</td></tr>
+            <tr><td>Crossfade</td><td>off</td><td>Video and image. Dissolves in from what is on the output at or below this layer, over the fade in, as an exact mix of the two frames; what it replaced is taken down and its cue stopped when it lands. With nothing to dissolve from it fades up.</td></tr>
+            <tr><td>Size to</td><td>Fit</td><td><strong>Fit</strong> (all of it, letterboxed), <strong>Fill</strong> (the whole output, cropped), <strong>Stretch</strong> (to the output's shape) or <strong>Native</strong> (one pixel per pixel). Text is always native.</td></tr>
+            <tr><td>Position</td><td>0%, 0%</td><td>The picture's centre, right of and below the output's centre, as a share of its width and height.</td></tr>
+            <tr><td>Scale</td><td>100%</td><td>A multiple of the fitted size, 1% to 1000%.</td></tr>
+            <tr><td>Rotate</td><td>0°</td><td>Clockwise, about the picture's own centre.</td></tr>
+            <tr><td>Crop</td><td>0%</td><td>Video, image and camera: cut from the top, right, bottom and left before the picture is fitted.</td></tr>
+            <tr><td>Blend</td><td>Normal</td><td>How the picture is laid over what is behind it: Normal, Multiply, Screen, Overlay, Darken, Lighten, Colour dodge, Colour burn, Hard light, Soft light, Difference, Exclusion, Add or Subtract, at the picture's opacity. The same on the GPU and the 2D fallback. Applies at once while it is up.</td></tr>
+            <tr><td>Next GO</td><td>the show's default</td><td><strong>Takes it down</strong> — over its own fade out — on the next GO, whatever that GO fires; <strong>Leaves it up</strong>; or the show's default (the Outputs panel's <strong>Next GO</strong>, off unless set). A GO from a trigger or a desk counts, but only a GO in the picture's own cue list; a picture the GO's own crossfade is dissolving is left to the dissolve.</td></tr>
+            <tr><td>Keyframes</td><td>none</td><td>Up to 32 places the picture moves to over its own play: each a time from its first frame (pauses taken out), a position, scale, rotation and crop, and how it is reached — Linear, Ease in, Ease out, Ease in and out, or Jump. From the cue's own geometry at nought; it stays at the last.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Type</th><th>Fields</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Video</strong></td>
+              <td><strong>File</strong> (MP4, MOV, M4V, WebM, MKV, OGV — what Chromium decodes), <strong>Start time</strong> / <strong>End time</strong> (0 / end of file), <strong>Loop count</strong> (0 once, n more times, −1 until stopped or devamped), <strong>Hold last frame</strong> (off; on, the cue runs until it is stopped) and, while it plays, <strong>Pause</strong>/<strong>Resume</strong> and <strong>Position</strong>. On <strong>Sound</strong>: <strong>Volume</strong> (100%), <strong>Pan</strong> (centre) and <strong>Routing</strong> — the sound is an engine voice exactly as an audio cue's is. Its length is measured from the file, like an audio cue's.</td>
+            </tr>
+            <tr>
+              <td><strong>Image</strong></td>
+              <td><strong>File</strong> (PNG, JPEG, GIF, WebP, BMP, SVG, AVIF) and <strong>Shown for</strong> (empty holds it until it is stopped).</td>
+            </tr>
+            <tr>
+              <td><strong>Text</strong></td>
+              <td><strong>Text</strong> (one block, new lines kept), <strong>Font</strong> (IBM Plex Sans; a font this computer does not have falls back), <strong>Size</strong> (96 px, in the output's own pixels), <strong>Colour</strong> (white), <strong>Bold</strong>, <strong>Italic</strong>, <strong>Position</strong> (one of nine; centre) and <strong>Shown for</strong>.</td>
+            </tr>
+            <tr>
+              <td><strong>Camera</strong></td>
+              <td><strong>Source</strong>: <strong>A camera on this machine</strong> (a capture device the outputs can see — webcam, USB, HDMI capture; the show keeps its name, this computer its exact device) or <strong>A network stream</strong> with an <strong>Address</strong> (HTTP video, HLS <code>.m3u8</code> or MJPEG; a login in the address is passed on; RTSP is refused). Fills its output (Size to <strong>Fill</strong>) and runs until it is stopped. A camera that is not connected is said across the output and on its card, and comes up when it is plugged in; with no camera chosen, or an RTSP address, the cue fails and says why.</td>
             </tr>
           </tbody>
         </table>
@@ -123,7 +186,7 @@
           <tbody>
             <tr><td>Sequence</td><td>Children in order, each after the one before.</td></tr>
             <tr><td>All at once</td><td>Every child together.</td></tr>
-            <tr><td>Random</td><td>One child, chosen at random.</td></tr>
+            <tr><td>Random</td><td>One child, drawn at random — every child once before any of them twice, and never the same one twice running across the seam between passes.</td></tr>
             <tr><td>Timeline</td><td>Each child at its own offset, edited by dragging in the dock.</td></tr>
           </tbody>
         </table>
@@ -131,6 +194,30 @@
       <p>
         A group's duration is worked out from its children. Stopping a group stops them
         too.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="light">
+      <h2>Light<span class="pro">Pro</span></h2>
+      <p>A look for the lighting rig, faded in over sACN or Art-Net. The rig itself is set up in the <a href="../guides/lighting.html">Lighting view</a>.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Field</th><th>Default</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Fade</td><td>3 s</td><td>How long the look takes to arrive. It is the cue's duration: the run ends, and On end advances, when the fade does. Up to an hour.</td></tr>
+            <tr><td>Curve</td><td>Linear</td><td>Linear, S-curve or logarithmic — the shapes an audio fade takes.</td></tr>
+            <tr><td>Intensity</td><td>Latest takes precedence</td><td><strong>Latest takes precedence</strong>: the cue takes every parameter it sets from whichever cue had it. <strong>Highest takes precedence</strong>: its intensity sits beside every other such cue's, and the light is the brightest of them and of the tracked level. Colour and position are latest takes precedence either way.</td></tr>
+            <tr><td>Look</td><td>empty</td><td>Levels, 0–100%: a fixture's parameter, or a group's — reaching every member that has it. A later line for the same parameter wins. A fixture removed from the rig is shown as gone and sends nothing. What the look does not name tracks: it stays where earlier cues left it.</td></tr>
+            <tr><td>Effects</td><td>none</td><td>A parameter that keeps moving after the fade: sine, triangle, square or saw, between a low and a high, 0.01–25 cycles a second. On a group, <strong>spread</strong> shares a cycle out across the members — 100% is a chase. A later cue that sets the parameter ends it.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        STOP stops the fade where it is and leaves the light on; a Stop cue with a fade-out
+        releases it home; a panic does what the show's <strong>On panic</strong> says — hold,
+        release or black out. The <strong>Tracking</strong> tab lists every parameter with a
+        value at the cue: moved by it, set to what it already was, or tracking from an
+        earlier cue. Without a licence the cue stays in the show and is refused when fired.
       </p>
     </section>
 
@@ -142,11 +229,11 @@
           <tbody>
             <tr>
               <td><strong>MIDI</strong></td>
-              <td><strong>Port</strong> (or the show's default output) and a list of messages: note on, note off, control change, program change, or raw sysex bytes.</td>
+              <td><strong>Port</strong> (or the show's default output) and a list of messages: note on, note off, control change, program change, or raw sysex bytes. <strong>Send now</strong> sends them from the inspector without running the cue.</td>
             </tr>
             <tr>
               <td><strong>OSC</strong></td>
-              <td><strong>Host</strong>, <strong>Port</strong>, <strong>Address</strong>, and arguments typed as integer, float, string, true or false.</td>
+              <td>One message or several, sent in order on GO: each <strong>Send to</strong> one of the show's <a href="./settings.html#network">OSC patches</a> or its own <strong>Host</strong> and <strong>Port</strong>, an <strong>Address</strong>, and arguments typed as integer, float, string, true or false — the type goes out as written. A message whose patch was deleted is not sent and the run says which; the rest still go. <strong>Send now</strong> sends them from the inspector without running the cue — the check that the console is listening — and says whether they left.</td>
             </tr>
             <tr>
               <td><strong>Network</strong></td>
@@ -157,12 +244,28 @@
               <td>MSC. <strong>Send on</strong> the show's desk connection or a MIDI port, a <strong>command</strong> (Go, Stop, Resume, Load…), the equipment <strong>format</strong>, a <strong>device ID</strong> (127 reaches everything), and a <strong>cue</strong> and <strong>list</strong> where the command carries them.</td>
             </tr>
             <tr>
+              <td><strong>MIDI File</strong></td>
+              <td>Plays a Standard MIDI File (<code>.mid</code>, <code>.midi</code>, <code>.smf</code>, <code>.kar</code>, or an <code>.rmi</code> wrapping one) to one <strong>MIDI Port</strong>, or the show's default output. Formats 0, 1 and 2; the file's tempo map is read whole, so a tempo change anywhere in it moves everything after it, and an SMPTE-timed file plays by its frames. <strong>Rate</strong> 0.25×–4×, <strong>Start time</strong> and <strong>End time</strong> (the region, in the file's own seconds), and <strong>Loop count</strong> (0 plays once, −1 loops until stopped). On the <strong>Channels</strong> tab: each of the file's sixteen channels sent as itself, as another channel, or not at all; and <strong>Transpose</strong> in semitones (±48), which leaves channel 10 — General MIDI's drums — alone unless <strong>Channel 10 too</strong> is ticked. The tab lists the file's tracks by name with their notes, events and channels. The cue completes when its file does, so Auto-follow works; looping until stopped holds the show until a Stop takes it. Started part-way — a timeline seek, a takeover — or at a start time, every channel is first put where the file had it there: program and bank, controllers, RPN and NRPN settings such as the pitch-bend range, pitch bend and pressure; notes already sounding are not struck again. Stopping releases every note the cue started and lifts the sustain pedal on every channel it played on; PANIC also sends All Notes Off on those channels. While it runs, <strong>Pause</strong> holds the file silent — its notes released, its pedal lifted — and <strong>Resume</strong> plays on from the same place with every channel put back; the show's PAUSE, the Active tab and a Control cue's Pause and Resume hold it the same way, and a Control cue's Load moves a playing file there now, chased. A release the file writes for a note the cue did not strike — one struck before a start part-way, or one a hold already let go — is not sent. A file that is not MIDI, or is damaged, says why in the tab and on the cue's Last run; so does a port that is not connected.</td>
+            </tr>
+            <tr>
               <td><strong>Script</strong></td>
               <td><strong>Script</strong> and <strong>Timeout</strong> (60000 ms; 0 waits for ever). See the <a href="./script-api.html">script API</a>.</td>
             </tr>
             <tr>
+              <td><strong>Memo</strong></td>
+              <td>A note in the stack — "hold for the bow", "LX 40 is called by the SM". Its words are its <strong>Name</strong> and <strong>Notes</strong> on Basics, and the first line of the note is read on its row. GO completes it at once: an advance passes straight through it, so a memo between two cues never holds the show.</td>
+            </tr>
+            <tr>
               <td><strong>Mic</strong><span class="pro">Pro</span></td>
               <td><strong>Mic</strong> — the Sennheiser EW-DX channel to act on, chosen from the packs the show knows (named by the plot and who is wearing the pack, or by what the receiver calls it), and <strong>Do</strong>: <strong>Mute</strong> or <strong>Unmute</strong>. There is no toggle, because a toggle run twice leaves the mic as the first run found it, and a cue list that can be jumped around in cannot know which that was. The receiver is asked afterwards: a mute that did not happen is an error on the cue, in the log and on its row, never a mic left open in silence. With no mic chosen the cue does nothing and says so.</td>
+            </tr>
+            <tr>
+              <td><strong>Live Input</strong></td>
+              <td>Plays a live input — a microphone, a line from the band — through the engine. <strong>Input</strong> (a capture device; the default input for a new cue), <strong>Channels</strong> (which of its inputs are the cue's channels), <strong>Volume</strong>, <strong>Pan</strong>, <strong>Fade in</strong> (50 ms, with a shape), <strong>Fade out</strong> (200 ms, used when the cue is stopped), <strong>Output patch</strong> and <strong>Routing</strong> as an audio cue's. It runs until stopped, or for its <strong>Duration</strong> when it has one. The input can be a different interface from the output: the engine resamples it to the output's clock and corrects the drift between the two, holding a small, steady buffer. <strong>Open input</strong> opens the device ahead of the cue so GO is instant and the meters read; the tab shows each channel's level, the time through the engine and the clock correction. Pause, show-wide pause, Fade cues, STOP and PANIC reach it. With no channel chosen it does nothing and says so. Not the <strong>Mic</strong> cue, which mutes a radio mic at its receiver.</td>
+            </tr>
+            <tr>
+              <td><strong>Timecode</strong><span class="pro">Pro</span></td>
+              <td>Runs a SMPTE clock. <strong>Rate</strong> — 24, 25, 29.97 drop-frame, 29.97 non-drop or 30 fps (25 for a new cue); <strong>Start from</strong> the <strong>Start</strong> time (01:00:00:00) or the incoming timecode (<strong>jam sync</strong>: the clock starts where the received one is, keeps to it, and carries on alone if it drops out); <strong>End</strong>, or empty to run until stopped — the cue's length is the difference. Outputs, in any mix, all one clock: <strong>MTC</strong> to a MIDI port (the show's output port if none is chosen) — a full-frame message on every start, locate and pause, then quarter frames; <strong>LTC</strong> written by the audio engine to an output channel (3 for a new cue) at a level in dBFS (−12) — give it a channel of its own; <strong>Art-Net</strong> ArtTimeCode once a frame to an address (255.255.255.255), or <code>host:port</code>. While it runs the tab shows where the clock is, with <strong>Pause</strong>/<strong>Resume</strong> and <strong>Locate</strong> to any frame. With no output ticked, or a start or end that is not a frame of the rate, the cue refuses and says why.</td>
             </tr>
             <tr>
               <td><strong>Scene</strong><span class="pro">Pro</span></td>

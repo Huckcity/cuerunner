@@ -1,7 +1,12 @@
 import type {
   AudioCue, MidiCue, OscCue, WaitCue, FadeCue, StopCue, GroupCue, NetworkCue, ScriptCue, SceneCue, DevampCue, MicCue,
-  MscCue, Cue, CueType, AudioCrosspoint
+  MscCue, Cue, CueType, AudioCrosspoint, MemoCue, LightCue, TimecodeCue, VideoCue, ImageCue, TextCue, CameraCue, ControlCue,
+  InputCue
 } from '../../../shared/cue'
+import { CAMERA_DEFAULTS } from '../../../shared/camera'
+import { TEXT_DEFAULTS, VIDEO_DEFAULTS, VISUAL_BASE_DEFAULTS, defaultGeometry } from '../../../shared/visual'
+import type { MidiFileCue } from '../../../shared/cue'
+import { MIDI_FILE_IDENTITY_MAP } from '../../../shared/midiFile'
 
 // Every field a new cue is born with. createCue builds on these, and the inspector's
 // reset controls restore them — one definition, so the two can never drift apart.
@@ -28,6 +33,7 @@ export const AUDIO_DEFAULTS = {
   startTime: 0,
   endTime: null as number | null,
   fadeInDuration: 0,
+  fadeOutDuration: 0,
   volume: 1,
   pan: 0,
   // Automatic channel routing: the file's own channel layout decides where it goes.
@@ -44,6 +50,20 @@ export const AUDIO_DEFAULTS = {
 
 export const AUDIO_CROSSPOINT_DEFAULTS: AudioCrosspoint = { inputChannel: 0, outputChannel: 0, gain: 1 }
 
+/**
+ * A new live input: the default input's first channel, at full level in the middle, opened
+ * over a short fade so a hot microphone does not arrive as a thump, and closed over one.
+ */
+export const INPUT_DEFAULTS = {
+  device: '',
+  inputChannels: [0] as number[],
+  volume: 1,
+  pan: 0,
+  fadeInDuration: 50,
+  fadeOutDuration: 200,
+  outputs: null as AudioCrosspoint[] | null
+}
+
 export const OSC_DEFAULTS = {
   host: '127.0.0.1',
   port: 53000,
@@ -52,8 +72,28 @@ export const OSC_DEFAULTS = {
 
 export const WAIT_DEFAULTS = { duration: 2000 }
 
+/**
+ * A new clock starts at the hour, where a show's timecode conventionally starts so that
+ * pre-roll never runs back through midnight, at the European rate, sending MTC to the
+ * show's own MIDI port. LTC and Art-Net are off until a channel and an address are chosen.
+ */
+export const TIMECODE_DEFAULTS = {
+  rate: '25' as const,
+  startTimecode: '01:00:00:00',
+  endTimecode: '',
+  jamSync: false,
+  mtc: true,
+  mtcPortName: '',
+  ltc: false,
+  ltcChannel: 2,
+  ltcLevelDb: -12,
+  artnet: false,
+  artnetHost: '255.255.255.255'
+}
+
 export const FADE_DEFAULTS = {
-  targetCueId: '',
+  // A list from the start: a fade made here names its cues the way a fade can now name several.
+  targetCueIds: [] as string[],
   fadeProperty: 'volume' as const,
   targetValue: 0,
   curve: 'linear' as const,
@@ -62,6 +102,8 @@ export const FADE_DEFAULTS = {
 }
 
 export const STOP_DEFAULTS = {
+  // Everything, in the spelling every build reads: a new stop is the stop it always was until
+  // it is pointed at cues.
   targetCueId: 'all',
   fadeOut: false,
   fadeOutDuration: 500,
@@ -69,6 +111,11 @@ export const STOP_DEFAULTS = {
 }
 
 export const GROUP_DEFAULTS = { mode: 'sequence' as const }
+
+export const CONTROL_DEFAULTS = {
+  action: 'start' as const,
+  loadToMs: 0
+}
 
 export const NETWORK_DEFAULTS = {
   method: 'GET' as const,
@@ -97,6 +144,27 @@ export const MSC_DEFAULTS = {
   // console on a cable is the other answer, and it is one field away.
   destination: 'desk' as const,
   portName: ''
+}
+
+export const MIDI_FILE_DEFAULTS = {
+  // The show's own MIDI output port, like a MIDI cue that names none.
+  portName: '',
+  playbackRate: 1,
+  startTime: 0,
+  endTime: null as number | null,
+  loopCount: 0,
+  // The file as written: every channel on its own channel, nothing moved.
+  channelMap: [...MIDI_FILE_IDENTITY_MAP],
+  transpose: 0,
+  transposeDrums: false
+}
+
+export const LIGHT_DEFAULTS = {
+  // A look takes three seconds to arrive unless it says otherwise: long enough to read as a
+  // fade, short enough that a cue nobody has timed yet does not hold the show.
+  duration: 3000,
+  curve: 'linear' as const,
+  intensity: 'ltp' as const
 }
 
 /**
@@ -167,8 +235,8 @@ export function createCue(type: CueType, number = '1'): Cue {
       return {
         ...base('OSC Cue', number),
         type: 'osc',
-        ...OSC_DEFAULTS,
-        args: []
+        // A list from the start: a new cue's one message, with room for the next.
+        messages: [{ patchId: '', ...OSC_DEFAULTS, args: [] }]
       } satisfies OscCue
     case 'wait':
       return {
@@ -180,7 +248,9 @@ export function createCue(type: CueType, number = '1'): Cue {
       return {
         ...base('Fade Cue', number),
         type: 'fade',
-        ...FADE_DEFAULTS
+        ...FADE_DEFAULTS,
+        // A list of its own: the defaults' one must not be shared by every fade made.
+        targetCueIds: []
       } satisfies FadeCue
     case 'stop':
       return {
@@ -238,6 +308,90 @@ export function createCue(type: CueType, number = '1'): Cue {
         label: '',
         action: 'mute'
       } satisfies MicCue
+    case 'memo':
+      return {
+        ...base('Memo', number),
+        type: 'memo'
+      } satisfies MemoCue
+    case 'midiFile':
+      return {
+        ...base('MIDI File', number),
+        type: 'midiFile',
+        filePath: '',
+        ...MIDI_FILE_DEFAULTS,
+        // A fresh list per cue: the defaults' own must not be shared by every cue made.
+        channelMap: [...MIDI_FILE_IDENTITY_MAP]
+      } satisfies MidiFileCue
+    case 'light':
+      return {
+        ...base('Light Cue', number),
+        type: 'light',
+        // Nothing until it is recorded or built: a Light cue with an empty look changes
+        // nothing, which is what a cue nobody has written yet should do.
+        look: [],
+        effects: [],
+        ...LIGHT_DEFAULTS
+      } satisfies LightCue
+    case 'timecode':
+      return {
+        ...base('Timecode', number),
+        type: 'timecode',
+        ...TIMECODE_DEFAULTS
+      } satisfies TimecodeCue
+    // The picture cues: shown on the show's first output until they are pointed at another,
+    // full size, fitted, and at full level. Their defaults live with the rest of the visual
+    // model (src/shared/visual.ts).
+    case 'video':
+      return {
+        ...base('Video Cue', number),
+        type: 'video',
+        filePath: '',
+        ...VISUAL_BASE_DEFAULTS,
+        ...VIDEO_DEFAULTS,
+        geometry: defaultGeometry()
+      } satisfies VideoCue
+    case 'image':
+      return {
+        ...base('Image Cue', number),
+        type: 'image',
+        filePath: '',
+        ...VISUAL_BASE_DEFAULTS,
+        geometry: defaultGeometry()
+      } satisfies ImageCue
+    case 'text':
+      return {
+        ...base('Text Cue', number),
+        type: 'text',
+        ...VISUAL_BASE_DEFAULTS,
+        ...TEXT_DEFAULTS,
+        geometry: defaultGeometry()
+      } satisfies TextCue
+    // A live picture: filled to the output, until it is stopped. Which camera is chosen in its
+    // own tab — by the name the show carries, with this machine's device kept by main.
+    case 'camera':
+      return {
+        ...base('Camera Cue', number),
+        type: 'camera',
+        ...VISUAL_BASE_DEFAULTS,
+        ...CAMERA_DEFAULTS,
+        geometry: { ...defaultGeometry(), fit: 'fill' }
+      } satisfies CameraCue
+    case 'control':
+      return {
+        ...base('Control Cue', number),
+        type: 'control',
+        ...CONTROL_DEFAULTS,
+        // Nothing until it is pointed at cues: a control cue aimed at nothing does nothing,
+        // where a start of everything would be a mistake nobody could take back.
+        targetCueIds: []
+      } satisfies ControlCue
+    case 'input':
+      return {
+        ...base('Live Input', number),
+        type: 'input',
+        ...INPUT_DEFAULTS,
+        inputChannels: [...INPUT_DEFAULTS.inputChannels]
+      } satisfies InputCue
   }
 }
 

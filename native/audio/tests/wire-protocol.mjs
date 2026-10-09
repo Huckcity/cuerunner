@@ -368,6 +368,8 @@ try {
     for (const verb of stamped) {
       const params = { cueId: 'never-prepared', whenMs: horizonMs + 600_000 }
       if (verb === 'start') params.options = {}
+      // A live voice names its input: the request has to be well formed to reach the horizon.
+      if (verb === 'startInput') Object.assign(params, { device: 'test:tone', channels: [0] })
       const reply = await client.request(verb, params)
       const message = reply.error?.message ?? ''
       if (reply.ok !== false || reply.error?.code !== 'limit' || !message.includes(String(horizonMs))) {

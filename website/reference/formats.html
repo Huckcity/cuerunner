@@ -47,14 +47,60 @@
       <h2>The workspace file</h2>
       <p>
         A show is one <code>.cuerunner</code> file: JSON, holding the cues in order, the show's
-        setup — the desk, the cast, the scenes, the mic plot, the triggers — and the
-        window's own state such as which cue was selected.
+        setup — the desk, the cast, the scenes, the mic plot, the triggers, the lighting rig —
+        and the window's own state such as which cue was selected. The rig is a
+        <code>lighting</code> section — fixtures, the types they are, groups, each universe's
+        outputs and the consoles heard — written only once a show has one, so a show with no
+        lights saves the bytes it always did. Which network interface the lights leave by,
+        and the sACN identity this machine sends as, are the machine's, in
+        <code>dmx.json</code> beside the licence.
+      </p>
+      <p id="gdtf">
+        <strong>A fixture type read from a GDTF file</strong> (DIN SPEC 15800; Lighting →
+        Patch → Import GDTF file…, part of Cuerunner Pro) is copied into the show like any
+        other type, so the show does not need the file again. Only the archive's
+        <code>description.xml</code> is read — the models and wheel images beside it are
+        not — up to 16 MB of XML, and a description that declares a document type is
+        refused. Each <code>DMXMode</code> becomes a mode, as wide as its highest offset. Each
+        <code>DMXChannel</code> with an offset becomes a parameter: its kind from the
+        attribute of the function it starts on (<code>Dimmer</code>, <code>Pan</code>,
+        <code>Tilt</code>, <code>ColorAdd_R</code> and the other emitters, colour wheels and
+        macros as colour, everything else as other), its label from the attribute's pretty
+        name — with the geometry after it where cells share an attribute — its coarse and
+        fine slots from <code>Offset</code>, and where it rests from the default of its
+        initial function (or, in a GDTF 1.0 file, the channel's own <code>Default</code>).
+        A channel with more than one <code>ChannelFunction</code> keeps each one's name and
+        the share of travel it starts at (<code>DMXFrom</code>), up to 64, and the faders name
+        the one a value is in. A 24- or 32-bit channel is driven on its two most significant
+        bytes and the bytes below are held at zero. A virtual channel (no offset) is left out.
+        Refused, with a sentence: a mode spread over more than one <code>DMXBreak</code>, a
+        channel that overwrites another break, an offset past 512, two channels on one slot,
+        a mode with no DMX channels, more than 32 modes or 128 parameters to a mode.
+      </p>
+      <p>
+        A show with more than one cue list carries a <code>cueLists</code> section: each list's
+        id, name, colour, whether it is a cart, whether it is disarmed, how it follows the
+        clock and its tiles' own keys, in tab order. A cue at the top level of a list other than
+        the main one names it with <code>listId</code>; a cue inside a group never does — it runs
+        in its group's list. A show with only its main list under its own name writes no
+        section and no <code>listId</code>, so a show saved before lists existed opens as one
+        list and saves the bytes it always did. A cue naming a list the file does not have runs
+        in the main list, and the bar across the top says so, the way a grouping repair does.
       </p>
       <p>
         <strong>It does not hold the audio.</strong> Each audio cue stores the path to its
         file. Moving a show to another machine means taking the sound with it and keeping
         the paths valid: the simplest arrangement is a folder with the <code>.cuerunner</code>
         file and the audio beside it, copied whole.
+      </p>
+      <p>
+        Video and image cues store their files the same way, and move with the show the
+        same way. The show's outputs are a <code>videoOutputs</code> list — name, size, timer,
+        corner pin and soft edges, a mirror and a mask — written only when the show has one;
+        where each output goes on a computer is kept on that computer, in
+        <code>video-outputs.json</code> beside the licence. A show whose pictures go on the next
+        GO carries a <code>pictures</code> section; a camera cue carries its camera's name, and
+        each computer keeps the device it picked for that cue in <code>camera-devices.json</code>.
       </p>
       <p>
         A cue whose file has gone says <em>missing</em> where its length should be, and a
@@ -104,9 +150,9 @@
     <section class="panel reveal delay-1" id="bundle">
       <h2>The bundle file<span class="pro">Pro</span></h2>
       <p>
-        A <code>.cuerunnerx</code> is the show <em>and</em> its audio as one file: a zip holding
-        <code>show.cuerunner</code> and a <code>media/</code> folder, with the showfile pointing
-        inside it. It opens in any file manager, and its bytes are a function of the show,
+        A <code>.cuerunnerx</code> is the show <em>and</em> its media as one file — the audio,
+        video, image and MIDI files its cues play — a zip holding <code>show.cuerunner</code>
+        and a <code>media/</code> folder, with the showfile pointing inside it. It opens in any file manager, and its bytes are a function of the show,
         so two exports of the same show are the same file.
       </p>
       <p>
@@ -119,6 +165,49 @@
         do not match is refused rather than half-unpacked. See
         <a href="../guides/showfile.html#bundle">Versions and handover</a>.
       </p>
+    </section>
+
+    <section class="panel reveal delay-1" id="qlab">
+      <h2>QLab workspaces</h2>
+      <p>
+        <strong>Import QLab Workspace&hellip;</strong> reads a <code>.qlab5</code> or
+        <code>.qlab4</code> workspace, a QLab 5 workspace saved as a folder (the property list
+        inside it), and a <code>.cues</code> file of cues with no list around them. A workspace
+        is an NSKeyedArchiver archive in a binary property list, with its cue lists stored as a
+        second archive inside the first; both are Apple's container formats, read by
+        Cuerunner's own reader. A workspace past <strong>64 MB</strong> is refused before it is
+        read, and so is one holding more than <strong>10,000</strong> cues.
+      </p>
+      <p>
+        From a running QLab, the import connects over TCP to the address and port given
+        (<code>53000</code> by default), SLIP-framed as QLab's OSC over TCP is, and sends
+        <code>/workspaces</code>, <code>/workspace/{id}/connect</code> with the passcode,
+        <code>/workspace/{id}/cueLists</code>, and <code>/workspace/{id}/cue_id/{id}/valuesForKeys</code>
+        once for each cue. One message is in flight at a time. The connection has 3 seconds
+        to open and every reply 5 seconds to arrive; a reply larger than 16 MB, or a
+        conversation past 64 MB, ends the import.
+      </p>
+      <p>
+        The result is a new show with no file, checked by the same reading every
+        <code>.cuerunner</code> file goes through. Audio paths are absolute: the QLab
+        workspace's folder joined to the path QLab recorded relative to it, or QLab's last
+        known absolute path where there is none. The mapping is in
+        <a href="../guides/qlab.html#mapping">Coming from QLab</a>.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>The import says</th><th>Because</th></tr></thead>
+          <tbody>
+            <tr><td>… is not a QLab workspace</td><td>The file is not a binary property list, which every QLab workspace is.</td></tr>
+            <tr><td>… looks like a QLab workspace but cannot be read</td><td>It is a property list whose bytes contradict themselves, or not an archive; the rest of the sentence says which.</td></tr>
+            <tr><td>… holds no QLab cue lists</td><td>An archive, but not of a QLab show.</td></tr>
+            <tr><td>… is N MB, and a QLab workspace this import reads is at most 64 MB</td><td>The size limit, checked before the file is read.</td></tr>
+            <tr><td>no QLab answered at …</td><td>Nothing is listening at that address and port, or QLab's OSC access does not let this computer in.</td></tr>
+            <tr><td>… did not accept that passcode</td><td>The workspace's passcode is not the one typed.</td></tr>
+            <tr><td>… stopped answering</td><td>A reply did not arrive within 5 seconds.</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section class="panel reveal delay-1" id="telemetry">

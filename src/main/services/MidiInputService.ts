@@ -1,4 +1,5 @@
 import { decodeMidiMessage } from '../midi/decode'
+import { midiTimecodeTap } from '../timecode/midiTap'
 import type { ShowSettings } from '../../shared/show'
 import type { ServiceContext, ShowService } from '../bus/ServiceHost'
 
@@ -93,6 +94,7 @@ export class MidiInputService implements ShowService {
     // Publish the offline rows before dropping the context they publish through —
     // otherwise they are silently dropped and the panel reads "online" forever.
     for (const [name, input] of this.inputs) {
+      midiTimecodeTap.closed(name)
       try {
         input.closePort()
       } catch {
@@ -148,13 +150,16 @@ export class MidiInputService implements ShowService {
     if (index < 0) return
     // Sysex is kept — it is how desks send their state. Clock and active sensing are
     // dropped: both arrive continuously and neither says anything the show needs.
-    input.ignoreTypes(false, true, true)
+    // MTC goes with the clock unless the timecode receiver is following this port.
+    input.ignoreTypes(false, !midiTimecodeTap.wants(name), true)
     input.on('message', (_deltaTime, message) => {
+      if (midiTimecodeTap.offer(name, message, Date.now())) return
       const decoded = decodeMidiMessage(message)
       if (!decoded) return
       context.bus.publish({ kind: 'midi', at: Date.now(), device: name, message: decoded })
     })
     input.openPort(index)
+    midiTimecodeTap.opened(name, { setTimecode: on => input.ignoreTypes(false, !on, true) })
     this.inputs.set(name, input)
     this.publishPort(name, true)
     context.setState('running', `listening on ${[...this.inputs.keys()].map(quote).join(', ')}`)
@@ -164,6 +169,7 @@ export class MidiInputService implements ShowService {
     const input = this.inputs.get(name)
     if (!input) return
     this.inputs.delete(name)
+    midiTimecodeTap.closed(name)
     try {
       input.closePort()
     } catch {

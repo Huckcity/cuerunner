@@ -21,6 +21,7 @@ import type {
   AudioClockReading,
   AudioErrorCode,
   AudioCommandResult,
+  AudioMeters,
   AudioCrosspoint,
   AudioDeviceInfo,
   AudioEndReason,
@@ -34,6 +35,14 @@ import type {
   AudioProbe,
   AudioOnsets,
   AudioSilence,
+  AudioLoudness,
+  AudioInputDevice,
+  AudioInputOpenOptions,
+  AudioInputStatus,
+  AudioOutputDevice,
+  AudioOutputOpenOptions,
+  AudioOutputStatus,
+  AudioPatchResult,
   AudioProgress,
   AudioSeekResult,
   AudioStartOptions,
@@ -73,8 +82,19 @@ const SLOW_VERBS: Partial<Record<AudioWireVerb, number>> = {
   // analysed frame by frame to its last one, which the default deadline cuts off —
   // silently, because the waveform panel treats a failed onsets request as "no ticks".
   onsets: SLOW_REQUEST_TIMEOUT_MS,
+  // A loudness scan is the same whole-file pass, through a four-times oversampler.
+  loudness: SLOW_REQUEST_TIMEOUT_MS,
+  // Opening a capture device is the device's own business and can take as long as a configure.
+  inputs: SLOW_REQUEST_TIMEOUT_MS,
+  inputOpen: SLOW_REQUEST_TIMEOUT_MS,
+  startInput: SLOW_REQUEST_TIMEOUT_MS,
   configure: SLOW_REQUEST_TIMEOUT_MS,
-  devices: SLOW_REQUEST_TIMEOUT_MS
+  devices: SLOW_REQUEST_TIMEOUT_MS,
+  // An extra output device is opened by the patch that first names it, and by its reconnect:
+  // the device's own business, as long as a configure.
+  patch: SLOW_REQUEST_TIMEOUT_MS,
+  outputs: SLOW_REQUEST_TIMEOUT_MS,
+  outputOpen: SLOW_REQUEST_TIMEOUT_MS
 }
 
 interface WireReply {
@@ -351,12 +371,28 @@ export class NativeAudioEngine {
     return this.request('seek', { cueId, positionMs, whenMs }) as Promise<AudioSeekResult>
   }
 
-  release(cueId: string, whenMs?: number, endMs?: number): Promise<AudioCommandResult> {
-    return this.request('release', { cueId, whenMs, endMs }) as Promise<AudioCommandResult>
+  release(cueId: string, whenMs?: number, endMs?: number, stopAtSliceEnd?: boolean): Promise<AudioCommandResult> {
+    return this.request('release', { cueId, whenMs, endMs, stopAtSliceEnd }) as Promise<AudioCommandResult>
   }
 
   cancel(cueId: string, whenMs?: number): Promise<AudioCancelResult> {
     return this.request('cancel', { cueId, whenMs }) as Promise<AudioCancelResult>
+  }
+
+  pause(cueId: string, whenMs?: number): Promise<AudioCommandResult> {
+    return this.request('pause', { cueId, whenMs }) as Promise<AudioCommandResult>
+  }
+
+  resume(cueId: string, whenMs?: number): Promise<AudioCommandResult> {
+    return this.request('resume', { cueId, whenMs }) as Promise<AudioCommandResult>
+  }
+
+  master(gain: number): Promise<AudioCommandResult> {
+    return this.request('master', { gain }) as Promise<AudioCommandResult>
+  }
+
+  meters(): Promise<AudioMeters> {
+    return this.request('meters', {}) as Promise<AudioMeters>
   }
 
   fade(
@@ -365,9 +401,12 @@ export class NativeAudioEngine {
     value: number,
     durationMs: number,
     curve: AudioFadeCurve,
-    whenMs?: number
+    whenMs?: number,
+    shape?: number[] | null
   ): Promise<AudioCommandResult> {
-    return this.request('fade', { cueId, param, value, durationMs, curve, whenMs }) as Promise<AudioCommandResult>
+    return this.request('fade', {
+      cueId, param, value, durationMs, curve, whenMs, shape: shape ?? undefined
+    }) as Promise<AudioCommandResult>
   }
 
   routing(cueId: string, outputs: AudioCrosspoint[] | null): Promise<AudioCommandResult> {
@@ -428,6 +467,65 @@ export class NativeAudioEngine {
     return this.request('silence', { filePath, thresholdDb }, SLOW_VERBS.silence) as Promise<AudioSilence>
   }
 
+  loudness(filePath: string): Promise<AudioLoudness> {
+    return this.request('loudness', { filePath }, SLOW_VERBS.loudness) as Promise<AudioLoudness>
+  }
+
+  async inputs(): Promise<AudioInputDevice[]> {
+    const result = (await this.request('inputs', {}, SLOW_VERBS.inputs)) as { inputs: AudioInputDevice[] }
+    return result.inputs
+  }
+
+  inputOpen(options: AudioInputOpenOptions): Promise<AudioInputStatus> {
+    return this.request('inputOpen', { ...options }, SLOW_VERBS.inputOpen) as Promise<AudioInputStatus>
+  }
+
+  inputClose(device: string): Promise<{ closed: boolean }> {
+    return this.request('inputClose', { device }) as Promise<{ closed: boolean }>
+  }
+
+  async inputStatus(): Promise<AudioInputStatus[]> {
+    const result = (await this.request('inputStatus', {})) as { feeds: AudioInputStatus[] }
+    return result.feeds
+  }
+
+  startInput(
+    cueId: string,
+    whenMs: number,
+    device: string,
+    channels: number[],
+    options: Partial<AudioStartOptions>
+  ): Promise<AudioStartResult> {
+    return this.request('startInput', { cueId, whenMs, device, channels, options }, SLOW_VERBS.startInput) as
+      Promise<AudioStartResult>
+  }
+
+  patch(slot: number, outputs: number[] | null, gain: number, device = ''): Promise<AudioPatchResult> {
+    return this.request('patch', { slot, outputs, gain, device }, SLOW_VERBS.patch) as Promise<AudioPatchResult>
+  }
+
+  async outputs(): Promise<AudioOutputDevice[]> {
+    const result = (await this.request('outputs', {}, SLOW_VERBS.outputs)) as { outputs: AudioOutputDevice[] }
+    return result.outputs
+  }
+
+  outputOpen(options: AudioOutputOpenOptions): Promise<AudioOutputStatus> {
+    return this.request('outputOpen', { ...options }, SLOW_VERBS.outputOpen) as Promise<AudioOutputStatus>
+  }
+
+  outputClose(device: string): Promise<{ closed: boolean }> {
+    return this.request('outputClose', { device }) as Promise<{ closed: boolean }>
+  }
+
+  async outputStatus(): Promise<AudioOutputStatus[]> {
+    const result = (await this.request('outputStatus', {})) as { outputs: AudioOutputStatus[] }
+    return result.outputs
+  }
+
+  outputGains(gains: number[]): Promise<AudioCommandResult> {
+    return this.request('outputGains', { gains }) as Promise<AudioCommandResult>
+  }
+
   waveform(filePath: string, points: number, region?: AudioRegion): Promise<AudioWaveform> {
     // The requested point count goes over the wire unchanged: the engine clamps it to
     // its own bound and reports back whether it had to, which is what the caller shows.
@@ -459,12 +557,20 @@ export class NativeAudioEngine {
     const args = ['--socket', path, '--backend', readEnv('CUERUNNER_AUDIO_BACKEND') ?? 'auto']
     const capture = readEnv('CUERUNNER_TEST_AUDIO_CAPTURE')
     if (capture !== undefined && !appIsPackaged()) args.push('--capture', capture)
+    // The engine's synthetic live inputs, for a test run on a machine with no input device.
+    if (readEnv('CUERUNNER_TEST_INPUTS') === '1' && !appIsPackaged()) args.push('--test-inputs')
+    // And its test output devices, for a test of a show on two devices on a machine with one.
+    if (readEnv('CUERUNNER_TEST_OUTPUTS') === '1' && !appIsPackaged()) args.push('--test-outputs')
     const deviceId = readEnv('CUERUNNER_AUDIO_DEVICE')
     if (deviceId !== undefined) args.push('--device', deviceId)
     const exclusive = readEnv('CUERUNNER_AUDIO_EXCLUSIVE')
     if (exclusive !== undefined) args.push('--exclusive', exclusive)
     const sampleRate = readEnv('CUERUNNER_AUDIO_SAMPLE_RATE')
     if (sampleRate !== undefined) args.push('--sample-rate', sampleRate)
+    // How many outputs the engine opens with: what a test of routing across more than a pair
+    // asks of the silent backend, which takes no device configuration once it is running.
+    const channels = readEnv('CUERUNNER_AUDIO_CHANNELS')
+    if (channels !== undefined && !appIsPackaged()) args.push('--channels', channels)
 
     const child = this.spawnEngine(binaryPath, args, { stdio: ['ignore', 'pipe', 'pipe'] })
     this.child = child
@@ -898,6 +1004,25 @@ export class NativeAudioEngine {
    */
   simulateDeviceLossForTest(): Promise<void> {
     return this.request('simulateDeviceNotification', { type: 'stopped', deliberate: false }).then(() => undefined)
+  }
+
+  /**
+   * Pulls one of the engine's test output devices, for the multi-device acceptance test. The
+   * engine runs the same classification a real device's notification runs, and refuses the
+   * verb for anything but a test output, so it can neither stand in for nor mask a genuine
+   * event. Reachable only through the dev harness, which a packaged build never installs.
+   */
+  simulateOutputLossForTest(device: string): Promise<void> {
+    return this.request('simulateDeviceNotification', { type: 'stopped', deliberate: false, device }).then(() => undefined)
+  }
+
+  /**
+   * One linear-timecode verb (native/audio/src/ltc.h), answered as the engine answers it.
+   * The timecode module owns the shapes on either side (src/main/timecode/ltc.ts); this is
+   * only the door to the socket, so the LTC block of the wire has one caller.
+   */
+  ltc(verb: Extract<AudioWireVerb, `ltc${string}`>, params: Record<string, unknown> = {}): Promise<unknown> {
+    return this.request(verb, params)
   }
 
   private failPending(error: Error): void {

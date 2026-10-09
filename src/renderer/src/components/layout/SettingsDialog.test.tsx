@@ -102,7 +102,7 @@ describe('SettingsDialog', () => {
     render()
     expect(text('.settings-tab-group-title')).toBe('This show|This computer')
     expect(text('.settings-tab')).toBe(
-      'General|Audio|MIDI|Network|Wireless|Backup machine|License'
+      'General|Audio|MIDI|Network|Wireless|Backup machine|Timecode|License|Updates'
     )
   })
 

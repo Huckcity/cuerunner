@@ -24,5 +24,7 @@ describe('the name the app calls itself', () => {
   it('is never the one it had before the rename', () => {
     const stale = sourceFiles('src').filter(path => /winslab/i.test(readFileSync(path, 'utf8')))
     expect(stale, 'these sources still say WinsLab').toEqual([])
-  })
+    // Every source file, read whole: milliseconds on a desk, but the records lane shares its
+    // runner with the e2e lanes, and there a whole-tree read has taken fourteen seconds.
+  }, 60_000)
 })

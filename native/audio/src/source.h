@@ -11,7 +11,7 @@
 
 namespace ws {
 
-enum class Format { Unknown = 0, Wav, Mp3, Ogg, Flac, M4a, Aiff };
+enum class Format { Unknown = 0, Wav, Mp3, Ogg, Flac, M4a, Aiff, Matroska };
 
 const char* formatName(Format format);
 
@@ -20,7 +20,8 @@ enum class SourceError {
   None = 0,
   Unreadable,          // missing, or not media we can parse
   UnsupportedFormat,   // a format we do not decode at all
-  DecoderUnavailable   // the format needs a decoder this build/session does not have
+  DecoderUnavailable,  // the format needs a decoder this build/session does not have
+  NoAudioTrack         // a video container with no sound in it: a picture, not a failure
 };
 
 struct SourceInfo {

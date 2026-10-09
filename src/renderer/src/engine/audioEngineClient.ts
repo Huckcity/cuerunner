@@ -35,6 +35,15 @@ import type {
   AudioProbe,
   AudioOnsets,
   AudioSilence,
+  AudioLoudness,
+  AudioInputDevice,
+  AudioInputOpenOptions,
+  AudioInputStatus,
+  AudioMeters,
+  AudioOutputDevice,
+  AudioOutputOpenOptions,
+  AudioOutputStatus,
+  AudioPatchResult,
   AudioProgress,
   AudioSeekResult,
   AudioRegion,
@@ -187,12 +196,51 @@ export class AudioEngineClient {
    * over from wherever this had got to (`adoptClock`), so nothing scheduled meanwhile moves.
    */
   nowMs(): number {
+    // A held show stands still: nothing scheduled on this clock comes due while it is held.
+    if (this.heldAtMs !== null) return this.heldAtMs
     if (!this.anchor) {
       const perfMs = performance.now()
       if (this.unanchoredSincePerfMs === null) this.unanchoredSincePerfMs = perfMs
       return perfMs - this.unanchoredSincePerfMs
     }
     return this.anchor.engineMs + (performance.now() - this.anchor.perfMs) + this.currentEpoch()
+  }
+
+  /** The show-clock moment the show was held at, or null while it runs. */
+  private heldAtMs: number | null = null
+
+  /**
+   * Holds the show clock where it stands: `nowMs()` reads the same until it is released, so
+   * no wait, pre-wait, handover or planned end comes due. The engine's own clock goes on —
+   * the voices the show is holding are held in the engine, by the runner.
+   */
+  holdClock(): void {
+    if (this.heldAtMs !== null) return
+    this.heldAtMs = this.nowMs()
+  }
+
+  /** Whether the show clock is held. */
+  clockHeld(): boolean {
+    return this.heldAtMs !== null
+  }
+
+  /**
+   * Lets the show clock go on from where it was held. The engine's clock kept running, so
+   * the projection absorbs the time held — the same way it absorbs an engine that was
+   * replaced — and a time on the show clock maps to an engine time that is that much later.
+   */
+  releaseClock(): void {
+    const heldAt = this.heldAtMs
+    if (heldAt === null) return
+    this.heldAtMs = null
+    const live = this.nowMs()
+    const gap = live - heldAt
+    if (gap <= 0) return
+    if (!this.anchor) {
+      if (this.unanchoredSincePerfMs !== null) this.unanchoredSincePerfMs += gap
+      return
+    }
+    if (this.sessionId !== null) this.epochs.set(this.sessionId, this.currentEpoch() - gap)
   }
 
   /** The epoch of the session the show is currently running on. */
@@ -329,6 +377,20 @@ export class AudioEngineClient {
         // A listener must not be able to stop the show clock with it.
       }
     }
+  }
+
+  /**
+   * A show-clock time as the engine's own clock reads it. Public for the one other process
+   * that has to place things on the engine's clock — a video output, which keeps its
+   * pictures on the clock the sound of them is scheduled on (src/renderer/src/output).
+   */
+  engineTime(showMs: number): number {
+    return this.toEngineMs(showMs)
+  }
+
+  /** An engine-clock time, as show time: the inverse of `engineTime`, for what an output reports. */
+  showTime(engineMs: number): number {
+    return this.toShowMs(engineMs)
   }
 
   /** Show-clock ms as the engine's own clock measures it. Every outbound time. */
@@ -494,6 +556,82 @@ export class AudioEngineClient {
     return { ...result, startAtMs: result.startAtMs + this.epochFor(sessionId) }
   }
 
+  /**
+   * Starts a live voice: `channels` of the input `device` as the voice's own channels, at
+   * show time `whenMs`. Watched like a file voice, so its end and its progress come back the
+   * same way.
+   */
+  async startInput(
+    cueId: string,
+    whenMs: number,
+    device: string,
+    channels: number[],
+    options: Partial<AudioStartOptions>
+  ): Promise<AudioStartResult> {
+    const sessionId = this.sessionId ?? ''
+    const result = await bridge().startInput(cueId, this.toEngineMs(whenMs), device, channels, options)
+    this.watched.set(cueId, { sessionId: this.sessionId ?? '', runId: result.runId })
+    return { ...result, startAtMs: result.startAtMs + this.epochFor(sessionId) }
+  }
+
+  /** The capture devices a live input can be taken from. */
+  inputs(): Promise<AudioInputDevice[]> {
+    return bridge().inputs()
+  }
+
+  /** Opens a live input ahead of its cue, so GO is instant. */
+  inputOpen(options: AudioInputOpenOptions): Promise<AudioInputStatus> {
+    return bridge().inputOpen(options)
+  }
+
+  inputClose(device: string): Promise<{ closed: boolean }> {
+    return bridge().inputClose(device)
+  }
+
+  /** Every open live input: its latency, drift correction, counters and meter. */
+  inputStatus(): Promise<AudioInputStatus[]> {
+    return bridge().inputStatus()
+  }
+
+  /**
+   * Defines output patch `slot` on `device` ('' is the main device), or clears it with null.
+   * The answer says which device it plays on, and why when that is not the one it named.
+   */
+  async patch(slot: number, outputs: number[] | null, gain: number, device = ''): Promise<AudioPatchResult> {
+    const result = await bridge().patch(slot, outputs, gain, device)
+    return { ...result, at: this.toShowMs(result.at) }
+  }
+
+  /** The output devices a patch can name. */
+  outputs(): Promise<AudioOutputDevice[]> {
+    return bridge().outputs()
+  }
+
+  /** Opens an extra output device — or again, after it was lost: the reconnect. */
+  outputOpen(options: AudioOutputOpenOptions): Promise<AudioOutputStatus> {
+    return bridge().outputOpen(options)
+  }
+
+  outputClose(device: string): Promise<{ closed: boolean }> {
+    return bridge().outputClose(device)
+  }
+
+  /** Every extra output device: whether it plays, its clock against the main one, its buffer. */
+  outputStatus(): Promise<AudioOutputStatus[]> {
+    return bridge().outputStatus()
+  }
+
+  /** Every device output's own fader, linear. */
+  async outputGains(gains: number[]): Promise<AudioCommandResult> {
+    const result = await bridge().outputGains(gains)
+    return { ...result, at: this.toShowMs(result.at) }
+  }
+
+  /** A file's integrated loudness and true peak. */
+  loudness(filePath: string): Promise<AudioLoudness> {
+    return bridge().loudness(filePath)
+  }
+
   async stop(cueId: string, fadeMs = 0, whenMs?: number): Promise<AudioCommandResult> {
     const result = await bridge().stop(cueId, fadeMs, whenMs === undefined ? undefined : this.toEngineMs(whenMs))
     this.watched.delete(cueId)
@@ -530,9 +668,35 @@ export class AudioEngineClient {
    * when the cue is trimmed of its trailing silence, which is where its sound stops.
    * The verb a devamp cue sends; `applied` says whether there was a loop to release.
    */
-  async release(cueId: string, whenMs?: number, endMs?: number): Promise<AudioCommandResult> {
-    const result = await bridge().release(cueId, whenMs === undefined ? undefined : this.toEngineMs(whenMs), endMs)
+  async release(cueId: string, whenMs?: number, endMs?: number, stopAtSliceEnd?: boolean): Promise<AudioCommandResult> {
+    const at = whenMs === undefined ? undefined : this.toEngineMs(whenMs)
+    const result = stopAtSliceEnd === true
+      ? await bridge().release(cueId, at, endMs, true)
+      : await bridge().release(cueId, at, endMs)
     return { ...result, at: this.toShowMs(result.at) }
+  }
+
+  /** Holds a cue's voice where it stands; its timed things wait with it. */
+  async pause(cueId: string, whenMs?: number): Promise<AudioCommandResult> {
+    const result = await bridge().pause(cueId, whenMs === undefined ? undefined : this.toEngineMs(whenMs))
+    return { ...result, at: this.toShowMs(result.at) }
+  }
+
+  /** Lets a held voice go on. */
+  async resume(cueId: string, whenMs?: number): Promise<AudioCommandResult> {
+    const result = await bridge().resume(cueId, whenMs === undefined ? undefined : this.toEngineMs(whenMs))
+    return { ...result, at: this.toShowMs(result.at) }
+  }
+
+  /** Sets the level everything leaves the engine at. */
+  async master(gain: number): Promise<AudioCommandResult> {
+    const result = await bridge().master(gain)
+    return { ...result, at: this.toShowMs(result.at) }
+  }
+
+  /** Reads the output's meter: each channel's peak over the last block, after the master. */
+  meters(): Promise<AudioMeters> {
+    return bridge().meters()
   }
 
   /** Drops a cue's future-dated verbs — a start or a stop that has not fired yet. */
@@ -546,12 +710,15 @@ export class AudioEngineClient {
     param: AudioFadeParam,
     value: number,
     durationMs = 0,
-    curve: 'linear' | 'sCurve' | 'logarithmic' = 'linear',
-    whenMs?: number
+    curve: 'linear' | 'sCurve' | 'logarithmic' | 'custom' = 'linear',
+    whenMs?: number,
+    shape?: number[] | null
   ): Promise<AudioCommandResult> {
-    const result = await bridge().fade(
-      cueId, param, value, durationMs, curve, whenMs === undefined ? undefined : this.toEngineMs(whenMs)
-    )
+    const at = whenMs === undefined ? undefined : this.toEngineMs(whenMs)
+    // A fade with no drawn shape is the call it always was.
+    const result = shape
+      ? await bridge().fade(cueId, param, value, durationMs, 'custom', at, shape)
+      : await bridge().fade(cueId, param, value, durationMs, curve, at)
     return { ...result, at: this.toShowMs(result.at) }
   }
 

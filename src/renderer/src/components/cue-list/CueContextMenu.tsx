@@ -5,6 +5,11 @@ import { useStore } from '../../store'
 import { CUE_COLORS, CUE_COLOR_SWATCH } from '../../utils/cueColors'
 import { regionEndMs } from '../../utils/cueSplit'
 import { formatShortcut } from '../../utils/shortcuts'
+import { canTarget, targetingBlock, type TargetingKind } from '../../utils/batchEdit'
+import { nextCueNumber } from '../../utils/cueDefaults'
+import { canPaste, copyCues, pasteCues } from '../../hooks/useCueClipboard'
+import { audition, auditionItemOf } from '../../engine/audition'
+import { normalizable, normalizeSummary, planNormalize } from '../../utils/normalize'
 import './CueContextMenu.css'
 
 interface Props {
@@ -13,10 +18,12 @@ interface Props {
   cue: Cue
   onClose: () => void
   onRename: () => void
+  /** Opens the batch edit for these cues; the list owns the dialog, since the menu closes. */
+  onBatchEdit?: (ids: string[]) => void
 }
 
 const MENU_WIDTH = 176
-const MENU_HEIGHT = 300
+const MENU_HEIGHT = 400
 
 /** What the split item would do, where the cursor is: "Split at 1:23.4". */
 function splitHint(cue: Cue, atMs: number): string {
@@ -35,14 +42,20 @@ function splitHint(cue: Cue, atMs: number): string {
  * not selected, so the right-click moved the selection to it — is a selection of one, and
  * reads exactly as it always did.
  */
-export function CueContextMenu({ x, y, cue, onClose, onRename }: Props) {
+export function CueContextMenu({ x, y, cue, onClose, onRename, onBatchEdit }: Props) {
   const cues = useStore(s => s.cues)
   const selectedIds = useStore(s => s.selectedIds)
   const removeCues = useStore(s => s.removeCues)
   const duplicateCues = useStore(s => s.duplicateCues)
   const updateCues = useStore(s => s.updateCues)
   const splitAudioCueAt = useStore(s => s.splitAudioCueAt)
+  const insertCues = useStore(s => s.insertCues)
   const cursor = useStore(s => s.waveformCursor)
+  // The other lists, for "Move to": the one on screen is where the cues already are.
+  const lists = useStore(s => s.cueLists)
+  const activeListId = useStore(s => s.activeListId)
+  const otherLists = lists.filter(list => list.id !== activeListId)
+  const moveCuesToList = useStore(s => s.moveCuesToList)
   const menuRef = useRef<HTMLDivElement>(null)
   /** Where the keyboard is in the menu: the item per index, in the order drawn. */
   const [activeIndex, setActiveIndex] = useState(0)
@@ -109,6 +122,32 @@ export function CueContextMenu({ x, y, cue, onClose, onRename }: Props) {
   const handleDuplicate = () => { duplicateCues(targets); onClose() }
   const handleDelete = () => { removeCues(targets); onClose() }
   const handleArmToggle = () => { updateCues(targets, { isArmed: !allArmed }); onClose() }
+  const handleBatchEdit = () => { onBatchEdit?.(targets); onClose() }
+
+  // A fade or a stop made for the selection, put after the last cue it acts on: one cue aimed
+  // at every target, however many. One edit, one undo.
+  const aimable = (kind: TargetingKind) => targetCues.filter(target => canTarget(kind, target))
+  const handleTargeting = (kind: TargetingKind) => {
+    const aimedAt = aimable(kind)
+    const block = targetingBlock(kind, aimedAt, nextCueNumber(cues))
+    if (block.length > 0) insertCues(block, aimedAt[aimedAt.length - 1].id)
+    onClose()
+  }
+  // The selection's sound, heard on the audition output in list order, and its loudness set to
+  // the show's target as one edit.
+  const audible = targetCues.filter(c => auditionItemOf(c) !== null)
+  const loud = targetCues.filter(normalizable)
+  const handleAudition = () => { audition.playCues(audible, useStore.getState().audioSettings); onClose() }
+  const handleNormalize = () => {
+    onClose()
+    void planNormalize(loud, useStore.getState().audioSettings).then(({ patches, outcomes }) => {
+      const state = useStore.getState()
+      if (Object.keys(patches).length > 0) state.patchCues(patches)
+      state.appendLog([{ level: 'info', message: normalizeSummary(outcomes) }])
+    })
+  }
+  const fadeCount = aimable('fade').length
+  const stopCount = aimable('stop').length
 
   // A split is offered when there is a place to make one: an audio cue whose region the
   // waveform cursor is inside, and the cursor is this cue's — it is a time in a file, and
@@ -155,6 +194,58 @@ export function CueContextMenu({ x, y, cue, onClose, onRename }: Props) {
         {allArmed ? 'Disarm' : 'Arm'}{count}
         <kbd>{formatShortcut('Mod+Shift+A')}</kbd>
       </button>
+      {otherLists.map(list => (
+        <button key={list.id} className="cue-context-menu-item" data-action="move-to-list" data-list-id={list.id}
+          onClick={() => { moveCuesToList(targets, list.id); onClose() }} onMouseEnter={e => e.currentTarget.focus()}>
+          <span className="cue-context-menu-icon">⇥</span>
+          Move{count} to “{list.name}”
+        </button>
+      ))}
+      <div className="cue-context-menu-separator" />
+      <button className="cue-context-menu-item" data-action="copy" onClick={() => { copyCues(targets); onClose() }} onMouseEnter={e => e.currentTarget.focus()}>
+        <span className="cue-context-menu-icon">⎘</span>
+        Copy{count}
+        <kbd>{formatShortcut('Mod+C')}</kbd>
+      </button>
+      {canPaste() && (
+        <button className="cue-context-menu-item" data-action="paste" onClick={() => { pasteCues(); onClose() }} onMouseEnter={e => e.currentTarget.focus()}>
+          <span className="cue-context-menu-icon">⎗</span>
+          Paste after
+          <kbd>{formatShortcut('Mod+V')}</kbd>
+        </button>
+      )}
+      {several && onBatchEdit && (
+        <button className="cue-context-menu-item" data-action="batch-edit" onClick={handleBatchEdit} onMouseEnter={e => e.currentTarget.focus()}>
+          <span className="cue-context-menu-icon">⋯</span>
+          Edit{count}…
+        </button>
+      )}
+      {audible.length > 0 && (
+        <button className="cue-context-menu-item" data-action="audition" onClick={handleAudition} onMouseEnter={e => e.currentTarget.focus()}
+          title="Hear it on the audition output, without firing the show">
+          <span className="cue-context-menu-icon">▷</span>
+          Audition{audible.length > 1 ? ` (${audible.length})` : ''}
+        </button>
+      )}
+      {loud.length > 0 && (
+        <button className="cue-context-menu-item" data-action="normalize" onClick={handleNormalize} onMouseEnter={e => e.currentTarget.focus()}
+          title="Measure each file (EBU R128) and set each trim to the show's loudness target, as one edit">
+          <span className="cue-context-menu-icon">≈</span>
+          Normalize loudness{loud.length > 1 ? ` (${loud.length})` : ''}
+        </button>
+      )}
+      {fadeCount > 0 && (
+        <button className="cue-context-menu-item" data-action="fade-out" onClick={() => handleTargeting('fade')} onMouseEnter={e => e.currentTarget.focus()}>
+          <span className="cue-context-menu-icon">↘</span>
+          Fade out{fadeCount > 1 ? ` (${fadeCount})` : ''}
+        </button>
+      )}
+      {stopCount > 0 && (
+        <button className="cue-context-menu-item" data-action="stop-cue" onClick={() => handleTargeting('stop')} onMouseEnter={e => e.currentTarget.focus()}>
+          <span className="cue-context-menu-icon">■</span>
+          Add stop{stopCount > 1 ? ` (${stopCount})` : ''}
+        </button>
+      )}
       <div className="cue-context-menu-separator" />
       {/* The eight colours, drawn where the cue is: the same pick as the inspector's, for
           the hand that is on the list rather than on the panel. */}

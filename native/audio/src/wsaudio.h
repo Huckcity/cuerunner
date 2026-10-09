@@ -23,7 +23,7 @@ inline constexpr const char* kEngineVersion = "1.0.0";
  * held against the declaration in src/shared/audio.ts by src/main/audio/audioWire.test.ts.
  * There is one copy of this number, in code, tests and docs: this one.
  */
-inline constexpr int kWireProtocolVersion = 3;
+inline constexpr int kWireProtocolVersion = 4;
 
 /**
  * How a declared bound treats a request that asks past it. `Refuse` is a request that
@@ -192,7 +192,61 @@ struct SilenceDTO {
 
 constexpr int kMaxOutputFrames = 4096;
 
-enum class Curve : int { Linear = 0, SCurve = 1, Logarithmic = 2 };
+/**
+ * The output patches a voice can be routed through (a named device-channel map with its own
+ * fader and meter), the slices one voice's file can be cut into, and the live inputs the
+ * engine can hold open at once. Engine sizes, not declared bounds: a request past one is
+ * refused where it is read, with a sentence that names it.
+ */
+constexpr int kMaxPatches = 16;
+constexpr int kMaxSlices = 32;
+constexpr int kMaxInputFeeds = 8;
+/**
+ * The output devices the engine can play beside the one it opened (aux_output.h): each one a
+ * stream of its own that a patch can name, locked to the main device's clock. An engine size
+ * like the ones above; a device past the last is refused by name where it is asked for.
+ */
+constexpr int kMaxAuxOutputs = 8;
+/** Points in a drawn fade shape: enough that a smooth curve read between them is within half a
+ *  percent of itself where it is steepest, few enough to travel inside a command. */
+constexpr int kMaxCurvePoints = 65;
+
+enum class Curve : int { Linear = 0, SCurve = 1, Logarithmic = 2, Table = 3 };
+
+/**
+ * A fade's shape drawn as a table: the share of the change done at `count` evenly spaced
+ * points from the start of the fade (0) to its end (1), read between points in a straight
+ * line. Any shape the window can draw — a preset, a Bézier — arrives as one of these, so the
+ * engine plays exactly what the curve editor drew without knowing how it was drawn.
+ */
+struct CurveTable {
+  int count = 0;  // 0: no table; the ramp's named curve applies
+  float values[kMaxCurvePoints] = {};
+};
+
+/** The share of a fade done at `t` (0–1) on a table, read between its points. */
+inline double curveTableValue(const CurveTable& table, double t) {
+  if (table.count < 2) return t;
+  if (!(t > 0.0)) return static_cast<double>(table.values[0]);
+  if (t >= 1.0) return static_cast<double>(table.values[table.count - 1]);
+  const double x = t * static_cast<double>(table.count - 1);
+  const int index = static_cast<int>(x);
+  if (index >= table.count - 1) return static_cast<double>(table.values[table.count - 1]);
+  const double fraction = x - static_cast<double>(index);
+  const double from = static_cast<double>(table.values[index]);
+  const double to = static_cast<double>(table.values[index + 1]);
+  return from + (to - from) * fraction;
+}
+
+/**
+ * One slice of a file: a region the voice plays `playCount` times before it moves on to the
+ * next, or until it is released when the count is -1 — a vamp. Times are file ms.
+ */
+struct SliceSpec {
+  double startMs = 0.0;
+  double endMs = 0.0;
+  int playCount = 1;
+};
 enum class Param : int { Volume = 0, Pan = 1, Trim = 2, Rate = 3 };
 enum class VoiceState : int { Idle = 0, Scheduled = 1, Playing = 2, Fading = 3, Stopped = 4 };
 enum class EndReason : int { Complete = 0, Stopped = 1, Replaced = 2, Cancelled = 3, DeviceLost = 4, Error = 5 };
@@ -215,6 +269,21 @@ struct StartOptions {
   bool automatic = true;  // outputs === null in the contract
   int crosspointCount = 0;
   Crosspoint crosspoints[kMaxCrosspoints] = {};
+  /** The output patch this voice plays through, or -1 for the device's own channels. With
+   *  a patch, the crosspoints and automatic routing address the patch's channels. */
+  int patch = -1;
+  /** The fade-in's drawn shape; an empty table is the straight line it always was. */
+  CurveTable fadeInShape;
+  /** The file cut into slices, played in order; none is the one region and its loop count. */
+  int sliceCount = 0;
+  SliceSpec slices[kMaxSlices] = {};
+  /**
+   * A live voice: the input feed it reads, and which of the feed's channels are its own
+   * channels 0..n-1. Unused (-1) for a voice that plays a file.
+   */
+  int inputFeed = -1;
+  int inputChannelCount = 0;
+  int inputChannels[kMaxOutputChannels] = {};
 };
 
 struct VoiceSnapshot {
@@ -245,6 +314,26 @@ struct MixSnapshot {
   uint64_t xruns = 0;
   int voiceCount = 0;
   VoiceSnapshot voices[kMaxVoices] = {};
+  // The output's own reading: each channel's peak over the last block rendered, after the
+  // master level, and the level itself — what the window's meter draws.
+  int meterChannels = 0;
+  float meterPeak[kMaxOutputChannels] = {};
+  double masterGain = 1.0;
+};
+
+// The meters only some shows have, in a record of their own so the main snapshot — copied on
+// every block — is no bigger for a show without patches or extra output devices. Published
+// only while a patch is defined or an extra device is open (Mixer::writeOptionalMeters).
+struct OptionalMeters {
+  // Each output patch's own meter: the peak of each of its channels over the last block,
+  // after its fader. A patch slot that is not defined reads zero channels.
+  int busChannels[kMaxPatches] = {};
+  float busPeak[kMaxPatches][kMaxOutputChannels] = {};
+  // Each extra output device's own reading, the way `meterPeak` is the main device's: the
+  // peak of each of its channels over the last block, after the master level. A slot with
+  // no device open reads zero channels.
+  int auxChannels[kMaxAuxOutputs] = {};
+  float auxPeak[kMaxAuxOutputs][kMaxOutputChannels] = {};
 };
 
 struct Event {
@@ -285,7 +374,22 @@ struct Command {
     Routing = 7,
     Panic = 8,
     Shutdown = 9,
-    Release = 10
+    Release = 10,
+    // A hold on one voice where it stands, and the end of it: the voice keeps its place in
+    // the file and every timed thing about it — a fade, a scheduled stop — waits with it.
+    Pause = 11,
+    Resume = 12,
+    // The level everything leaves the engine at, after every voice is mixed.
+    Master = 13,
+    // One output patch defined (its channel map and fader) or cleared, and the per-output
+    // faders: the mixer's controls, applied on the audio thread like every other change.
+    Bus = 14,
+    OutputGains = 15,
+    // An extra output device opened (its channel count) or closed (0), so the mixer mixes
+    // the patches that name it into a block of its own; and one that was lost, whose
+    // voices end `device-lost` while every other device plays on.
+    AuxOutput = 16,
+    AuxLost = 17
   } kind = None;
 
   char cueId[kMaxCueIdLen] = {};
@@ -301,8 +405,23 @@ struct Command {
   // A release's named end, in file ms: absent plays out to the end of the file.
   bool hasEndMs = false;
   double endMs = 0.0;
+  // A release that ends the voice at the end of the pass it is in, rather than playing on.
+  bool stopAtSliceEnd = false;
   Param param = Param::Volume;
   Curve curve = Curve::Linear;
+  CurveTable shape;
+  // A bus: its slot, whether it is defined, its channel map (patch channel -> device
+  // output, -1 for none) and its fader. Output gains: one per device output.
+  int busSlot = -1;
+  bool busDefined = false;
+  int busChannels = 0;
+  int busMap[kMaxOutputChannels] = {};
+  // The device a bus is mixed onto: -1 the main one, otherwise an extra output's slot.
+  int busAux = -1;
+  // An extra output device's slot, and its channel count (0: closed).
+  int auxSlot = -1;
+  int auxChannels = 0;
+  float outputGains[kMaxOutputChannels] = {};
   double value = 0.0;
   double durationMs = 0.0;
   StartOptions options;

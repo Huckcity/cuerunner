@@ -46,6 +46,12 @@ export interface PlaybackDevHarness {
    * device is open, so a spec can only ever exercise this on the silent backend.
    */
   simulateDeviceLoss: () => Promise<void>
+  /**
+   * Pulls one of the engine's test output devices mid-show: the engine runs the same
+   * classification a real device's notification runs, and refuses it for anything but a test
+   * output, so a spec can only ever exercise this on a device that is not hardware.
+   */
+  simulateOutputLoss: (device: string) => Promise<void>
 }
 
 declare global {
@@ -70,6 +76,8 @@ export interface PlaybackDevHarnessDeps {
      * when a real device is open, so it cannot mask or imitate a genuine event.
      */
     simulateDeviceLoss: () => Promise<void>
+    /** One test output device's loss, through the same classification; refused for real devices. */
+    simulateOutputLoss: (device: string) => Promise<void>
   }
 }
 
@@ -83,6 +91,7 @@ export function installPlaybackDevHarness(deps: PlaybackDevHarnessDeps): void {
     engineInfo: () => deps.engine.info(),
     engineEvents: () => deps.engine.recentEvents(),
     killEngine: () => deps.engine.kill(),
-    simulateDeviceLoss: () => deps.engine.simulateDeviceLoss()
+    simulateDeviceLoss: () => deps.engine.simulateDeviceLoss(),
+    simulateOutputLoss: (device: string) => deps.engine.simulateOutputLoss(device)
   }
 }

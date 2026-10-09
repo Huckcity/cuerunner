@@ -12,6 +12,11 @@ import { resampleNotice } from '../../utils/sampleRate'
 import { AUDIO_DEFAULTS, cueNameFromFile, DEFAULT_AUDIO_CUE_NAME } from '../../utils/cueDefaults'
 import { trimAmounts } from '../../utils/silenceTrim'
 import { AUDIO_SILENCE_THRESHOLD_DB } from '../../../../shared/audio'
+import { CurveEditor } from '../audio/CurveEditor'
+import { PatchSelect } from '../audio/PatchSelect'
+import { NormalizeControls } from '../audio/NormalizeControls'
+import { AuditionButton } from '../audio/AuditionButton'
+import { SlicesEditor } from './SlicesEditor'
 
 interface Props { cue: AudioCue; tab: string }
 
@@ -195,6 +200,8 @@ export function AudioInspector({ cue, tab }: Props) {
     }
   }
 
+  if (tab === 'Slices') return <SlicesEditor cue={cue} />
+
   if (tab === 'Time & Loops') {
     const toSeconds = (ms: number) => Math.round(ms / 100) / 10  // 1 decimal
     const fromSeconds = (s: number) => Math.round(s * 1000)
@@ -239,6 +246,20 @@ export function AudioInspector({ cue, tab }: Props) {
           <ResetButton label="Fade in" value={cue.fadeInDuration} defaultValue={AUDIO_DEFAULTS.fadeInDuration}
             onReset={() => set({ fadeInDuration: AUDIO_DEFAULTS.fadeInDuration })} />
         </div>
+        <CurveEditor name="audio-fade-in" label="Fade-in shape" defaultLabel="linear" shape={cue.fadeInShape}
+          onChange={shape => set({ fadeInShape: shape })} />
+        <div className="field-row">
+          <label>Fade out (s)</label>
+          <NumberField when="typed" min={0} step={0.1} value={toSeconds(cue.fadeOutDuration ?? 0)}
+            onValue={seconds => { if (seconds !== null) set({ fadeOutDuration: fromSeconds(seconds) }) }} />
+          <ResetButton label="Fade out" value={cue.fadeOutDuration ?? 0} defaultValue={AUDIO_DEFAULTS.fadeOutDuration}
+            onReset={() => set({ fadeOutDuration: AUDIO_DEFAULTS.fadeOutDuration })} />
+        </div>
+        <CurveEditor name="audio-fade-out" label="Fade-out shape" defaultLabel="S-curve" shape={cue.fadeOutShape}
+          onChange={shape => set({ fadeOutShape: shape })} />
+        {(cue.fadeOutDuration ?? 0) > 0 && cue.loopCount < 0 && (
+          <p className="inspector-hint">A cue that loops for ever has no end to fade into.</p>
+        )}
         <div className="field-row">
           <label>Loop count</label>
           <NumberField when="typed" min={-1} value={cue.loopCount}
@@ -283,6 +304,13 @@ export function AudioInspector({ cue, tab }: Props) {
           onClick={pickFile} />
         <button onClick={pickFile} disabled={loading} className="inspector-btn">Browse</button>
       </div>
+      {cue.filePath !== '' && (
+        <div className="field-row">
+          <label>Audition</label>
+          <AuditionButton cue={cue} label="Audition cue" />
+          <AuditionButton filePath={cue.filePath} label="Whole file" className="audition-file" />
+        </div>
+      )}
       {folder !== '' && (
         <p className="inspector-hint audio-file-folder" title={folder}>{folder}</p>
       )}
@@ -316,6 +344,7 @@ export function AudioInspector({ cue, tab }: Props) {
         <ResetButton label="Trim" value={cue.trim} defaultValue={AUDIO_DEFAULTS.trim}
           onReset={() => applyTrim(AUDIO_DEFAULTS.trim)} />
       </div>
+      <NormalizeControls cue={cue} />
       <div className="field-section-title">Level</div>
       <div className="field-row">
         <label>Volume</label>
@@ -339,6 +368,7 @@ export function AudioInspector({ cue, tab }: Props) {
           onReset={() => applyPan(AUDIO_DEFAULTS.pan)} />
       </div>
       <div className="field-section-title">Output routing</div>
+      <PatchSelect name="audio" value={cue.outputPatchId} onChange={outputPatchId => set({ outputPatchId })} />
       <RoutingMatrix
         cue={cue}
         fileChannels={fileChannels}

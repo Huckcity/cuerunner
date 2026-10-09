@@ -1,5 +1,6 @@
-// The Timing tab dropped the audio Fade out field (dedicated Fade and Stop cues cover
-// it) and now states what the loop count range means.
+// The Timing tab once dropped the audio Fade out field because it never reached the audio
+// graph; it is back now that it does — the engine lands it on the cue's end (see
+// audio-fade-out.spec.ts) — and the tab states what the loop count range means.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -17,12 +18,12 @@ test.afterEach(async () => {
   await closeApp(app)
 })
 
-test('Audio Timing tab has no Fade out field and states the loop range', async () => {
+test('Audio Timing tab has Fade in and Fade out beside each other and states the loop range', async () => {
   await toolbarCueBtn(page, 'Audio').click()
   await page.locator('.inspector-tab', { hasText: 'Time & Loops' }).click()
 
-  await expect(page.locator('.inspector')).not.toContainText('Fade out')
   await expect(page.locator('.field-row').filter({ hasText: 'Fade in' })).toBeVisible()
+  await expect(page.locator('.field-row').filter({ hasText: 'Fade out' }).locator('input')).toHaveValue('0')
   await expect(page.locator('.inspector')).toContainText('0 = play once, -1 = forever')
 
   // The loop hint sits under its field rather than beside it: sharing the row squeezed

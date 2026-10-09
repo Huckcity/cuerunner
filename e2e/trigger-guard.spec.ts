@@ -75,18 +75,24 @@ test('the window is the show’s, and it is over when it is over', async () => {
   // operator typed rather than the third-of-a-second default.
   await setGuardWindow(page, 1500)
 
+  // The window opens when the first datagram is accepted, so every later send is timed from
+  // that send — not from when the poll below happened to see its hit, which on a loaded
+  // runner can be most of a second later and would push the second send out of the window.
+  const firstSent = Date.now()
   await sendOsc(port, '/eos/cue/12/fire')
   await expect.poll(hits).toBe(1)
+  const untilAfterFirst = (ms: number): Promise<void> =>
+    page.waitForTimeout(Math.max(0, firstSent + ms - Date.now()))
 
   // Inside the window, and long after the cue itself has finished: it is the guard that
   // has to refuse this one, not the re-fire interlock.
-  await page.waitForTimeout(1000)
+  await untilAfterFirst(1000)
   await sendOsc(port, '/eos/cue/12/fire')
-  await page.waitForTimeout(400)
+  await untilAfterFirst(1400)
   expect(hits()).toBe(1)
 
   // And a window is a window: once it has passed, the same datagram is heard again.
-  await page.waitForTimeout(1100)
+  await untilAfterFirst(2500)
   await sendOsc(port, '/eos/cue/12/fire')
   await expect.poll(hits).toBe(2)
 })

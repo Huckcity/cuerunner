@@ -166,4 +166,65 @@ describe('useCueTriggers', () => {
 
     expect(goById.mock.calls.map(call => call[0])).toEqual(['1', '2'])
   })
+
+  describe('the remote', () => {
+    let go: Mock
+    let stop: Mock
+
+    beforeEach(() => {
+      go = vi.spyOn(cueEngine, 'go').mockImplementation(() => {})
+      stop = vi.spyOn(cueEngine, 'stop').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+      go.mockRestore()
+      stop.mockRestore()
+    })
+
+    it('presses GO for a QLab /go, and the log says who pressed it', () => {
+      useStore.setState({ cues: [cue('1', [])] })
+      act(() => { deliver([osc('/go')]) })
+      expect(go).toHaveBeenCalledTimes(1)
+      expect(logMessages()).toEqual(['GO from OSC /go from 10.0.0.5:8000'])
+    })
+
+    it('fires a cue by its number for /cue/{n}/start', () => {
+      useStore.setState({ cues: [cue('1', []), cue('2', [])] })
+      act(() => { deliver([osc('/workspace/ABC/cue/2/start')]) })
+      expect(goById).toHaveBeenCalledWith('2')
+    })
+
+    it('leaves an address a cue’s own trigger answers to that cue', () => {
+      const goTrigger: CueTrigger = { id: 't3', kind: 'osc', address: '/go' }
+      useStore.setState({ cues: [cue('5', [goTrigger])] })
+      act(() => { deliver([osc('/go')]) })
+      expect(goById).toHaveBeenCalledWith('5')
+      expect(go).not.toHaveBeenCalled()
+    })
+
+    it('answers nothing when the show turned the remote off', () => {
+      const showSettings = useStore.getState().showSettings
+      useStore.setState({
+        cues: [cue('1', [])],
+        showSettings: { ...showSettings, oscIn: { ...showSettings.oscIn, remote: false } }
+      })
+      act(() => { deliver([osc('/go'), osc('/stop')]) })
+      expect(go).not.toHaveBeenCalled()
+      expect(stop).not.toHaveBeenCalled()
+      useStore.setState({ showSettings })
+    })
+
+    it('asks the repeat guard first, so a desk that sends /select/next twice steps once', () => {
+      // The guard's window is its own test's business (inputGuard.test.ts); what this pins is
+      // that the remote goes through it, as a trigger does.
+      const accepts = vi.spyOn(cueEngine, 'acceptsFire')
+        .mockReturnValueOnce(true)
+        .mockReturnValueOnce(false)
+      useStore.setState({ cues: [cue('1', []), cue('2', []), cue('3', [])], selectedId: '1' })
+      act(() => { deliver([osc('/select/next'), osc('/select/next')]) })
+      expect(accepts).toHaveBeenCalledWith('osc', '/select/next ')
+      expect(useStore.getState().selectedId).toBe('2')
+      accepts.mockRestore()
+    })
+  })
 })

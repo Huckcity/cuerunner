@@ -1,6 +1,11 @@
-import type { Cue } from './cue'
+import type { OutputFader, OutputPatch } from './audioRouting'
+import type { Cue, OscPatch } from './cue'
 import type { ShowSettings } from './show'
 import type { ShowHistoryEntry } from './showfile'
+import type { LightingSettings } from './dmx'
+import type { TimecodeShowSettings } from './timecode'
+import type { PictureSettings, VideoOutput } from './visual'
+import type { CueListInfo } from './cueLists'
 
 export interface AudioSettings {
   /**
@@ -23,6 +28,19 @@ export interface AudioSettings {
    * it on or off changes nothing that is already in the show.
    */
   autoTrimSilence?: boolean
+  /**
+   * Where the show's sound goes by name (src/shared/audioRouting.ts): output patches, the
+   * mixer's per-output faders, the patch audition plays through, and the loudness a cue is
+   * normalised to. Each is absent until the show says something with it, so a show saved
+   * before any of them existed saves byte for byte as it did.
+   */
+  outputPatches?: OutputPatch[]
+  outputFaders?: OutputFader[]
+  auditionPatchId?: string
+  /** EBU R128 integrated loudness a normalised cue is set to, LUFS. Absent is −23. */
+  loudnessTargetLufs?: number
+  /** The true peak a normalised cue stays under, dBTP. Absent is −1. */
+  truePeakCeilingDb?: number
 }
 
 export interface MidiSettings {
@@ -46,6 +64,11 @@ export interface TriggerGuardSettings {
    * rather than a constant.
    */
   windowMs: number
+  /**
+   * How long the operator's STOP fades everything over, ms. Optional, and absent or 0 is the
+   * cut STOP has always been; a show that fades has a second STOP during the fade cut it.
+   */
+  stopFadeMs?: number
 }
 
 /**
@@ -71,14 +94,24 @@ export function isUnnamedShow(name: string | undefined): boolean {
 export const TRIGGER_GUARD_MIN_MS = 0
 export const TRIGGER_GUARD_MAX_MS = 2000
 
+/** The longest STOP fade the setting takes: past this, STOP is a fade cue. */
+export const STOP_FADE_MAX_MS = 10_000
+
 /** Fills in a gate a workspace saved by an older build never wrote. */
 export function normalizeTriggerGuard(
   guard: Partial<TriggerGuardSettings> | undefined
 ): TriggerGuardSettings {
   const windowMs = guard?.windowMs
-  if (typeof windowMs !== 'number' || !Number.isFinite(windowMs)) return { ...DEFAULT_TRIGGER_GUARD }
+  const stopFadeMs = guard?.stopFadeMs
+  // Carried only when it is a fade: a show that cuts writes no field, so its file is the
+  // bytes it always was.
+  const fade = typeof stopFadeMs === 'number' && Number.isFinite(stopFadeMs) && stopFadeMs > 0
+    ? { stopFadeMs: Math.min(Math.round(stopFadeMs), STOP_FADE_MAX_MS) }
+    : {}
+  if (typeof windowMs !== 'number' || !Number.isFinite(windowMs)) return { ...DEFAULT_TRIGGER_GUARD, ...fade }
   return {
-    windowMs: Math.min(Math.max(windowMs, TRIGGER_GUARD_MIN_MS), TRIGGER_GUARD_MAX_MS)
+    windowMs: Math.min(Math.max(windowMs, TRIGGER_GUARD_MIN_MS), TRIGGER_GUARD_MAX_MS),
+    ...fade
   }
 }
 
@@ -103,7 +136,7 @@ export interface WorkspaceIdentity {
 export interface LoadNote {
   /** The cue the note is about: the orphan, the loop member, or the group whose children moved. */
   cueId: string
-  kind: 'reordered' | 'missing-group' | 'cycle'
+  kind: 'reordered' | 'missing-group' | 'cycle' | 'missing-list' | 'list-in-group'
   /** What happened, in one line, ready for the dialog that lists it. */
   detail: string
 }
@@ -136,6 +169,44 @@ export interface Workspace {
    * bounced key truncates a cue.
    */
   triggerGuard?: TriggerGuardSettings
+  /**
+   * The lighting rig: fixtures, their types, groups, and where each universe goes. Optional:
+   * a show with no lights carries no such section, and a show saved before lighting existed
+   * opens with an empty rig rather than being refused.
+   */
+  lighting?: LightingSettings
+  /**
+   * How the show follows an incoming SMPTE clock: chase, what the cues do when it stops, the
+   * offset and the rate it is read at. Optional: a show that leaves every one of them at its
+   * default carries no such section, so a show saved before timecode existed — or never
+   * touched it — writes the bytes it always wrote. Which port or input the clock arrives on
+   * is the machine's, not here.
+   */
+  timecode?: TimecodeShowSettings
+  /**
+   * The windows the show's pictures go to (src/shared/visual.ts). Optional: a show with no
+   * video output carries none, which is every show written before outputs existed — so
+   * their bytes are what they were. Where each output is on a machine is that machine's.
+   */
+  videoOutputs?: VideoOutput[]
+  /**
+   * The show's cue lists, in tab order: each one's id, name, colour and what it decides for
+   * its cues (`./cueLists`). Optional: a show with only its main list, under its own name,
+   * carries no such section, so a show saved before lists existed writes the bytes it always
+   * wrote. A cue names its list with `listId`; one that names none is in the main list.
+   */
+  cueLists?: CueListInfo[]
+  /**
+   * What the show says about its pictures as a whole (src/shared/visual.ts). Optional: a show
+   * that leaves them at the defaults carries none, so its bytes are what they were.
+   */
+  pictures?: PictureSettings
+  /**
+   * The show's named OSC destinations, chosen per message by an OSC cue. Optional: a show with
+   * none carries no such section, so a show saved before patches existed writes the bytes it
+   * always wrote.
+   */
+  oscPatches?: OscPatch[]
   cues: Cue[]
 }
 

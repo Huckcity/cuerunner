@@ -38,11 +38,23 @@ export const GUIDES = [
              the device.</p>
           <span class="doc-card-meta">Audio cues</span>
         </a>
+        <a class="card doc-card" href="./guides/video.html">
+          <h3>Video and outputs</h3>
+          <p>Video, image and text on a projector: outputs, layers, crossfades, geometry
+             and the corner pin.</p>
+          <span class="doc-card-meta">Picture cues</span>
+        </a>
         <a class="card doc-card" href="./guides/running.html">
           <h3>Running the show</h3>
           <p>GO, stop, what the bar at the top is telling you, and what to check before
              the house opens.</p>
           <span class="doc-card-meta">Show night</span>
+        </a>
+        <a class="card doc-card" href="./guides/qlab.html">
+          <h3>Coming from QLab</h3>
+          <p>Bring a QLab show across in one step, from its workspace file or from QLab
+             while it runs, and read what came.</p>
+          <span class="doc-card-meta">Free</span>
         </a>
       </div>
     </section>
@@ -74,6 +86,11 @@ export const GUIDES = [
           <h3>Watching the radio mics</h3>
           <p>The plot, the batteries, the alarm before one dies mid-line, and the report
              afterwards.</p>
+        </a>
+        <a class="card doc-card" href="./guides/lighting.html">
+          <h3>Lighting from the cue list</h3>
+          <p>Patch the rig, build a look on the faders, record it into a Light cue, and send
+             it out as sACN or Art-Net.</p>
         </a>
         <a class="card doc-card" href="./guides/script.html">
           <h3>Following the script</h3>
@@ -135,7 +152,10 @@ export const GUIDES = [
         whether a build is signed. Windows warns when an unsigned installer is run, and macOS
         warns about an unidentified developer at first launch. Downloads come from
         <code>pub.cuerunner.app</code>, and these links are the newest release's files. A Linux
-        AppImage is published too, and is experimental.
+        AppImage is published too, and is experimental, with a
+        <a href="https://pub.cuerunner.app/latest/Cuerunner.deb">.deb</a> for Debian and Ubuntu
+        beside it. Once installed, Cuerunner offers each new version itself — see
+        <a href="running.html#updates">Updates</a>.
       </p>
       <p>
         <a href="https://pub.cuerunner.app/latest/SHA256SUMS">SHA256SUMS</a> carries the
@@ -199,6 +219,145 @@ export const GUIDES = [
   },
 
   {
+    path: 'guides/qlab.html',
+    section: 'Guides',
+    title: 'Coming from QLab',
+    blurb: 'Bring a QLab show into Cuerunner from its workspace file or from QLab while it runs, and read the report on what came across.',
+    body: `
+    <section class="panel reveal">
+      <h1>Coming from QLab</h1>
+      <p class="doc-lede">
+        A QLab show comes across in one step: from the workspace file, or from QLab itself
+        while it is running. The cues keep their numbers, names, colours, notes and timing,
+        and a report says, cue by cue, what could not come across exactly.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1" id="file">
+      <h2>1. From the workspace file</h2>
+      <p>
+        <strong>Cuerunner &#9662; &rarr; Import QLab Workspace&hellip; &rarr; Choose Workspace
+        File&hellip;</strong>, and pick the <code>.qlab5</code>. A <code>.qlab4</code> and a
+        <code>.cues</code> file work the same way. A workspace saved as a folder can be picked
+        by the file inside it.
+      </p>
+      <p>
+        The show opens as a <strong>new show with no file of its own</strong>. Nothing is
+        written to the QLab workspace or beside it. <strong>Save As</strong> keeps the new
+        show where you choose, and closing without saving asks first, as it does for any
+        show with unsaved changes. The audio device, MIDI port and other settings of this
+        computer stay as they were: a QLab show's outputs name another machine's hardware.
+      </p>
+      <p>
+        Audio plays from where QLab kept it. QLab records each file relative to the
+        workspace, so copy the workspace together with its audio folder and every cue
+        plays straight away.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1" id="live">
+      <h2>2. From a running QLab</h2>
+      <p>
+        For a show on a Mac you can reach over the network, a workspace whose last changes
+        were never saved, or a QLab version whose files the import does not read. Cuerunner
+        asks QLab for the show over QLab's own OSC interface, cue by cue.
+      </p>
+      <ol>
+        <li>In QLab's workspace settings, let this computer in over OSC, with the
+            workspace's passcode if it has one.</li>
+        <li>In <strong>Import QLab Workspace&hellip;</strong>, type the Mac's address
+            (<code>127.0.0.1</code> if QLab is on this computer) and the port, which is
+            <code>53000</code> unless it has been changed.</li>
+        <li><strong>Find Workspaces</strong>, pick one, type the passcode if it asks for
+            one, and press <strong>Import from QLab</strong>.</li>
+      </ol>
+      <p>
+        The file paths QLab reports are where the audio is on that Mac, so the report
+        lists the files as missing. Copy the show's audio folder across and use
+        <strong>Find in Folder&hellip;</strong>, below.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="report">
+      <h2>3. Read the report</h2>
+      <p>
+        The report opens as soon as the show does. It lists every QLab cue type in the show,
+        how many cues of it there were, and what each became. Below that, by cue:
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Heading</th><th>What it means</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Placeholders</strong></td><td>Cuerunner has no cue of this kind yet: video, camera, text, light, live input, MIDI file, timecode, the start/pause/load/reset/go-to/target/arm/disarm cues, and AppleScript. Each is a <em>disarmed</em> wait cue under the QLab cue's own number and name, so the running order keeps its shape, and its notes say what it was and carry what it held — the script, the light command, the file, the cue it targeted. Nothing is dropped.</td></tr>
+            <tr><td><strong>Approximated</strong></td><td>Mapped, with one thing that could not be carried exactly: a level above unity, a fade of level and pan at once, a group whose children chain in a way no Cuerunner mode does, a network patch that does not say where it sends. The line says which.</td></tr>
+            <tr><td><strong>Retimed</strong></td><td>Fires at the moment it fired in QLab, with its times written differently. See <a href="#timing">timing</a>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>Audio files</strong> says whether every file the show plays was found. For
+        the ones that were not, <strong>Find in Folder&hellip;</strong> asks for a folder — the
+        show's audio folder, a copy of it, a stick — and links every missing file it holds
+        at once. It looks for each file by the path QLab knew it by, then by the last few
+        folders of that path, then by its name, and never searches: two files with one name
+        in different folders are never mistaken for each other. The bar across the top of
+        the window relinks one file at a time, as it does for any show.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="mapping">
+      <h2>What becomes what</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>QLab</th><th>Cuerunner</th></tr></thead>
+          <tbody>
+            <tr><td>Every cue</td><td>Number, name, colour (QLab's extra colours land in the nearest of the eight), notes, armed, pre-wait, continue mode, and QLab's own cue id.</td></tr>
+            <tr><td>Audio</td><td>Audio: the file, start and end, loops (an infinite loop is a vamp, released by a devamp), rate, master level and the pan its first two outputs make.</td></tr>
+            <tr><td>Fade</td><td>Fade: its target, its length, level or pan, and <em>stop target when done</em>. The curve is an S-curve, QLab's own default.</td></tr>
+            <tr><td>Stop, Devamp</td><td>Stop and Devamp, on the same target.</td></tr>
+            <tr><td>Group</td><td><em>Timeline</em> is Timeline, each child at its pre-wait. <em>Start random child</em> is Random. <em>Playlist</em> is Sequence. <em>Start first child and go to next cue</em> is a Timeline when its children auto-continue into each other and a Sequence when they auto-follow. <em>Start first child and enter into group</em> is Playlist: one child per GO.</td></tr>
+            <tr><td>Wait, Memo</td><td>Wait. A memo is a wait of no length, its notes kept.</td></tr>
+            <tr><td>MIDI</td><td>MIDI for note on, note off, control change, program change and SysEx, on the port the workspace's patch names; Show Control for MIDI Show Control's Go, Stop, Resume, Load and Reset.</td></tr>
+            <tr><td>Network (QLab 4: OSC)</td><td>OSC, to the host and port of the workspace's network patch, its arguments typed as QLab types them.</td></tr>
+            <tr><td>Second cue list, cart</td><td>Every QLab list is a cue list here, a tab of its own with its own GO, and keeps QLab's id, so a remote that sent <code>/cue_id/{list}/go</code> to QLab sends it here. The first list that is not a cart is the main list. A cart is a cart list, its tiles in the order the cart held them rather than at their grid places.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-3" id="timing">
+      <h2>Timing</h2>
+      <p>
+        <em>Do not continue</em> is Advance <strong>None</strong>, <em>auto-continue</em> is
+        <strong>On start</strong> and <em>auto-follow</em> is <strong>On end</strong>.
+      </p>
+      <p>
+        QLab's auto-continue fires the next cue a post-wait after this one starts acting.
+        Cuerunner's On start fires the next cue the moment this one is fired, and reads no
+        post-wait. So the next cue's pre-wait is written to include this cue's pre-wait and
+        post-wait, which puts it at the same moment, and the report lists it as retimed. A
+        group whose children auto-continue into each other becomes a timeline with each
+        child where the chain reached it.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-3">
+      <h2>Next</h2>
+      <p>
+        <a href="./cue-list.html">Building a cue list</a> covers the cue types and groups
+        the show now has. The <a href="../reference/formats.html#qlab">file formats
+        reference</a> has what the import reads, its limits, and what each refusal means.
+      </p>
+      <div class="note">
+        QLab is a trademark of Figure 53, LLC. Cuerunner is not affiliated with or endorsed
+        by Figure 53. The import reads a show you already own, in the container format
+        Apple's own frameworks write.
+      </div>
+    </section>
+`
+  },
+
+  {
     path: 'guides/cue-list.html',
     section: 'Guides',
     title: 'Building a cue list',
@@ -217,8 +376,10 @@ export const GUIDES = [
       <p>
         The toolbar adds cues: <strong>Audio</strong>, <strong>Group</strong>,
         <strong>Fade</strong>, <strong>Wait</strong>, <strong>Stop</strong>, and the rest
-        under <strong>More</strong>. A new cue lands after the selected one. Dragging a
-        row moves it; dropping audio files on the list adds them where you dropped them.
+        under <strong>More</strong>. A new cue lands after the selected one — or drag the
+        button into the list and it lands where you let go, between two cues, at the top,
+        or inside an open group. Dragging a row moves it; dropping audio files on the list
+        adds them where you dropped them.
       </p>
       <figure class="figure">
         <a href="../assets/guide/02-cue-list.png" target="_blank" rel="noreferrer">
@@ -231,6 +392,27 @@ export const GUIDES = [
         <strong>disarmed</strong> cue stays in the list and is skipped by GO, which is how
         you take something out of a show without losing it. Undo is
         <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Z</kbd> and covers the last 50 edits.
+      </p>
+      <p>
+        The columns after the name are yours to arrange: drag a heading to move its column,
+        drag its left edge to size it, and right-click the header to show or hide one —
+        <strong>Notes</strong> among them, which reads the first line of each cue's notes on its
+        row. The layout belongs to this computer rather than the show, and
+        <strong>Reset columns</strong> on the same menu puts the list back as it was.
+        Double-click a <strong>Pre</strong> or <strong>Post</strong> cell — or the
+        <strong>Duration</strong> of a wait or a fade — to type a new time where you read it:
+        <code>1.5</code> or <code>1:30</code>, Enter to keep it, Esc to put it back.
+      </p>
+      <p>
+        With several rows selected (<kbd>Shift</kbd>-click a range, <kbd>Ctrl</kbd>/<kbd>⌘</kbd>-click
+        one at a time) the menu acts on all of them. <strong>Edit…</strong> sets a pre-wait,
+        post-wait or advance across the set — and an audio cue's volume and fades across the
+        audio cues in it — leaving any field you do not fill as each cue has it. Its
+        <strong>Number from</strong> and <strong>Step</strong> renumber the set in list order
+        (from 10 by 0.5 reads 10, 10.5, 11), and refuse a number another cue already has.
+        <strong>Fade out</strong> and <strong>Add stop</strong> make the cue that ends what is
+        selected and put it after the last of them: one cue that names every one of them, so
+        one GO takes them all on one time. Each of these is one undo.
       </p>
     </section>
 
@@ -252,7 +434,7 @@ export const GUIDES = [
     <section class="panel reveal delay-2">
       <h2>The cue types</h2>
       <p>
-        Twelve of them, and the <a href="../reference/cue-types.html">reference</a> lists
+        Fourteen of them, and the <a href="../reference/cue-types.html">reference</a> lists
         every field of each. In practice:
       </p>
       <div class="table-wrap">
@@ -265,13 +447,36 @@ export const GUIDES = [
             <tr><td>Stop</td><td>Stop one cue, or everything, with or without a fade.</td></tr>
             <tr><td>Group</td><td>Cues inside a cue: fire them in order, all at once, at random, or on a timeline.</td></tr>
             <tr><td>MIDI / OSC / Network</td><td>Send a message to something else in the rig.</td></tr>
+            <tr><td>MIDI File</td><td>Play a <code>.mid</code> to a synth, a click, or anything else on a MIDI port.</td></tr>
             <tr><td>Show Control</td><td>MSC: GO, STOP and LOAD to a desk that speaks it.</td></tr>
             <tr><td>Script</td><td>Run JavaScript, including a system command.</td></tr>
             <tr><td>Scene<span class="pro">Pro</span></td><td>Move the sound desk to a scene you built.</td></tr>
+            <tr><td>Light<span class="pro">Pro</span></td><td>Fade the lighting rig to a look, over sACN or Art-Net.</td></tr>
+            <tr><td>Timecode<span class="pro">Pro</span></td><td>Run a SMPTE clock — MTC, LTC and Art-Net — for the rest of the building to follow.</td></tr>
             <tr><td>Devamp</td><td>Let a looping cue out of its loop and play on.</td></tr>
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>Playing a MIDI file</h2>
+      <p>
+        A <strong>MIDI File</strong> cue (in the toolbar's More menu) plays a Standard MIDI File
+        to one port — the keys part of a backing track to a synth, a click to the band's in-ears,
+        a sequence to a lighting desk that listens on MIDI. Browse to the file and the tab reads
+        it back: its format, its tempo, its length, and each track by name, so you know it is the
+        file you meant. Pick the port, and set a <strong>Rate</strong> if the band has moved the
+        song's tempo; the cue's length follows, and it completes when the file does, so the cue
+        after it can follow on by itself. A <strong>Start time</strong> and <strong>End time</strong>
+        play part of the file, and a <strong>Loop count</strong> of −1 vamps it until a Stop. On the
+        <strong>Channels</strong> tab you can send each of the file's channels out as a different
+        one — or not at all, to drop the part a player is covering live — and transpose the notes
+        for tonight's key, with the drums on channel 10 left where they are. Start it part-way and
+        every channel is set the way the file had it first, so the right sounds are on the right
+        channels before the next note; stop it and every note it played is released, with the
+        sustain pedal lifted.
+      </p>
     </section>
 
     <section class="panel reveal delay-2">
@@ -283,7 +488,7 @@ export const GUIDES = [
       <ul class="tight-list">
         <li><strong>Sequence</strong> — its children in order, each after the one before.</li>
         <li><strong>All at once</strong> — everything together: a bang, a blackout, three sends in one press.</li>
-        <li><strong>Random</strong> — one child, picked at random. Good for a stinger you do not want to be identical every night.</li>
+        <li><strong>Random</strong> — one child, drawn at random, every child once before any repeats. Good for a stinger you do not want to be identical every night, or the same twice in a row.</li>
         <li><strong>Timeline</strong> — each child at an offset you set by dragging it. The dock draws the timeline for a group in this mode.</li>
         <li><strong>Playlist</strong> — one child per GO. The group holds the show until a full pass is done, so a walk-in playlist of thirty cues is thirty presses.</li>
       </ul>
@@ -344,7 +549,7 @@ export const GUIDES = [
     path: 'guides/sound.html',
     section: 'Guides',
     title: 'Working with sound',
-    blurb: 'Audio cues in practice: levels and pan, fades, trimming silence, loops and vamps, and routing channels to the device.',
+    blurb: 'Audio cues in practice: levels and pan, fades and their shapes, loudness, loops, vamps and slices, routing, patches and the mixer, auditioning, and live inputs.',
     body: `
     <section class="panel reveal">
       <h1>Working with sound</h1>
@@ -383,13 +588,29 @@ export const GUIDES = [
       <p>
         <strong>Volume</strong> and <strong>Pan</strong> are the cue's own, applied as it
         plays. <strong>Fade in</strong> ramps it up from silence over that many seconds
-        when it starts.
+        when it starts, and <strong>Fade out</strong> takes it down to silence over that
+        many seconds before its own end — the end of its region, or of its last loop — so a
+        track that should not stop dead does not.
       </p>
       <p>
         To change a level while a cue is already playing, use a <strong>fade cue</strong>
         pointed at it: a target, a level to reach, and a time to take getting there. Tick
         <strong>Stop when done</strong> and the fade becomes a fade-out — the usual way to
         take music out under dialogue.
+      </p>
+      <p>
+        Every fade has a <strong>shape</strong>: the cue's fade in and fade out, a fade cue,
+        a Light cue's fade. Leave it at its default, pick a preset — <strong>equal power</strong>
+        for a crossfade that does not dip, <strong>exponential</strong> for a slow start — or
+        choose <strong>Custom</strong> and drag the curve's two handles until it moves the way
+        the moment wants. What is drawn is what plays.
+      </p>
+      <p>
+        <strong>Normalize</strong>, on the Audio tab beside the trim, measures the file the way
+        a broadcast meter does (EBU R128) and sets the trim so the cue plays at the show's
+        loudness target, its true peak kept under the ceiling. Select a run of cues and choose
+        <strong>Normalize loudness</strong> from the right-click menu to level the whole set in
+        one go — and take it back with one undo. The target and ceiling are in Settings → Audio.
       </p>
       <p>
         A <strong>stop cue</strong> stops a target at once, or fades it out first over a
@@ -411,6 +632,13 @@ export const GUIDES = [
         lap it is on and plays out to the end of the file. That is the underscore that
         holds for a scene change of unknown length and then resolves properly.
       </p>
+      <p>
+        For music with more than one place to hold, use the <strong>Slices</strong> tab: add
+        markers to cut the region into slices, and give each a number of passes or make it a
+        <strong>Vamp</strong>. The cue plays the intro once, vamps the groove until the devamp,
+        plays the bridge twice and holds on the next vamp — each change landing on its sample.
+        A devamp set to <strong>Stop at the end of the slice</strong> ends the cue there instead.
+      </p>
     </section>
 
     <section class="panel reveal delay-2">
@@ -426,6 +654,38 @@ export const GUIDES = [
       <p>
         The device itself, its sample rate, buffer and channel count are in
         Settings → Audio, with what the engine is actually doing underneath them.
+      </p>
+      <p>
+        <strong>Output patches</strong>, also in Settings → Audio, name sets of outputs —
+        Mains, Foldback, Delays — so a cue says where it goes by name: choose the patch under
+        <strong>Output patch</strong>, and a matrix then addresses the patch's own channels. When
+        the rig changes, change the patch, not every cue. The <strong>Mixer</strong> button by
+        the master opens a strip for each patch and each output, with a fader, a mute and a
+        meter, and the master beside them.
+      </p>
+      <p>
+        A patch can play on another interface: choose it as the patch's device — the band's
+        in-ear rack beside the house system, a second USB interface for the delays. The engine
+        plays every device the patches name at once, opened when the show loads so the first
+        cue on one starts at once, and holds each to the show's own device's clock, so a cue
+        sent to two of them stays in phase all night rather than drifting apart. The master,
+        PAUSE, PANIC, fades and live inputs reach them all. <strong>Output devices</strong>, under
+        the patches, says how each one is: its rate, its clock against the show's device and
+        how far behind it it sounds. If one goes — unplugged, taken by another program — its
+        cues stop, the rest of the show plays on, and its patches play on the show's device
+        until <strong>Reconnect</strong> brings it back. A show opened on a machine that has not
+        got one of its devices says which patches fell back, and where they are playing instead.
+      </p>
+      <p>
+        <strong>Audition</strong> plays a cue, a selection or a whole file on the show's
+        audition output — headphones at the desk — without firing anything: the list does not
+        move. Choose the audition output in Settings → Audio first.
+      </p>
+      <p>
+        A <strong>Live Input</strong> cue plays a microphone or a line input through the engine
+        with the same level, pan, routing, patches and fades as a file. Pick the input and its
+        channels; <strong>Open input</strong> shows the level and the time through the engine. A
+        separate interface works: the engine follows its clock and keeps the buffer steady.
       </p>
       <p>
         On Windows, <strong>Audio system</strong> above the device picks how the sound
@@ -455,6 +715,273 @@ export const GUIDES = [
 `
   },
 
+  {
+    path: 'guides/video.html',
+    section: 'Guides',
+    title: 'Video and outputs',
+    blurb: 'Video, image, text and camera cues on one or more outputs: placing an output on a projector, sound that runs through the engine, layers, blend modes, fades and exact crossfades, geometry and moving it, the next GO, mirrors and masks, corner pin and soft edges, and the timers.',
+    body: `
+    <section class="panel reveal">
+      <h1>Video and outputs</h1>
+      <p class="doc-lede">
+        Pictures go to <strong>outputs</strong> — windows Cuerunner keeps open for the show,
+        one per projector or screen — and four cue types put them there: <strong>Video</strong>,
+        <strong>Image</strong>, <strong>Text</strong> and <strong>Camera</strong>. All of it is free.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1" id="outputs">
+      <h2>Adding an output</h2>
+      <p>
+        Open the <strong>Outputs</strong> tab in the dock and press <strong>+ Add output</strong>.
+        A black window opens: that is the output, and it stays open for as long as the show
+        has it, so a cue that follows another lands on a picture that was never taken down —
+        there is no black frame between cues. Each output's card shows a live picture of what
+        it is showing, so you can see the projector from the desk.
+      </p>
+      <p>
+        <strong>Display</strong> puts it somewhere: <strong>A window</strong> you can drag and
+        size, or one of this computer's displays, with <strong>Fullscreen</strong> to fill it.
+        A fullscreen output never takes the keyboard, so GO stays with the cue list.
+        Where an output goes is kept on <em>this computer</em>, not in the show file: the same
+        show opens in rehearsal on a laptop and on the night on the venue's projectors, and
+        each machine remembers its own places. The output's name, its size, its timer and its
+        projector settings travel with the show.
+      </p>
+      <p>
+        A display that is not connected when the show opens is not a failure: the output opens
+        as a window instead, with a red banner across it saying which display it was meant
+        for, and its card says the same. It moves back as soon as the display is plugged in.
+      </p>
+      <p>
+        <strong>Identify</strong> draws each output's name across it for three seconds.
+        <strong>Test pattern</strong> puts a grid, the centre, the corners and colour bars over
+        one output, at its own resolution, for lining a projector up.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1" id="video">
+      <h2>A video cue</h2>
+      <p>
+        Add one from the toolbar's <strong>More</strong> menu, then <strong>Browse</strong> on
+        its <strong>Video</strong> tab. MP4 (H.264), WebM (VP8, VP9, AV1) and the other formats
+        Chromium decodes all play. A small preview of the file sits under its name.
+        <strong>Start time</strong> and <strong>End time</strong> trim it, <strong>Loop
+        count</strong> repeats it (−1 loops it until it is stopped or a devamp cue lets it go),
+        and <strong>Hold last frame</strong> keeps the final frame up when it ends — the cue
+        then runs until it is stopped, the way a held picture does.
+      </p>
+      <p>
+        While it plays, the Video tab has <strong>Pause</strong>/<strong>Resume</strong> and a
+        <strong>Position</strong> slider. A paused video stands on the frame it is on, its
+        sound taken away, and resumes from exactly there.
+      </p>
+      <h3>Its sound</h3>
+      <p>
+        A video's sound plays through the audio engine as an ordinary voice — the same
+        level, pan, routing matrix, fades and meters an audio cue has, on the
+        <strong>Sound</strong> tab — and the picture is silent. Both start on the engine's
+        clock at the same instant, and the output keeps the picture on that clock frame by
+        frame: a small drift is closed by playing the picture a touch fast or slow, a large one
+        by moving it. However long the video, picture and sound stay together. A fade cue on
+        the video's <strong>Volume</strong> fades the sound; a stop cue with a fade takes
+        both down together.
+      </p>
+      <p>
+        A video with no sound track plays as a picture alone, and its cue ends with it. The
+        sound of an MP4 or MOV plays everywhere; a WebM's or MKV's needs a decoder this machine
+        has — on Windows that is the system's own, and where it has none the picture plays
+        silent and the Sound tab says so.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="pictures">
+      <h2>Images and text</h2>
+      <p>
+        An <strong>Image</strong> cue shows a still — PNG, JPEG, GIF, WebP, SVG and the rest —
+        for <strong>Shown for</strong> seconds, or until it is stopped when that is empty.
+        A <strong>Text</strong> cue draws its text in the font, size, colour and style you give
+        it, anchored to one of nine places on the output.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="camera">
+      <h2>A live camera</h2>
+      <p>
+        A <strong>Camera</strong> cue shows a live picture on an output until it is stopped,
+        with the fades, layer, blend and geometry every picture has. Its <strong>Camera</strong>
+        tab chooses the source. <strong>A camera on this machine</strong> lists the capture
+        devices the outputs can see — a webcam, a USB camera, an HDMI capture card. The list
+        comes from the output windows, the one place Cuerunner opens a camera, so open an output
+        first. The show keeps the camera's <em>name</em>, so the venue machine finds the same
+        model; each machine keeps its own pick of the exact device, so two cameras with one name
+        are never confused. A camera that is stood on is opened ahead of its GO, so its picture
+        is live the moment it is asked for.
+      </p>
+      <p>
+        If the camera is not connected, the output says so in a banner across it —
+        <em>Camera Stage cam is not connected</em> — the output's card says the same, and the
+        cue keeps running: plug the camera in and the picture comes up by itself. A cable pulled
+        mid-show does the same.
+      </p>
+      <p>
+        <strong>A network stream</strong> takes an address: HTTP video, an HLS playlist
+        (<code>.m3u8</code>), or MJPEG — what most IP cameras and phone camera apps serve. A login
+        in the address (<code>http://user:password@camera/…</code>) is passed on. The stream is
+        fetched by Cuerunner itself, only from the address a cue names. RTSP is not supported:
+        use the camera's HTTP, MJPEG or HLS address.
+      </p>
+      <p>
+        On a Mac, the first camera cue asks for camera access once; if it was refused, allow
+        Cuerunner under Camera in the Mac's Privacy &amp; Security settings.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="layers">
+      <h2>Layers, fades and crossfades</h2>
+      <p>
+        Every picture cue has a <strong>Picture</strong> tab. <strong>Output</strong> says which
+        output it goes to (empty is the show's first). <strong>Layer</strong> stacks it: higher
+        is in front, and pictures on one layer stack in the order they were fired, the newest
+        in front — so a title on layer 5 sits over every video on layer 1. Pictures layer;
+        nothing is taken down because another went up, unless you ask for it.
+      </p>
+      <p>
+        <strong>Fade in</strong> starts on the picture's first frame on screen, not on the GO,
+        so a file that takes a moment to open never jumps in half-faded. <strong>Fade
+        out</strong> lands on the picture's own end — the end of a video's last pass, or of an
+        image's or text's display time.
+      </p>
+      <p>
+        <strong>Crossfade</strong> dissolves a video or image in from whatever is on its
+        output at or below its layer, over its fade-in. The dissolve is exact: half way
+        through, the output is half the old frame and half the new, so nothing dips through
+        black and a letterboxed video's bars dissolve to black rather than to the picture it
+        replaced. When it lands, what it replaced is taken down and its cue is stopped; a
+        video it replaced takes its sound down over the same time. With nothing on the output,
+        a crossfade simply fades up. A title on a layer above stays exactly where it is.
+      </p>
+      <p>
+        A <strong>fade cue</strong> aimed at a picture can move its <strong>Opacity</strong>,
+        with the same curves and <strong>Stop target when done</strong> a sound fade has.
+        <strong>Opacity</strong> on the Picture tab is the level a picture rests at; changing
+        it while the picture is up changes it at once.
+      </p>
+      <h3>Blend modes</h3>
+      <p>
+        <strong>Blend</strong> on the Picture tab says how a picture is laid over what is
+        behind it: <strong>Normal</strong>, <strong>Multiply</strong>, <strong>Screen</strong>,
+        <strong>Overlay</strong>, <strong>Darken</strong>, <strong>Lighten</strong>,
+        <strong>Colour dodge</strong>, <strong>Colour burn</strong>, <strong>Hard light</strong>,
+        <strong>Soft light</strong>, <strong>Difference</strong>, <strong>Exclusion</strong>,
+        <strong>Add</strong> and <strong>Subtract</strong>. Screen or Add a flare or a smoke
+        loop over a scene so its black disappears; Multiply a gobo or a texture over it so its
+        white does. The picture's opacity sets how much of the blend shows. Every mode draws the
+        same on the GPU and on the 2D fallback.
+      </p>
+      <h3>The next GO</h3>
+      <p>
+        <strong>Next GO</strong> on the Picture tab takes the picture down — over its own fade
+        out — the next time GO is pressed, whatever that GO fires: a caption, a title card, a
+        still between scenes. <strong>The show's default</strong> follows the
+        <strong>Next GO</strong> box at the top of the Outputs panel, so a show of surtitles can
+        say it once. A GO from a trigger or a desk counts the same as the button. It is the next
+        GO <em>in the picture's own cue list</em>: a sound effect fired from a cart list leaves
+        the main list's captions up. A picture the GO's own crossfade is dissolving away is left
+        to the dissolve.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="geometry">
+      <h2>Where a picture sits</h2>
+      <p>
+        <strong>Size to</strong> fits the picture inside the output (letterboxed),
+        <strong>fills</strong> it (cropping what spills over), <strong>stretches</strong> it to
+        the output's shape, or shows it <strong>native</strong>, one pixel per pixel. Then
+        <strong>Position</strong> moves it as a share of the output, <strong>Scale</strong>
+        sizes it, <strong>Rotate</strong> turns it clockwise, and <strong>Crop</strong> cuts
+        from each edge first. Every one of them applies while the picture is up.
+      </p>
+      <h3>Moving it</h3>
+      <p>
+        <strong>Keyframes</strong>, under the geometry, move a picture over its own play.
+        <strong>Add keyframe</strong> puts one a second on from the last, where the picture would
+        be then; give it a time (from the picture's first frame), a place, scale, rotation and
+        crop, and how it gets there — <strong>Linear</strong>, <strong>Ease in</strong>,
+        <strong>Ease out</strong>, <strong>Ease in and out</strong>, or <strong>Jump</strong>.
+        The picture starts where its own geometry puts it and stays at the last keyframe. A
+        paused picture's keyframes pause with it.
+      </p>
+      <p>
+        A <strong>fade cue</strong> moves a picture that is up: with its <strong>Property</strong>
+        set to <strong>Opacity</strong> or <strong>Geometry only</strong>, tick what it moves under
+        <strong>Move the picture</strong> — position, scale, rotation, crop — and give each its
+        target. It moves from wherever the picture is when the fade starts, over the fade's time
+        and curve, and the picture stays where the fade left it. A property you then change by
+        hand on the Picture tab is yours again.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="mirrors">
+      <h2>Mirrors and masks</h2>
+      <p>
+        <strong>Shows</strong>, on an output's card, makes it a mirror of another output: it
+        shows that output's pictures exactly as that output composes them — a confidence monitor
+        at the desk, or a second projector stacked on the first for brightness. A mirror keeps
+        its own display, timer and corner pin; a picture cue cannot be pointed at a mirror, only
+        at the output it shows.
+      </p>
+      <p>
+        <strong>Mask</strong> lays an image over an output's pictures: where it is white they
+        show, where it is black they do not — or by its transparency, with <strong>Mask
+        reads</strong> set so, and turned round with <strong>Invert</strong>. Draw it on the test
+        pattern's grid to mask a set piece or a proscenium. The mask is stretched to the output
+        and pinned with the picture; the timer and test pattern are drawn over it. A mirror with
+        no mask of its own shows its source's. A mask that cannot be read is said on the output
+        and the pictures are drawn unmasked.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-3" id="projector">
+      <h2>Corner pin and soft edges</h2>
+      <p>
+        A projector that is not square to its screen throws a keystoned picture.
+        <strong>Corner pin and soft edges</strong>, on the output's card, moves each of the four
+        corners by a share of the output, and the whole frame — text and the timer included —
+        is laid onto that shape in perspective. <strong>Soft edge</strong> fades an edge to
+        black across a share of the frame, for two projectors whose pictures overlap; the
+        <strong>edge curve</strong> bends that ramp for the projectors' gamma. Both are part
+        of the show, because they belong to the venue's rig as the show was teched on it.
+      </p>
+      <p>
+        An output draws on the computer's GPU. On a machine whose graphics Chromium will not
+        use it draws the same picture with its 2D fallback, says so on its card, and puts a
+        corner pin's offsets aside — that one thing needs the GPU — with a banner saying so.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-3" id="timers">
+      <h2>Timers</h2>
+      <p>
+        <strong>Timer</strong> on an output's card draws a clock over it: the time of day, the
+        show clock (from the first GO since the show was opened), or the time left on the
+        most recently started cue that has an end. <strong>Floating timer</strong>, in the
+        panel's header, opens a small window that stays on top of everything else on this
+        computer, counting the same way — for the operator, not the audience.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-3" id="safety">
+      <h2>When things go wrong</h2>
+      <p>
+        Panic takes every output down with the sound, whichever surface raised it. An output
+        whose window crashes reloads in place and puts back every picture it had, where each
+        would have been by then — the record is kept by the app, not by the window. A picture
+        whose file is missing says so in the log and on its cue.
+      </p>
+    </section>
+`
+  },
   {
     path: 'guides/running.html',
     section: 'Guides',
@@ -506,6 +1033,66 @@ export const GUIDES = [
         The cue list says the same thing in more detail: a playing row counts its Duration
         cell down, a cue in its pre-wait says so, and a vamping cue says it is vamping.
       </p>
+      <p>
+        <strong>PAUSE</strong> (<kbd>P</kbd>, or the button beside STOP) holds the whole show
+        where it stands: every sound goes quiet over a few milliseconds and keeps its place in
+        its file, a MIDI file lets go of its notes where it stands, and every wait, pre-wait,
+        fade and handover waits with it. The button reads
+        <strong>RESUME</strong> while it is held, and the show goes on from exactly where it
+        stood. GO waits for the resume rather than firing over a held show; STOP and PANIC end
+        the hold along with everything else. To hold one sound while the rest plays on — a
+        track paused for a line of dialogue — use its pause on the <strong>Active</strong> tab.
+      </p>
+      <p>
+        At the transport's right edge is what leaves the engine: a <strong>meter</strong> for the
+        output's first two channels, read after the master — its border turns red once the
+        output reaches full scale, and a press clears it — and the <strong>master</strong>
+        fader, from silence to +6 dB, double-click for 0 dB. The master is this computer's, not
+        the show's: the level a room wants belongs to the room, and an engine that restarts
+        mid-show is given it again.
+      </p>
+      <p>
+        <strong>Show mode</strong> (<kbd>F5</kbd>, or the View menu) puts the show in large type
+        for running it: a card per cue, what is done set back, what GO fires next in amber,
+        what is running counting down — and nothing on it that edits the show, so a hand that
+        meant to press GO cannot drag or delete a cue. The transport keys work as always, and
+        <kbd>F5</kbd> again brings the editor back.
+      </p>
+      <p>
+        The <strong>cart</strong> (<kbd>F6</kbd>, or the View menu) turns the list into a wall
+        of buttons — one tile per cue at the top of the list, a group as one tile — and a press
+        plays that cue wherever the show is standing: the doorbell, the phone, the crash, in
+        whatever order the scene asks for them. The first ten answer the number keys
+        <kbd>1</kbd>–<kbd>9</kbd> and <kbd>0</kbd>. A running tile counts down and has its own
+        stop. This computer remembers whether you left it in the cart.
+      </p>
+      <p>
+        A show can hold several <strong>cue lists</strong>, a tab each above the list: the main
+        sequence, a cart of effects, the pre-show loop. <strong>+</strong> adds one; a double
+        click renames it; a right-click colours it, shows it as a cart, disarms it, moves it
+        among the tabs or deletes it with its cues, after asking. Each list keeps its own
+        place: GO, <kbd>Space</kbd> and STOP act on the list in front, and a list you come back
+        to is standing where you left it. Cues running in another list play on, the tab shows a
+        green dot while they do, and the Active tab names the list beside each one. Drag rows
+        onto a tab, or right-click them and choose <strong>Move to</strong>, to move them to
+        another list — a group goes whole. A disarmed list fires nothing, by GO, trigger or the
+        clock. In <strong>List settings</strong> each list follows timecode or ignores it, and
+        sits its own number of frames later on the clock than the show. Every one of these is
+        one <kbd>Ctrl</kbd>+<kbd>Z</kbd>.
+      </p>
+      <p>
+        A list shown as a <strong>cart</strong> opens as tiles, and <kbd>F6</kbd> turns it to
+        rows for editing and back. Right-click a tile and press a key to give it a key of its
+        own: that key plays it wherever the show is standing, with the main list in front.
+        Backspace takes the key away.
+      </p>
+      <p>
+        The <strong>Active</strong> tab in the dock lists everything that is running, oldest
+        first, with the time it has left and a stop of its own on each row. An audio cue's
+        bar there is a handle: drag along it and let go, and that cue plays on from there —
+        the rehearsal "back to the second verse", made on the cue that is playing rather than
+        on the one that is selected.
+      </p>
     </section>
 
     <section class="panel reveal delay-2">
@@ -520,6 +1107,13 @@ export const GUIDES = [
         The <strong>Log</strong> tab in the dock is the session's history: every cue fired,
         every message sent, and every failure with its reason. It holds the last 500 lines
         and is not saved with the show. A line that repeats is said once with a count.
+      </p>
+      <p>
+        Every line is also written, stamped, to <code>cuerunner.log</code> in the app's logs
+        folder — beside the failures the app's own process reports, which reach the file even
+        when the window has gone — so last night's show can be read this morning. The file
+        rolls to <code>cuerunner.1.log</code> at 5 MB. <strong>Open Logs Folder</strong> in the
+        File menu, or <strong>Folder</strong> on the Log tab, opens it.
       </p>
       <p>
         An audio event whose type the app does not recognise is named in the log with its
@@ -575,6 +1169,34 @@ export const GUIDES = [
         19:42".
       </div>
     </section>
+
+    <section class="panel reveal delay-2" id="updates">
+      <h2>Updates</h2>
+      <p>
+        Cuerunner looks for a newer version twenty seconds after it starts and once a day after
+        that, and only looks: when there is one, a bar under the toolbar says so, with its
+        release notes. Nothing is downloaded until you press <strong>Download</strong>, and
+        nothing is installed until you press <strong>Restart now</strong> or quit the app.
+      </p>
+      <ol class="steps">
+        <li><strong>Read the notes.</strong> <strong>Release notes</strong> lists every version between the one you are running and the new one.</li>
+        <li><strong>Download when the show is idle.</strong> A download asked for while a cue is running, paused or waiting is held with a sentence saying so, and a cue fired while a download is under way stops it. Nothing is fetched during a show.</li>
+        <li><strong>Restart, or just quit.</strong> A downloaded update installs the next time Cuerunner quits, or now with <strong>Restart now</strong> — which asks you to save the show first, and is refused while anything is running.</li>
+      </ol>
+      <p>
+        A download whose bytes do not match the checksum its release published, or whose
+        signature is not the publisher's, is refused with a sentence and deleted; nothing is
+        installed. A machine with no network says nothing at all. A copy installed from the
+        <code>.deb</code> is told when there is a newer version and sent to the download page,
+        because a package manager's install cannot replace itself.
+      </p>
+      <p>
+        For show week, set <strong>Show hours</strong> in Settings → Updates: no update checks
+        between the two times, by this computer's clock. Show Mode with a show open is locked out
+        too, unless you turn that off. The first launch after an update shows what changed, once.
+        Every field is in the <a href="../reference/settings.html#updates">settings reference</a>.
+      </p>
+    </section>
 `
   },
 
@@ -599,6 +1221,14 @@ export const GUIDES = [
         and listens on port 53000. Settings → <strong>MIDI</strong> →
         <strong>Listen to MIDI</strong> opens the inputs you tick, or all of them if you
         tick none.
+      </p>
+      <p>
+        The OSC port is Cuerunner's alone. If QLab, another Cuerunner or a bridge already
+        holds 53000, the row under OSC control says the port is in use and the log says it
+        too: change the port, or close what holds it. Nothing is shared in silence, so a desk
+        that is heard is heard by this show. On a machine with two networks,
+        <strong>Network interface</strong> under the same block picks the one the show
+        listens on and the one its OSC cues send from.
       </p>
       <p>
         The <strong>Monitor</strong> tab in the dock shows what is listening and what has
@@ -628,6 +1258,8 @@ export const GUIDES = [
         <li><strong>OSC</strong> — an address, such as <code>/eos/cue/12/fire</code>. Arguments are ignored; the address is the trigger.</li>
         <li><strong>MIDI</strong> — a note, a controller or a program change on a channel. A note fires whatever its velocity.</li>
         <li><strong>Show control</strong> — an MSC command from a desk, matched on every field it sent.</li>
+        <li><strong>Key</strong> — a key on this machine, typed or taken with <strong>Record</strong>: the sound-effects board under one finger. A key the app already uses is refused, with what it does.</li>
+        <li><strong>Time of day</strong> — the half-hour call at 19:00, the house-open loop at 19:15. Choose what a time the show was closed for does: skip it and say so, or fire it late within a few minutes.</li>
       </ul>
       <p>
         <strong>Learn</strong> is the shortcut: press it, then send the message from the
@@ -640,6 +1272,19 @@ export const GUIDES = [
         advance. A disarmed cue ignores its triggers, which makes disarming a safe way to
         take a cue out of a show that a console is driving.
       </div>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>Let a remote read the show</h2>
+      <p>
+        A tablet that runs the show can also show it. Turn on <strong>Feedback</strong> under
+        OSC control and give it the tablet's address and port: the playhead, the running
+        cues and their progress are pushed there, ten times a second by default. A remote can
+        ask for itself instead — <code>/cuerunner/feedback/subscribe</code> — and a remote set
+        up for QLab is answered the way QLab answers it, so its playhead and running-cue
+        displays work unchanged. The addresses are in the
+        <a href="../reference/control.html#feedback">reference</a>.
+      </p>
     </section>
 
     <section class="panel reveal delay-2">
@@ -662,6 +1307,45 @@ export const GUIDES = [
         A footswitch that bounces, a desk that sends twice, a key held down: Settings →
         General → <strong>Repeat guard</strong> ignores a second GO arriving within the
         window you set. 300 ms by default; 0 turns it off.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2" id="timecode">
+      <h2>Following timecode<span class="pro">Pro</span></h2>
+      <p>
+        When the show is driven by a clock — the band's playback rig, a video server, the
+        lighting desk's own timeline — Cuerunner can follow it. Settings →
+        <strong>Timecode</strong> → <strong>Source</strong> picks the wire it arrives on:
+        <strong>MTC</strong> on a MIDI input, <strong>LTC</strong> on an audio input channel,
+        or <strong>Art-Net</strong> from the lighting network. The transport bar then shows
+        the clock, and whether it is <strong>Locked</strong>.
+      </p>
+      <p>
+        Give a cue a <strong>Timecode</strong> trigger on its Triggers tab: type the frame, or
+        play the clock to the moment and press <strong>Take</strong>. The cue fires as the
+        clock runs through that frame, exactly as GO would. A clock that skips a few frames
+        still fires what it skipped; one that jumps further has been located, and fires
+        nothing it jumped over.
+      </p>
+      <p>
+        Turn on <strong>Chase</strong> and the cue list goes where the clock goes. Locate the
+        playback rig to the second chorus and the backing track starts at the second chorus;
+        stop it and the cues it started hold, and pick up again where it starts.
+        <strong>Offset</strong> moves the show against the clock, so a show written at
+        10:00:00:00 runs against a clock that starts at 01:00:00:00. Chase, the offset and the
+        rate are saved with the show; which input the clock arrives on stays with the computer.
+      </p>
+      <p>
+        A dropout is not a stop: a clock that stops arriving is carried on at its own rate
+        for the <strong>Freewheel</strong> time (a second) before it is called lost, and the
+        loss is an alarm. The rate is read from the stream, and measured where the stream
+        cannot say — 29.97 against 30, which share a code.
+      </p>
+      <p>
+        Going the other way, a <strong>Timecode</strong> cue runs a clock of its own from a
+        start time, out of any mix of MTC, LTC and Art-Net. With <strong>jam sync</strong> it
+        starts from the clock it is hearing and keeps to it, and carries on alone if that
+        clock drops out — a clean clock regenerated for the rest of the building.
       </p>
     </section>
 
@@ -1090,6 +1774,121 @@ export const GUIDES = [
         what the night did to its packs. Like the rest of the session it starts over when
         Cuerunner does, so copy it before you quit.
       </p>
+    </section>
+`
+  },
+
+  {
+    path: 'guides/lighting.html',
+    section: 'Guides',
+    title: 'Lighting from the cue list',
+    blurb: 'Patch the rig, send it out as sACN or Art-Net, build a look on the faders, record it into a Light cue, and run it with the sound.',
+    pro: true,
+    body: `
+    <section class="panel reveal">
+      <h1>Lighting from the cue list<span class="pro">Pro</span></h1>
+      <p class="doc-lede">
+        The lights in the same list as the sound, fired by the same GO: Cuerunner sends
+        DMX over the network itself, as sACN or Art-Net, to whatever node or dimmer rack
+        the rig is on.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>1. Patch the rig</h2>
+      <p>
+        The <strong>Lighting</strong> view, then <strong>Patch</strong>. Choose a type and a
+        mode, a universe, and how many: <strong>Patch</strong> puts them one after another in
+        the first gaps that fit, or from the address you type. The built-in types are a
+        dimmer, RGB, dimmer + RGB, RGBW, RGBA, RGBAW + UV and a basic moving head in 8- or
+        16-bit; anything else is a type you make from a channel list, an
+        <strong>Open Fixture Library</strong> definition file read in, or a
+        <strong>GDTF</strong> file — the format fixture makers publish their own fixtures in,
+        on the GDTF Share and on their own sites — with <strong>Import GDTF file…</strong>.
+      </p>
+      <p>
+        A GDTF import brings every DMX mode the fixture has, each channel at its own width,
+        where each one rests, and the functions across a channel's travel: a shutter that is
+        closed, open and then strobing says which on its fader as you move it. A 24-bit
+        channel is driven on its top two bytes, and the import says so. A fixture whose mode
+        is split over several DMX breaks — separately addressed parts — is refused with a
+        sentence saying so: patch each part as a fixture of its own type. The
+        <a href="../reference/formats.html#gdtf">formats reference</a> has the whole mapping.
+      </p>
+      <p>
+        Two fixtures sharing a slot, and one that runs off the end of its universe, are
+        listed above the patch in amber before the show finds them.
+        <strong>Identify</strong> flashes a fixture for three seconds — light and colour
+        full, a head centred — so you can find it in the rig.
+      </p>
+      <p>
+        <strong>Groups</strong> are fixtures a cue drives as one: a level on a group reaches
+        every member that has that parameter, so "the wash to blue" is one line in a cue
+        however many fixtures are in the wash.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-1">
+      <h2>2. Send it somewhere</h2>
+      <p>
+        <strong>Network</strong>, then <strong>Add output</strong> for each universe:
+        sACN to its multicast group or to one receiver, or Art-Net broadcast or to one node.
+        A universe can have both. sACN carries a priority, for a rig where a console sends
+        too; <strong>Synchronise</strong> holds every universe's frame until they can all
+        change at once. <strong>Interface</strong> pins the traffic to one network card —
+        a machine fact, kept with the machine rather than the show. <strong>Find
+        nodes</strong> asks the Art-Net network who is there.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>3. Build a look and record it</h2>
+      <p>
+        <strong>Faders</strong> has every fixture's parameters live, over whatever the cues
+        are doing. Set the look by eye, then <strong>Record into cue</strong> (or
+        <strong>New Light cue</strong>): the faders' values go into the cue and the faders
+        let go, so the next GO shows the cue rather than the faders on top of it. A look can
+        also be built and trimmed in the cue's own <strong>Light</strong> tab.
+      </p>
+    </section>
+
+    <section class="panel reveal delay-2">
+      <h2>4. Run it</h2>
+      <p>
+        A Light cue's <strong>Fade</strong> is how long its look takes to arrive, on the
+        curve it names. What the cue does not name stays where the cues before it left it —
+        tracking — and a later cue that sets the same parameter takes it over:
+        <strong>latest takes precedence</strong>. A cue whose intensity is
+        <strong>highest takes precedence</strong> adds its intensity alongside the others
+        instead, and the light is as bright as the brightest of them. The
+        <strong>Tracking</strong> tab shows, parameter by parameter, what the cue moves,
+        what it sets to where it already was, and what it leaves.
+      </p>
+      <ul class="tight-list">
+        <li><strong>STOP</strong> stops a fade where it has got to. The light stays on.</li>
+        <li>A <strong>Stop cue</strong> with a fade-out releases a Light cue: what it holds fades home.</li>
+        <li>A <strong>Fade cue</strong> aimed at a Light cue moves its intensity to a share of what it set — 0.5 is half.</li>
+        <li><strong>Effects</strong> keep a parameter moving after the fade — sine, triangle, square or saw. On a group, spread starts each member at its own point, which is a chase.</li>
+      </ul>
+    </section>
+
+    <section class="panel reveal delay-3">
+      <h2>5. Watch it, and the consoles beside it</h2>
+      <p>
+        <strong>Monitor</strong> shows every slot of a universe as it goes out, ten times a
+        second. <strong>Listen to this universe</strong> in Network hears another console's
+        sACN or Art-Net: it shows under each slot, and with <strong>Merge in</strong> it is
+        merged into this show's output, highest takes precedence.
+      </p>
+      <div class="note">
+        <strong>Blackout</strong> takes every slot to zero until it is pressed again;
+        <strong>Release all</strong> fades every cue's levels home. A panic does what the
+        show says under Network → <strong>On panic</strong>: hold the lights where they are
+        (the default — a panic is a sound emergency, and a dark stage is a second one),
+        release them, or black out. The packets are held byte for byte to the sACN and
+        Art-Net documents and to a listener on this machine in the test suite; no hardware
+        node has been part of a run yet.
+      </div>
     </section>
 `
   },

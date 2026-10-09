@@ -5,6 +5,9 @@ import {
   AUDIO_SILENCE_THRESHOLD_DB,
   type AudioCancelPayload,
   type AudioReleasePayload,
+  type AudioHoldPayload,
+  type AudioMasterPayload,
+  type AudioMeters,
   type AudioCancelResult,
   type AudioClockReading,
   type AudioCommandResult,
@@ -27,6 +30,22 @@ import {
   type AudioProbePayload,
   type AudioRegion,
   type AudioSilencePayload,
+  type AudioLoudness,
+  type AudioLoudnessPayload,
+  type AudioInputDevice,
+  type AudioInputOpenOptions,
+  type AudioInputOpenPayload,
+  type AudioInputClosePayload,
+  type AudioInputStatus,
+  type AudioStartInputPayload,
+  type AudioPatchPayload,
+  type AudioOutputGainsPayload,
+  type AudioOutputOpenPayload,
+  type AudioOutputClosePayload,
+  type AudioOutputDevice,
+  type AudioOutputOpenOptions,
+  type AudioOutputStatus,
+  type AudioPatchResult,
   type AudioSilence,
   type AudioOnsetsPayload,
   type AudioOnsets,
@@ -45,6 +64,7 @@ import {
 import { unwrapAudioResult, type AudioResult } from '../shared/audioResult'
 import {
   APP_CHANNELS,
+  type LogsOpenResult,
   type ReportEmailResult,
   type ReportInput,
   type ReportSaveResult,
@@ -53,9 +73,33 @@ import {
 import { PLAYBACK_CHANNELS } from '../shared/ipc/playback'
 import { LICENSE_CHANNELS } from '../shared/ipc/license'
 import { MIDI_CHANNELS, type MidiSendPayload, type MidiSendResult, type MidiSendTcpPayload } from '../shared/ipc/midi'
+import type {
+  MidiFileCuePayload,
+  MidiFileInspectPayload,
+  MidiFileInspectResult,
+  MidiFilePauseResult,
+  MidiFilePlayPayload,
+  MidiFilePlayResult,
+  MidiFileResumeResult,
+  MidiFileSeekPayload
+} from '../shared/ipc/midi'
 import { NETWORK_CHANNELS } from '../shared/ipc/network'
-import { OSC_CHANNELS, type OscSendPayload, type OscSendResult } from '../shared/ipc/osc'
+import {
+  OSC_CHANNELS,
+  type OscInterfaceState,
+  type OscSendPayload,
+  type OscSendResult,
+  type OscSetInterfacePayload,
+  type OscSetInterfaceResult
+} from '../shared/ipc/osc'
 import { REDUNDANCY_CHANNELS, type RedundancyConfigureResult } from '../shared/ipc/redundancy'
+import {
+  TIMECODE_CHANNELS,
+  type TimecodeControlPayload,
+  type TimecodeGenerateResult,
+  type TimecodeInputs
+} from '../shared/ipc/timecode'
+import type { TimecodeGenerateRequest, TimecodeSettings, TimecodeShowSettings, TimecodeStatus } from '../shared/timecode'
 import {
   SCRIPT_CHANNELS,
   type ScriptReadDocumentPayload,
@@ -92,6 +136,37 @@ import {
   type WorkspaceSavePayload,
   type WorkspaceSaveResult
 } from '../shared/ipc/workspace'
+import {
+  QLAB_CHANNELS,
+  type QLabFindMediaPayload,
+  type QLabFindMediaResult,
+  type QLabImportResult,
+  type QLabLivePayload,
+  type QLabWorkspacesResult
+} from '../shared/ipc/qlab'
+import {
+  UPDATE_CHANNELS,
+  type UpdateActionResult,
+  type UpdateCheckResult,
+  type WhatsNew
+} from '../shared/ipc/update'
+import type { UpdateSettings, UpdateShowState, UpdateStatus } from '../shared/update'
+import {
+  OUTPUT_CHANNELS,
+  type LayerCommand,
+  type OutputCommandResult,
+  type OutputEvent,
+  type OutputPlacePayload,
+  type OutputPlaceResult,
+  type OutputSnapshot,
+  type CameraSnapshot,
+  type ChooseCameraPayload,
+  type OutputTestPatternPayload,
+  type TimerFeed,
+  type TimerWindowState
+} from '../shared/ipc/output'
+import type { OutputPlacement, VideoOutput } from '../shared/visual'
+import type { CameraDevice } from '../shared/camera'
 import type { CuerunnerBridge, EventChannel } from '../shared/ipc'
 import type { Workspace } from '../shared/workspace'
 import type { ShowEvent, ShowSettings, ShowSnapshot, ScriptDocument } from '../shared/show'
@@ -154,7 +229,11 @@ contextBridge.exposeInMainWorld('cuerunner', {
     saveReport: (text: string): Promise<ReportSaveResult> =>
       invoke(APP_CHANNELS.saveReport, text),
     emailReport: (text: string): Promise<ReportEmailResult> =>
-      invoke(APP_CHANNELS.emailReport, text)
+      invoke(APP_CHANNELS.emailReport, text),
+    writeLog: (lines: string[]): Promise<void> =>
+      invoke(APP_CHANNELS.writeLog, lines),
+    openLogs: (): Promise<LogsOpenResult> =>
+      invoke(APP_CHANNELS.openLogs)
   },
   playback: {
     /**
@@ -187,10 +266,18 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invokeAudio(AUDIO_CHANNELS.stopAll, { fadeMs } satisfies AudioStopAllPayload),
     seek: (cueId: string, positionMs: number, whenMs?: number): Promise<AudioSeekResult> =>
       invokeAudio(AUDIO_CHANNELS.seek, { cueId, positionMs, whenMs } satisfies AudioSeekPayload),
-    release: (cueId: string, whenMs?: number, endMs?: number): Promise<AudioCommandResult> =>
-      invokeAudio(AUDIO_CHANNELS.release, { cueId, whenMs, endMs } satisfies AudioReleasePayload),
+    release: (cueId: string, whenMs?: number, endMs?: number, stopAtSliceEnd?: boolean): Promise<AudioCommandResult> =>
+      invokeAudio(AUDIO_CHANNELS.release, { cueId, whenMs, endMs, stopAtSliceEnd } satisfies AudioReleasePayload),
     cancel: (cueId: string, whenMs?: number): Promise<AudioCancelResult> =>
       invokeAudio(AUDIO_CHANNELS.cancel, { cueId, whenMs } satisfies AudioCancelPayload),
+    pause: (cueId: string, whenMs?: number): Promise<AudioCommandResult> =>
+      invokeAudio(AUDIO_CHANNELS.pause, { cueId, whenMs } satisfies AudioHoldPayload),
+    resume: (cueId: string, whenMs?: number): Promise<AudioCommandResult> =>
+      invokeAudio(AUDIO_CHANNELS.resume, { cueId, whenMs } satisfies AudioHoldPayload),
+    master: (gain: number): Promise<AudioCommandResult> =>
+      invokeAudio(AUDIO_CHANNELS.master, { gain } satisfies AudioMasterPayload),
+    meters: (): Promise<AudioMeters> =>
+      invokeAudio(AUDIO_CHANNELS.meters),
     /** Replace a running cue's matrix live: null is automatic, [] is silence, else a list. */
     routing: (cueId: string, outputs: AudioCrosspoint[] | null): Promise<AudioCommandResult> =>
       invokeAudio(AUDIO_CHANNELS.routing, { cueId, outputs } satisfies AudioRoutingPayload),
@@ -200,9 +287,12 @@ contextBridge.exposeInMainWorld('cuerunner', {
       value: number,
       durationMs: number,
       curve: AudioFadeCurve,
-      whenMs?: number
+      whenMs?: number,
+      shape?: number[] | null
     ): Promise<AudioCommandResult> =>
-      invokeAudio(AUDIO_CHANNELS.fade, { cueId, param, value, durationMs, curve, whenMs } satisfies AudioFadePayload),
+      invokeAudio(AUDIO_CHANNELS.fade, {
+        cueId, param, value, durationMs, curve, whenMs, shape
+      } satisfies AudioFadePayload),
     progress: (cueId: string): Promise<AudioProgress | null> =>
       invokeAudio(AUDIO_CHANNELS.progress, { cueId } satisfies AudioProgressPayload),
     panic: (fadeMs: number): Promise<AudioPanicResult> =>
@@ -230,6 +320,34 @@ contextBridge.exposeInMainWorld('cuerunner', {
     /** Headers only: a workspace footprint asks about every cue without decoding one. */
     probe: (filePath: string): Promise<AudioProbe> =>
       invokeAudio(AUDIO_CHANNELS.probe, { filePath } satisfies AudioProbePayload),
+    loudness: (filePath: string): Promise<AudioLoudness> =>
+      invokeAudio(AUDIO_CHANNELS.loudness, { filePath } satisfies AudioLoudnessPayload),
+    inputs: (): Promise<AudioInputDevice[]> =>
+      invokeAudio(AUDIO_CHANNELS.inputs),
+    inputOpen: (options: AudioInputOpenOptions): Promise<AudioInputStatus> =>
+      invokeAudio(AUDIO_CHANNELS.inputOpen, options satisfies AudioInputOpenPayload),
+    inputClose: (device: string): Promise<{ closed: boolean }> =>
+      invokeAudio(AUDIO_CHANNELS.inputClose, { device } satisfies AudioInputClosePayload),
+    inputStatus: (): Promise<AudioInputStatus[]> =>
+      invokeAudio(AUDIO_CHANNELS.inputStatus),
+    startInput: (
+      cueId: string, whenMs: number, device: string, channels: number[], options: Partial<AudioStartOptions>
+    ): Promise<AudioStartResult> =>
+      invokeAudio(AUDIO_CHANNELS.startInput, {
+        cueId, whenMs, device, channels, options
+      } satisfies AudioStartInputPayload),
+    patch: (slot: number, outputs: number[] | null, gain: number, device?: string): Promise<AudioPatchResult> =>
+      invokeAudio(AUDIO_CHANNELS.patch, { slot, outputs, gain, device } satisfies AudioPatchPayload),
+    outputGains: (gains: number[]): Promise<AudioCommandResult> =>
+      invokeAudio(AUDIO_CHANNELS.outputGains, { gains } satisfies AudioOutputGainsPayload),
+    outputs: (): Promise<AudioOutputDevice[]> =>
+      invokeAudio(AUDIO_CHANNELS.outputs),
+    outputOpen: (options: AudioOutputOpenOptions): Promise<AudioOutputStatus> =>
+      invokeAudio(AUDIO_CHANNELS.outputOpen, options satisfies AudioOutputOpenPayload),
+    outputClose: (device: string): Promise<{ closed: boolean }> =>
+      invokeAudio(AUDIO_CHANNELS.outputClose, { device } satisfies AudioOutputClosePayload),
+    outputStatus: (): Promise<AudioOutputStatus[]> =>
+      invokeAudio(AUDIO_CHANNELS.outputStatus),
     /** Engine events, batched by main. Returns the unsubscribe function. */
     onEvents: (callback: (events: AudioEngineEvent[]) => void): (() => void) =>
       subscribe(AUDIO_CHANNELS.events, callback),
@@ -248,7 +366,21 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invoke(MIDI_CHANNELS.send, cmd),
     /** MIDI to a desk on the network, which is where an SQ and an Avantis listen. */
     sendTcp: (cmd: MidiSendTcpPayload): Promise<MidiSendResult> =>
-      invoke(MIDI_CHANNELS.sendTcp, cmd)
+      invoke(MIDI_CHANNELS.sendTcp, cmd),
+    pickFile: (): Promise<string | null> =>
+      invoke(MIDI_CHANNELS.pickFile),
+    fileInspect: (cmd: MidiFileInspectPayload): Promise<MidiFileInspectResult> =>
+      invoke(MIDI_CHANNELS.fileInspect, cmd),
+    filePlay: (cmd: MidiFilePlayPayload): Promise<MidiFilePlayResult> =>
+      invoke(MIDI_CHANNELS.filePlay, cmd),
+    filePause: (cmd: MidiFileCuePayload): Promise<MidiFilePauseResult> =>
+      invoke(MIDI_CHANNELS.filePause, cmd),
+    fileResume: (cmd: MidiFileCuePayload): Promise<MidiFileResumeResult> =>
+      invoke(MIDI_CHANNELS.fileResume, cmd),
+    fileSeek: (cmd: MidiFileSeekPayload): Promise<MidiFileResumeResult> =>
+      invoke(MIDI_CHANNELS.fileSeek, cmd),
+    fileStop: (cmd: MidiFileCuePayload): Promise<boolean> =>
+      invoke(MIDI_CHANNELS.fileStop, cmd)
   },
   network: {
     /**
@@ -263,7 +395,11 @@ contextBridge.exposeInMainWorld('cuerunner', {
   },
   osc: {
     send: (cmd: OscSendPayload): Promise<OscSendResult> =>
-      invoke(OSC_CHANNELS.send, cmd)
+      invoke(OSC_CHANNELS.send, cmd),
+    interfaces: (): Promise<OscInterfaceState> =>
+      invoke(OSC_CHANNELS.interfaces),
+    setInterface: (payload: OscSetInterfacePayload): Promise<OscSetInterfaceResult> =>
+      invoke(OSC_CHANNELS.setInterface, payload)
   },
   show: {
     snapshot: (): Promise<ShowSnapshot> =>
@@ -387,5 +523,99 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invoke(WORKSPACE_CHANNELS.setTitle, title),
     confirmClose: (workspaceName: string): Promise<0 | 1 | 2> =>
       invoke(WORKSPACE_CHANNELS.confirmClose, workspaceName)
+  },
+  /** SMPTE timecode: the clock this machine follows, and the clocks its cues run. */
+  timecode: {
+    settings: (): Promise<TimecodeSettings> =>
+      invoke(TIMECODE_CHANNELS.settings),
+    configure: (patch: Partial<TimecodeSettings>): Promise<TimecodeSettings> =>
+      invoke(TIMECODE_CHANNELS.configure, patch),
+    show: (settings: TimecodeShowSettings): Promise<TimecodeShowSettings> =>
+      invoke(TIMECODE_CHANNELS.show, settings),
+    status: (): Promise<TimecodeStatus> =>
+      invoke(TIMECODE_CHANNELS.status),
+    inputs: (): Promise<TimecodeInputs> =>
+      invoke(TIMECODE_CHANNELS.inputs),
+    generate: (request: TimecodeGenerateRequest): Promise<TimecodeGenerateResult> =>
+      invoke(TIMECODE_CHANNELS.generate, request),
+    control: (payload: TimecodeControlPayload): Promise<boolean> =>
+      invoke(TIMECODE_CHANNELS.control, payload),
+    onEvents: (callback: (status: TimecodeStatus) => void): (() => void) =>
+      subscribe(TIMECODE_CHANNELS.events, callback)
+  },
+  /**
+   * A QLab show brought across: from its workspace file, through a dialog main shows, or
+   * from a QLab that is running, over the socket main opens. A cancel is a `null` inside
+   * the `ok` arm; a file or a QLab the import cannot read is the refusal arm.
+   */
+  qlab: {
+    importFile: (): Promise<QLabImportResult> =>
+      invoke(QLAB_CHANNELS.importFile),
+    listWorkspaces: (host: string, port: number): Promise<QLabWorkspacesResult> =>
+      invoke(QLAB_CHANNELS.listWorkspaces, { host, port }),
+    importLive: (payload: QLabLivePayload): Promise<QLabImportResult> =>
+      invoke(QLAB_CHANNELS.importLive, payload),
+    findMedia: (workspace: Workspace, workspacePath: string | null): Promise<QLabFindMediaResult> =>
+      invoke(QLAB_CHANNELS.findMedia, { workspace, workspacePath } satisfies QLabFindMediaPayload)
+  },
+  /**
+   * Updates: each step the operator's, and each refused while the show runs. The show's state
+   * is reported as it changes, fire and forget — a report that fails is one main does without,
+   * and it treats a show it has not heard about as the window last described it.
+   */
+  update: {
+    status: (): Promise<UpdateStatus> =>
+      invoke(UPDATE_CHANNELS.status),
+    check: (): Promise<UpdateCheckResult> =>
+      invoke(UPDATE_CHANNELS.check),
+    download: (): Promise<UpdateActionResult> =>
+      invoke(UPDATE_CHANNELS.download),
+    install: (): Promise<UpdateActionResult> =>
+      invoke(UPDATE_CHANNELS.install),
+    configure: (patch: Partial<UpdateSettings>): Promise<UpdateStatus> =>
+      invoke(UPDATE_CHANNELS.configure, patch),
+    report: (state: UpdateShowState): void => {
+      void ipcRenderer.invoke(UPDATE_CHANNELS.report, state).catch(() => {})
+    },
+    whatsNew: (): Promise<WhatsNew | null> =>
+      invoke(UPDATE_CHANNELS.whatsNew),
+    openDownloads: (): Promise<void> =>
+      invoke(UPDATE_CHANNELS.openDownloads),
+    onEvents: (callback: (status: UpdateStatus) => void): (() => void) =>
+      subscribe(UPDATE_CHANNELS.events, callback)
+  },
+  /**
+   * The video outputs: windows main keeps for the show's pictures. Every time a command
+   * carries is engine milliseconds, the clock the sound of a video is scheduled on.
+   */
+  output: {
+    configure: (outputs: VideoOutput[]): Promise<void> =>
+      invoke(OUTPUT_CHANNELS.configure, outputs),
+    snapshot: (): Promise<OutputSnapshot> =>
+      invoke(OUTPUT_CHANNELS.snapshot),
+    place: (outputId: string, placement: OutputPlacement): Promise<OutputPlaceResult> =>
+      invoke(OUTPUT_CHANNELS.place, { outputId, placement } satisfies OutputPlacePayload),
+    layer: (command: LayerCommand): Promise<OutputCommandResult> =>
+      invoke(OUTPUT_CHANNELS.layer, command),
+    identify: (): Promise<void> =>
+      invoke(OUTPUT_CHANNELS.identify),
+    testPattern: (outputId: string, on: boolean): Promise<OutputCommandResult> =>
+      invoke(OUTPUT_CHANNELS.testPattern, { outputId, on } satisfies OutputTestPatternPayload),
+    preview: (outputId: string): Promise<string | null> =>
+      invoke(OUTPUT_CHANNELS.preview, outputId),
+    timer: (feed: TimerFeed): Promise<void> =>
+      invoke(OUTPUT_CHANNELS.timer, feed),
+    timerWindow: (state: TimerWindowState): Promise<TimerWindowState> =>
+      invoke(OUTPUT_CHANNELS.timerWindow, state),
+    pickFile: (kind: 'video' | 'image'): Promise<string | null> =>
+      invoke(OUTPUT_CHANNELS.pickFile, kind),
+    onEvents: (callback: (events: OutputEvent[]) => void): (() => void) =>
+      subscribe(OUTPUT_CHANNELS.events, callback),
+    cameras: (): Promise<CameraSnapshot> =>
+      invoke(OUTPUT_CHANNELS.cameras),
+    chooseCamera: (cueId: string, device: CameraDevice | null): Promise<CameraSnapshot> =>
+      invoke(OUTPUT_CHANNELS.chooseCamera, { cueId, device } satisfies ChooseCameraPayload),
+    pickMask: (): Promise<string | null> =>
+      invoke(OUTPUT_CHANNELS.pickMask)
   }
 } satisfies CuerunnerBridge)

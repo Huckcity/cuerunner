@@ -1,5 +1,11 @@
 import { savedShape, type WorkspaceValues } from '../../../shared/workspaceSections'
 import type { Workspace } from '../../../shared/workspace'
+import { isEmptyLighting, type LightingSettings } from '../../../shared/dmx'
+import { isDefaultTimecodeShow, type TimecodeShowSettings } from '../../../shared/timecode'
+import { canonicalCueList, isDefaultCueLists, type CueListInfo } from '../../../shared/cueLists'
+import { isDefaultPictureSettings, type PictureSettings } from '../../../shared/visual'
+import { savedOscPatches } from '../../../shared/oscPatches'
+import type { OscPatch } from '../../../shared/cue'
 
 // The saved form of the current session. A real save and an autosave snapshot are built
 // the same way, so a recovered workspace has the shape a saved one does.
@@ -20,12 +26,56 @@ import type { Workspace } from '../../../shared/workspace'
 // direction: the main process compares the file about to be replaced with what is about
 // to replace it and writes the entry itself. The store carries the result back, so a save
 // appends to the file's history rather than replacing it with this session's.
-export function buildWorkspace(values: Omit<WorkspaceValues, 'version'>): Workspace {
+//
+// The lighting rig is the one section every caller has to name, even as nothing: it is
+// optional on the saved form, so a call site that forgot it would compile and save a show
+// without its rig. A show with no rig writes no section, the way a show with no past writes
+// no history — so a show saved before lighting existed stays byte-identical.
+//
+// The show's timecode is a section every caller has to name, even as nothing: it is
+// optional on the saved form, so a call site that forgot it would compile and save a show
+// that had stopped chasing. A show that leaves it at the defaults writes no section — so a
+// show saved before timecode existed, or that never touched it, stays byte-identical.
+//
+// The video outputs the same: named at every call, even where there are none, and a show with
+// none writes no section.
+//
+// The cue lists are named by every caller the same way: a call site that forgot them would
+// compile and save every list's cues into a show that has only its main list — which the load
+// funnel would then repair into one list. A show with only its main list under its own name
+// writes no section, so a show saved before lists existed stays byte-identical.
+//
+// And the show's picture settings: named at every call, and a show that leaves them at the
+// defaults writes no section.
+// The OSC patches are named by every caller for the same reason: a show with none writes no
+// section, and a call site that forgot them would save a show whose messages name patches it
+// no longer has.
+export function buildWorkspace(
+  values: Omit<WorkspaceValues, 'version' | 'lighting' | 'timecode' | 'videoOutputs' | 'cueLists' | 'pictures' | 'oscPatches'> & {
+    lighting: LightingSettings | undefined
+    timecode: TimecodeShowSettings | undefined
+    videoOutputs: WorkspaceValues['videoOutputs']
+    cueLists: CueListInfo[] | undefined
+    pictures: PictureSettings | undefined
+    oscPatches: OscPatch[] | undefined
+  }
+): Workspace {
   return savedShape({
     version: 1,
     ...values,
     // A file with nothing to say about its past says nothing: an empty array here would
     // be the key every save of every show carries for no reason.
-    history: values.history && values.history.length > 0 ? values.history : undefined
+    history: values.history && values.history.length > 0 ? values.history : undefined,
+    lighting: values.lighting === undefined || isEmptyLighting(values.lighting) ? undefined : values.lighting,
+    timecode: values.timecode === undefined || isDefaultTimecodeShow(values.timecode) ? undefined : values.timecode,
+    // The same for a show with no video output: its bytes are what they were before
+    // outputs existed.
+    videoOutputs: values.videoOutputs && values.videoOutputs.length > 0 ? values.videoOutputs : undefined,
+    cueLists: values.cueLists === undefined || isDefaultCueLists(values.cueLists)
+      ? undefined
+      : values.cueLists.map(canonicalCueList),
+    // And for a show whose pictures stay up until they are stopped, as they always did.
+    pictures: values.pictures === undefined || isDefaultPictureSettings(values.pictures) ? undefined : values.pictures,
+    oscPatches: savedOscPatches(values.oscPatches)
   })
 }

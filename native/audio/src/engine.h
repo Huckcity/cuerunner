@@ -4,8 +4,12 @@
 // preallocated mixer state.
 #pragma once
 
+#include "aux_output.h"
 #include "cache.h"
 #include "capture.h"
+#include "live_input.h"
+#include "loudness.h"
+#include "ltc.h"
 #include "mixer.h"
 #include "snapshot_cell.h"
 #include "source.h"
@@ -50,6 +54,15 @@ struct EngineOptions {
    */
   int64_t scheduleHorizonMs = limitValue(LimitId::ScheduleHorizonMs);
   bool offline = false;
+  /** Offer the synthetic live inputs (`test:tone`, `test:ramp`) beside the real ones. The
+   *  offline backend always offers them; a device backend only when asked, for the tests. */
+  bool testInputs = false;
+  /** Offer the test output devices (`test:out-a`, `test:out-b`) beside the real ones. The
+   *  offline backend always offers them; a device backend only when asked, for the tests. */
+  bool testOutputs = false;
+  /** Offline: where the test output devices tee what they play, beside the render's own WAV.
+   *  A device backend tees them beside `capturePath`. */
+  std::string testOutputCapture;
 };
 
 struct EngineError {
@@ -108,6 +121,25 @@ struct StartResultDTO {
 struct CommandResultDTO {
   double atMs = 0.0;
   bool applied = false;
+};
+
+/** What defining a patch did: the device it plays on, and whether that is the one it asked for. */
+struct PatchResultDTO {
+  double atMs = 0.0;
+  bool applied = false;
+  /** The extra output device the patch plays on; empty for the main device. */
+  std::string device;
+  /** The patch named a device that would not open, and plays on the main device's outputs
+   *  of the same numbers instead. */
+  bool fallback = false;
+  /** Why the device it named would not open; empty unless `fallback`. */
+  std::string reason;
+};
+
+/** One extra output device's meter: each of its channels' peak, after the master level. */
+struct OutputMeterDTO {
+  std::string device;
+  std::vector<float> peaks;
 };
 
 struct CancelResultDTO {
@@ -246,6 +278,13 @@ class Engine {
   bool stopAll(double fadeMs, CommandResultDTO& out, EngineError& error);
   bool seekCue(const std::string& cueId, double positionMs, double whenMs, SeekResultDTO& out, EngineError& error);
   bool cancelCue(const std::string& cueId, double whenMs, CancelResultDTO& out, EngineError& error);
+  /** Holds a cue's voice where it stands, at `whenMs` (0 is now); `applied` is false for a
+   *  voice already held or a cue with nothing playing. */
+  bool pauseCue(const std::string& cueId, double whenMs, CommandResultDTO& out, EngineError& error);
+  /** Lets a held voice go on, every timed thing about it moved on by the hold. */
+  bool resumeCue(const std::string& cueId, double whenMs, CommandResultDTO& out, EngineError& error);
+  /** Sets the level everything leaves the engine at, 0 to 2 (+6 dB), ramped over a block. */
+  bool setMaster(double gain, CommandResultDTO& out, EngineError& error);
   /**
    * Ends a voice's loop and plays it out to the end of the file, from wherever the loop
    * is — or to `endMs` when `hasEnd` names one, which is where a cue trimmed of its
@@ -254,13 +293,65 @@ class Engine {
    * operator aimed at rather than at a seam.
    */
   bool releaseCue(const std::string& cueId, double whenMs, bool hasEnd, double endMs, CommandResultDTO& out,
-                  EngineError& error);
+                  EngineError& error, bool stopAtSliceEnd = false);
+
+  // ── Live inputs (live_input.h) ─────────────────────────────────────────────────────
+  /** The capture devices a live input can be taken from, and the synthetic ones when offered. */
+  bool inputDevices(std::vector<InputDeviceInfo>& out, EngineError& error) const;
+  /** Opens a feed (or finds it open) so a cue that goes live later starts at once. */
+  bool openInput(const InputOpenOptions& options, InputFeedStatus& out, EngineError& error);
+  /** Closes a feed; voices reading it fall silent. `closed` is false when none was open. */
+  bool closeInput(const std::string& device, bool& closed, EngineError& error);
+  std::vector<InputFeedStatus> inputStatus();
+  /**
+   * Starts a live voice: `channels` of the feed `input.device` (opened if it is not) as the
+   * voice's channels, with the level, pan, routing, patch and fade-in of `options`. The
+   * voice is a mixer voice like any other: stop, fade, pause, routing and panic reach it.
+   */
+  bool startInput(const std::string& cueId, double whenMs, const InputOpenOptions& input,
+                  const std::vector<int>& channels, StartOptions options, StartResultDTO& out, EngineError& error);
+
+  // ── Output patches and the mixer ──────────────────────────────────────────────────
+  /**
+   * Defines (or clears) output patch `slot`: its channels onto the outputs of `device` (empty,
+   * or the main device's own id, is the main device), and its fader. A device the engine has
+   * not opened is opened here and kept open; one that will not open leaves the patch on the
+   * main device's outputs of the same numbers, and the answer says so and why.
+   */
+  bool setPatch(int slot, bool defined, const std::vector<int>& outputs, double gain, const std::string& device,
+                PatchResultDTO& out, EngineError& error);
+
+  // ── Extra output devices (aux_output.h) ─────────────────────────────────────────────
+  /** The output devices a patch can name, and the test ones when offered. */
+  bool outputDevices(std::vector<OutputDeviceInfo>& out, EngineError& error) const;
+  /**
+   * Opens an extra output device (or finds it open) — the reconnect for one that was lost —
+   * and brings the patches that named it back onto it.
+   */
+  bool openOutput(const OutputOpenOptions& options, OutputStatus& out, EngineError& error);
+  /** Closes an extra output device; its patches go to the main device. `closed` is false when none was open. */
+  bool closeOutput(const std::string& device, bool& closed, EngineError& error);
+  std::vector<OutputStatus> outputStatus() { return auxOutputs_.status(); }
+  /** Each open extra output device's meter as the last block left it. */
+  void outputMeters(std::vector<OutputMeterDTO>& out) const;
+  /** Test-only: runs the real notification classification against an open test output device. */
+  bool simulateOutputNotification(const std::string& device, int type, bool deliberate, EngineError& error);
+  /** Every device output's own fader, linear, in output order; outputs not named are at unity. */
+  bool setOutputGains(const std::vector<double>& gains, CommandResultDTO& out, EngineError& error);
+  /** Each patch's meter as the last block left it: its channel count and each channel's peak. */
+  void busMeters(int* channels, float (*peaks)[kMaxOutputChannels]) const;
+
+  /** A file's integrated loudness and true peak (loudness.h), from a scan of its samples. */
+  bool loudness(const std::string& filePath, LoudnessDTO& out, EngineError& error);
+  /** `shape`, when it carries a table, is the fade's drawn curve, and `curve` is `Table`. */
   bool fadeCue(const std::string& cueId, int param, double value, double durationMs, int curve, double whenMs,
-               CommandResultDTO& out, EngineError& error);
+               CommandResultDTO& out, EngineError& error, const CurveTable* shape = nullptr);
   bool routeCue(const std::string& cueId, bool automatic, const std::vector<Crosspoint>& points,
                 CommandResultDTO& out, EngineError& error);
   bool panic(double fadeMs, PanicResultDTO& out, EngineError& error);
   bool progress(const std::string& cueId, VoiceSnapshot& out, bool& found) const;
+  /** The output's meter as the last block left it: each channel's peak, and the master level. */
+  void meters(int& channels, float* peaks, double& master, double& atMs) const;
   double clockMs() const;
   /** The identity minted when this engine instance was constructed. */
   const std::string& sessionId() const { return sessionId_; }
@@ -306,6 +397,10 @@ class Engine {
   // offline mode deliberately has no background thread.
   void renderOfflineBlock(float* out, int frames);
   void pump();
+
+  /** The LTC voices the mixer adds to its output, and the reader on a capture device (ltc.h). */
+  LtcOutputs& ltcOutputs() { return ltcOutputs_; }
+  LtcInput& ltcInput() { return ltcInput_; }
 
  private:
   struct DeviceState;
@@ -394,6 +489,20 @@ class Engine {
   void copySnapshot(MixSnapshot& out) const;
   std::string deviceIdString() const;
 
+  /**
+   * Opens an extra output device (or finds it open) and has the mixer mix for it: its slot,
+   * or -1 with the reason. The patch lock is the caller's.
+   */
+  int openAuxLocked(const OutputOpenOptions& options, std::string& error);
+  /** Points patch `slot` at a device (an extra one's slot, or -1 for the main one). The patch lock is the caller's. */
+  bool pointPatchLocked(int slot, int aux, EngineError& error);
+  /** The main device's own id, or empty when the engine has no device. */
+  std::string mainDeviceId() const;
+  /** The render thread's block for every open extra output device, and the simulated ones run. */
+  void pushAux(int frames);
+  /** Service thread: each extra output device that failed is reported, and its voices end. */
+  void handleAuxFailures();
+
   EngineOptions options_;
   std::string sessionId_;
   DecodedCache cache_;
@@ -403,6 +512,27 @@ class Engine {
   SpscQueue<ReclaimItem, 512> reclaim_;
   Mixer mixer_;
   CaptureWriter capture_;
+  LtcOutputs ltcOutputs_;
+  LtcInput ltcInput_;
+  InputFeeds inputs_;
+  AuxOutputs auxOutputs_;
+
+  /**
+   * What each patch slot was last defined as, on the control side: the device it asked for
+   * and the one it was pointed at. A device opened again (a reconnect) brings back every
+   * patch that asked for it, and one closed sends them to the main device first, so a slot a
+   * device gave up never carries a patch onto the next device to take it. Opening, closing
+   * and pointing patches are serialised by `patchMutex_`, which the service thread never takes.
+   */
+  struct PatchState {
+    bool defined = false;
+    std::vector<int> outputs;
+    double gain = 1.0;
+    std::string device;
+    int aux = -1;
+  };
+  PatchState patches_[kMaxPatches];
+  std::mutex patchMutex_;
 
   std::unique_ptr<DeviceState> device_;
   mutable std::mutex deviceMutex_;
@@ -457,6 +587,13 @@ class Engine {
   std::vector<WaveformCacheEntry> waveformCache_;
   std::vector<OnsetCacheEntry> onsetCache_;
   std::vector<SilenceCacheEntry> silenceCache_;
+  struct LoudnessCacheEntry {
+    std::string filePath;
+    FileStamp stamp;
+    LoudnessDTO result;
+    uint64_t lastUse = 0;
+  };
+  std::vector<LoudnessCacheEntry> loudnessCache_;
   uint64_t analysisCacheClock_ = 0;
 
   struct PreparedFile {
@@ -471,6 +608,10 @@ class Engine {
   // `snapshot_` is the writer's own staging copy; readers only ever see `snapshotCell_`.
   mutable MixSnapshot snapshot_;
   mutable SnapshotCell<MixSnapshot> snapshotCell_;
+  // The patches' and extra devices' meters, published apart so the main snapshot costs a show
+  // without either nothing.
+  mutable OptionalMeters optionalMeters_;
+  mutable SnapshotCell<OptionalMeters> optionalMetersCell_;
   std::atomic<bool> running_{false};
   std::atomic<bool> backgroundStop_{false};
   std::thread background_;

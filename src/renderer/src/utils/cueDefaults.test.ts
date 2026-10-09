@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createCue, cueNameFromFile, formatDuration, formatClock, nextCueNumber } from './cueDefaults'
 import type { CueType } from '../../../shared/cue'
+import { oscMessages } from '../../../shared/cueTargets'
 
 describe('nextCueNumber', () => {
   const numbered = (...numbers: string[]) => numbers.map(number => ({ number }))
@@ -75,8 +76,10 @@ describe('createCue', () => {
   it('osc cue defaults to localhost port 53000', () => {
     const cue = createCue('osc')
     if (cue.type !== 'osc') throw new Error('wrong type')
-    expect(cue.host).toBe('127.0.0.1')
-    expect(cue.port).toBe(53000)
+    // A new cue carries its one message as a list, ready for the next.
+    expect(cue.messages).toEqual([{ patchId: '', host: '127.0.0.1', port: 53000, address: '/cue/1/start', args: [] }])
+    expect(oscMessages(cue)[0].host).toBe('127.0.0.1')
+    expect(oscMessages(cue)[0].port).toBe(53000)
   })
 
   it('wait cue has non-zero default duration', () => {

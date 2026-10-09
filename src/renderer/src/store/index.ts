@@ -1,10 +1,22 @@
 import { create } from 'zustand'
-import type { Cue, CueType, AudioCue, GroupCue, SoundRegion } from '../../../shared/cue'
+import type { Cue, CueType, AudioCue, GroupCue, OscPatch, SoundRegion } from '../../../shared/cue'
+import { withPatch } from '../../../shared/cueTargets'
+import { heldOscPatches } from '../../../shared/oscPatches'
 import type { MissingMedia } from '../../../shared/media'
 import type { ShowHistoryEntry } from '../../../shared/showfile'
 import type { MergeNote, MergeTally } from '../../../shared/showfileMerge'
 import type { AudioSettings, LoadNote, MidiSettings, TriggerGuardSettings, WorkspaceIdentity } from '../../../shared/workspace'
 import { DEFAULT_TRIGGER_GUARD, normalizeTriggerGuard, UNTITLED_SHOW } from '../../../shared/workspace'
+import {
+  MAX_OUTPUTS,
+  carriesMediaFile,
+  createOutput,
+  defaultPictureSettings,
+  normalizePictureSettings,
+  normalizeVideoOutputs,
+  type PictureSettings,
+  type VideoOutput
+} from '../../../shared/visual'
 import { defaultShowSettings } from '../../../shared/show'
 import type { RedundancySettings, RedundancyStatus } from '../../../shared/redundancy'
 import type {
@@ -54,14 +66,35 @@ import { incidentsFrom, MAX_INCIDENTS } from '../utils/rfIncidents'
 import type { RfIncident } from '../utils/rfIncidents'
 import { liveCue } from '../utils/liveCue'
 import type { LicenseStatus } from '../../../shared/license'
+import { defaultLightingSettings, heldLighting, type LightingSettings } from '../../../shared/dmx'
+import {
+  defaultTimecodeShowSettings,
+  heldTimecode,
+  normalizeTimecodeShowSettings,
+  type TimecodeShowSettings
+} from '../../../shared/timecode'
+import {
+  canonicalCueList,
+  CUE_LIST_NAME_MAX,
+  cuesOfList,
+  defaultCueLists,
+  firstCueOfList,
+  heldCueLists,
+  MAIN_CUE_LIST_ID,
+  moveToList,
+  newListName,
+  withoutList,
+  type CueListInfo
+} from '../../../shared/cueLists'
+import { cursorFor, cursorOf, withCueLists, type ListCursor } from './cueLists'
 
-export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait'
+export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait' | 'paused'
 
 /**
  * The tabs the settings dialog has. `license` is the machine's own settings rather
  * than the workspace's, which is why the dialog can be opened straight onto it.
  */
-export type SettingsTab = 'general' | 'audio' | 'midi' | 'network' | 'wireless' | 'redundancy' | 'license'
+export type SettingsTab = 'general' | 'audio' | 'midi' | 'network' | 'wireless' | 'redundancy' | 'license' | 'timecode' | 'updates'
 
 /** The tabs Show Settings has, in the order they are drawn. */
 export type ShowSettingsTab = 'channels' | 'cast' | 'mic-plot'
@@ -110,6 +143,11 @@ export interface LogEntry {
   message: string
   /** Cue identity when the entry was written, e.g. "3 · Network Cue". */
   label?: string
+  /**
+   * Where the line came from when it is not the window's own: a failure main reported, which
+   * main writes to the log file itself, so the window does not write it a second time.
+   */
+  origin?: 'main'
 }
 
 export type LogEntryInput = Omit<LogEntry, 'id' | 'at'>
@@ -196,6 +234,47 @@ interface CueListState {
   moveCue: (fromIndex: number, beforeIndex: number, newParentId?: string | null) => void
   /** Duplicates each cue with its children as a single edit; the copies are selected. */
   duplicateCues: (ids: string[]) => void
+  /**
+   * Writes a patch of its own to each cue as a single edit — a batch edit whose fields do not
+   * apply to every cue in the set (a volume to the audio cues and not to the waits).
+   */
+  patchCues: (patches: Record<string, Partial<Cue>>) => void
+  /**
+   * Puts a block of new cues — a group and its children, already in order — into the list as
+   * one edit, and selects the first of them: at the top level after the top-level cue that
+   * holds `afterId`, or in front of the cue at a flat index (`cues.length` is the end), where
+   * a drop put it with the parent it gave the block's first cue.
+   */
+  insertCues: (block: Cue[], at: string | null | { beforeIndex: number }) => void
+
+  /**
+   * The show's cue lists, in tab order. Workspace content: an edit to one dirties the show
+   * and enters undo with the cues it is read beside.
+   */
+  cueLists: CueListInfo[]
+  /**
+   * The list on screen, which is the one the selection below is in: GO, STOP, the toolbar and
+   * a paste act on it. Session state — which tab is in front is where the operator is looking.
+   */
+  activeListId: string
+  /** Every other list's place, by list id, kept for when it comes back to the front. Session state. */
+  listCursors: Record<string, ListCursor>
+  /** Brings a list to the front, where its hand was left (its first cue, the first time). */
+  setActiveList: (listId: string) => void
+  /** A new, empty list after the others, brought to the front. One edit. */
+  addCueList: (name?: string, cart?: boolean) => void
+  /** A list's own settings: its name, colour, face, arm, clock or tile keys. One edit. */
+  updateCueList: (listId: string, patch: Partial<Omit<CueListInfo, 'id'>>) => void
+  /** A list moved to another place among the tabs. One edit. */
+  moveCueList: (listId: string, toIndex: number) => void
+  /** A list and every cue in it, as one edit. The main list stays: it is where unlisted cues are. */
+  removeCueList: (listId: string) => void
+  /** Cues moved to the end of another list, groups whole, as one edit; the hand stays in this one. */
+  moveCuesToList: (ids: string[], listId: string) => void
+  /** The cue a list's GO fires next: the selection on screen, or the place another list was left. */
+  listPlayhead: (listId: string) => string | null
+  /** Moves a list's playhead, on screen or off it, without bringing the list to the front. */
+  setListPlayhead: (listId: string, cueId: string | null) => void
 
   // Selection. The set is what a bulk edit acts on; `selectedId` is the cue the operator
   // last put their hand on — the one GO fires and advances from, and always a member of
@@ -282,6 +361,42 @@ interface CueListState {
    */
   triggerGuard: TriggerGuardSettings
   updateTriggerGuard: (patch: Partial<TriggerGuardSettings>) => void
+
+  /**
+   * The lighting rig: workspace content, so an edit dirties the show and enters undo with the
+   * cue list it is read beside. The levels on the rig are not here — they are the lighting
+   * engine's, in main — only what the show says the rig is.
+   */
+  lighting: LightingSettings
+  setLighting: (next: LightingSettings) => void
+
+  /**
+   * How the show follows an incoming SMPTE clock: chase, what the cues do when it stops, the
+   * offset, the rate it is read at. Workspace content — it travels in the file — so an edit
+   * dirties the show and enters undo. Where the clock arrives is the machine's, not here.
+   */
+  timecode: TimecodeShowSettings
+  setTimecode: (patch: Partial<TimecodeShowSettings>) => void
+
+  /**
+   * The show's video outputs (src/shared/visual.ts). Workspace content: what each output is
+   * travels with the show; where it is on this machine does not (main keeps that).
+   */
+  videoOutputs: VideoOutput[]
+  /** Adds an output named for its place in the list, and answers its id. */
+  addVideoOutput: () => string
+  updateVideoOutput: (id: string, patch: Partial<Omit<VideoOutput, 'id'>>) => void
+  removeVideoOutput: (id: string) => void
+  /** What the show says about its pictures as a whole (src/shared/visual.ts). Workspace content. */
+  pictures: PictureSettings
+  setPictures: (patch: Partial<PictureSettings>) => void
+
+  /**
+   * The show's named OSC destinations: workspace content, so an edit dirties the show and
+   * enters undo with the cues whose messages name them.
+   */
+  oscPatches: OscPatch[]
+  setOscPatches: (next: OscPatch[]) => void
 
   // Show services. Everything here is reported by the main process and rendered by the
   // monitor panel: what is listening, what is on stage, and what has gone wrong. None
@@ -528,7 +643,13 @@ interface CueListState {
     showSettings?: ShowSettings,
     identity?: WorkspaceIdentity,
     triggerGuard?: TriggerGuardSettings,
-    history?: ShowHistoryEntry[]
+    history?: ShowHistoryEntry[],
+    lighting?: LightingSettings,
+    timecode?: TimecodeShowSettings,
+    videoOutputs?: VideoOutput[],
+    cueLists?: CueListInfo[],
+    pictures?: PictureSettings,
+    oscPatches?: OscPatch[]
   ) => void
   /** A save that reached the disk: its path, and the history it wrote into the file. */
   saveSucceeded: (path: string, name: string, history: ShowHistoryEntry[]) => void
@@ -548,6 +669,12 @@ interface EditSnapshot {
   cast: CastSettings
   desk: DeskSettings
   plot: RfPlot
+  lighting: LightingSettings
+  timecode: TimecodeShowSettings
+  videoOutputs: VideoOutput[]
+  cueLists: CueListInfo[]
+  pictures: PictureSettings
+  oscPatches: OscPatch[]
 }
 
 function snapshotOf(state: CueListState): EditSnapshot {
@@ -556,7 +683,13 @@ function snapshotOf(state: CueListState): EditSnapshot {
     scenes: state.showSettings.scenes,
     cast: state.showSettings.cast,
     desk: state.showSettings.desk,
-    plot: state.showSettings.rf.plot
+    plot: state.showSettings.rf.plot,
+    lighting: state.lighting,
+    timecode: state.timecode,
+    videoOutputs: state.videoOutputs,
+    cueLists: state.cueLists,
+    pictures: state.pictures,
+    oscPatches: state.oscPatches
   }
 }
 
@@ -680,7 +813,10 @@ function cueRetargeted(cues: Cue[], id: string, patch: Partial<Cue>): boolean {
  * file that answered, not about the cue.
  */
 function patchedCue(cue: Cue, patch: Partial<Cue>): Cue {
-  const next = { ...cue, ...patch } as Cue
+  // A field the patch names as undefined is taken off the cue rather than left on it as
+  // undefined: that is how an edit moves a cue from one spelling of a field to another — a
+  // fade's single legacy target to its list (`fadeTargetsPatch`) — without carrying both.
+  const next = withPatch(cue, patch) as Cue
   // Only an audio cue has a file to point somewhere else, and only a measurement has a
   // file to belong to.
   const was = cue.type === 'audio' ? cue : null
@@ -779,7 +915,7 @@ function neighbourOfRemoved(
   return null
 }
 
-export const useStore = create<CueListState>((set) => ({
+export const useStore = create<CueListState>()(withCueLists<CueListState>((set, get) => ({
   workspaceName: UNTITLED_SHOW,
   workspacePath: null,
   // A session that has not opened a file is a new show, so it starts with an identity of
@@ -804,6 +940,14 @@ export const useStore = create<CueListState>((set) => ({
   log: [],
   showSettings: defaultShowSettings(),
   triggerGuard: { ...DEFAULT_TRIGGER_GUARD },
+  lighting: defaultLightingSettings(),
+  timecode: defaultTimecodeShowSettings(),
+  videoOutputs: [],
+  cueLists: defaultCueLists(),
+  activeListId: MAIN_CUE_LIST_ID,
+  listCursors: {},
+  pictures: defaultPictureSettings(),
+  oscPatches: [],
   showServices: [],
   showDevices: [],
   showAlerts: [],
@@ -991,6 +1135,41 @@ export const useStore = create<CueListState>((set) => ({
     }
   }),
 
+  patchCues: (patches) => set(s => {
+    const ids = Object.keys(patches).filter(id => s.cues.some(cue => cue.id === id))
+    if (ids.length === 0) return s
+    const retargeted = ids.filter(id => cueRetargeted(s.cues, id, patches[id]))
+    return {
+      cues: s.cues.map(c => c.id in patches ? patchedCue(c, patches[c.id]) : c),
+      ...(retargeted.length > 0
+        ? { silenceFailures: forgetSilenceFailures(s.silenceFailures, retargeted) }
+        : {}),
+      isDirty: true,
+      past: pushPast(s.past, snapshotOf(s)),
+      future: [],
+    }
+  }),
+
+  insertCues: (block, at) => set(s => {
+    if (block.length === 0) return s
+    const cues = [...s.cues]
+    let insertIdx: number
+    if (at !== null && typeof at === 'object') {
+      insertIdx = Math.min(Math.max(at.beforeIndex, 0), cues.length)
+    } else {
+      // The block goes after the top-level cue that holds `at`, past its whole subtree:
+      // inside a group it would become part of what it acts on.
+      let anchor = at === null ? -1 : cues.findIndex(c => c.id === at)
+      while (anchor >= 0 && cues[anchor].parentId !== null) {
+        const parentId = cues[anchor].parentId
+        anchor = cues.findIndex(c => c.id === parentId)
+      }
+      insertIdx = anchor < 0 ? cues.length : subtreeEndIndex(cues, anchor) + 1
+    }
+    cues.splice(insertIdx, 0, ...block)
+    return { cues, ...selectionFor(block[0].id), isDirty: true, past: pushPast(s.past, snapshotOf(s)), future: [] }
+  }),
+
   moveCue: (fromIndex, beforeIndex, newParentId) => set(s => {
     const moved = s.cues[fromIndex]
     if (!moved) return s
@@ -1102,6 +1281,12 @@ export const useStore = create<CueListState>((set) => ({
       cues: snapshot.cues,
       ...pruneSelection(snapshot.cues, s),
       showSettings: restoreSettings(s.showSettings, snapshot),
+      lighting: snapshot.lighting,
+      timecode: snapshot.timecode,
+      videoOutputs: snapshot.videoOutputs,
+      cueLists: snapshot.cueLists,
+      pictures: snapshot.pictures,
+      oscPatches: snapshot.oscPatches,
       past,
       future: [snapshotOf(s), ...s.future.slice(0, HISTORY_LIMIT - 1)],
       // An undo after a save moves the cues away from the file's bytes: the session is
@@ -1117,11 +1302,138 @@ export const useStore = create<CueListState>((set) => ({
       cues: snapshot.cues,
       ...pruneSelection(snapshot.cues, s),
       showSettings: restoreSettings(s.showSettings, snapshot),
+      lighting: snapshot.lighting,
+      timecode: snapshot.timecode,
+      videoOutputs: snapshot.videoOutputs,
+      cueLists: snapshot.cueLists,
+      pictures: snapshot.pictures,
+      oscPatches: snapshot.oscPatches,
       future,
       past: pushPast(s.past, snapshotOf(s)),
       // A redo after a save is an edit like any other: it leaves the file behind.
       isDirty: true
     }
+  }),
+
+  setActiveList: (listId) => set(s => {
+    if (listId === s.activeListId || !s.cueLists.some(list => list.id === listId)) return s
+    return {
+      activeListId: listId,
+      ...cursorFor(s.cues, listId, s.listCursors[listId]),
+      listCursors: { ...s.listCursors, [s.activeListId]: cursorOf(s) }
+    }
+  }),
+
+  addCueList: (name, cart) => set(s => {
+    const id = crypto.randomUUID()
+    const list = canonicalCueList({
+      id,
+      name: (name?.trim() || newListName(s.cueLists, cart ? 'Cart' : 'Cue List')).slice(0, CUE_LIST_NAME_MAX),
+      cart
+    })
+    return {
+      cueLists: [...s.cueLists, list],
+      // A new list is brought to the front, empty: the next cue added is its first.
+      activeListId: id,
+      ...NO_SELECTION,
+      listCursors: { ...s.listCursors, [s.activeListId]: cursorOf(s) },
+      isDirty: true,
+      past: pushPast(s.past, snapshotOf(s)),
+      future: []
+    }
+  }),
+
+  updateCueList: (listId, patch) => set(s => {
+    const at = s.cueLists.findIndex(list => list.id === listId)
+    if (at < 0) return s
+    const next = { ...s.cueLists[at], ...patch, id: listId }
+    if (patch.name !== undefined) {
+      // A tab with no name is a tab nobody can tell apart from the next one: an empty name
+      // keeps the one it had.
+      const name = patch.name.trim().slice(0, CUE_LIST_NAME_MAX)
+      next.name = name === '' ? s.cueLists[at].name : name
+    }
+    const list = canonicalCueList(next)
+    if (JSON.stringify(list) === JSON.stringify(s.cueLists[at])) return s
+    const cueLists = s.cueLists.slice()
+    cueLists[at] = list
+    return { cueLists, isDirty: true, past: pushPast(s.past, snapshotOf(s)), future: [] }
+  }),
+
+  moveCueList: (listId, toIndex) => set(s => {
+    const from = s.cueLists.findIndex(list => list.id === listId)
+    if (from < 0) return s
+    const to = Math.min(Math.max(Math.round(toIndex), 0), s.cueLists.length - 1)
+    if (to === from) return s
+    const cueLists = s.cueLists.slice()
+    const [moved] = cueLists.splice(from, 1)
+    cueLists.splice(to, 0, moved)
+    return { cueLists, isDirty: true, past: pushPast(s.past, snapshotOf(s)), future: [] }
+  }),
+
+  removeCueList: (listId) => set(s => {
+    // The main list is where a cue that names no list runs, so it is never taken away; and a
+    // show is never left without a list to add a cue to.
+    if (listId === MAIN_CUE_LIST_ID || !s.cueLists.some(list => list.id === listId)) return s
+    const cueLists = s.cueLists.filter(list => list.id !== listId)
+    const cues = withoutList(s.cues, listId)
+    const removed = new Set(s.cues.filter(cue => !cues.includes(cue)).map(cue => cue.id))
+    const listCursors = { ...s.listCursors }
+    delete listCursors[listId]
+    const leaving = s.activeListId === listId
+    const index = s.cueLists.findIndex(list => list.id === listId)
+    // The tab that takes the deleted one's place is the one before it, as a closed tab's is.
+    const nextActive = leaving ? cueLists[Math.max(0, index - 1)].id : s.activeListId
+    return {
+      cueLists,
+      cues,
+      activeListId: nextActive,
+      listCursors,
+      ...(leaving ? cursorFor(cues, nextActive, s.listCursors[nextActive]) : pruneSelection(cues, s)),
+      lastRuns: Object.fromEntries(Object.entries(s.lastRuns).filter(([cueId]) => !removed.has(cueId))),
+      isDirty: true,
+      past: pushPast(s.past, snapshotOf(s)),
+      future: []
+    }
+  }),
+
+  moveCuesToList: (ids, listId) => set(s => {
+    if (!s.cueLists.some(list => list.id === listId)) return s
+    const cues = moveToList(s.cues, ids, listId)
+    if (cues === s.cues) return s
+    // The hand stays in the list on screen: what it held has gone to the other list, so it
+    // comes to rest on the cue that took its place, as a removal's does.
+    const before = cuesOfList(s.cues, s.activeListId)
+    const after = new Set(cuesOfList(cues, s.activeListId).map(cue => cue.id))
+    const gone = new Set(before.filter(cue => !after.has(cue.id)).map(cue => cue.id))
+    const stillHere = s.selectedIds.filter(id => after.has(id))
+    const lead = s.selectedId !== null && gone.has(s.selectedId) ? s.selectedId : [...gone][0]
+    const neighbour = stillHere.length > 0 || lead === undefined
+      ? null
+      : neighbourOfRemoved(before, gone, lead, s.collapsedGroupIds)
+    return {
+      cues,
+      // Named, so the write is taken as a write about lists: the cues say where they went.
+      cueLists: s.cueLists,
+      ...(stillHere.length > 0
+        ? { selectedIds: stillHere, selectedId: stillHere[stillHere.length - 1], selectionAnchorId: stillHere[0] }
+        : neighbour !== null ? selectionFor(neighbour) : NO_SELECTION),
+      isDirty: true,
+      past: pushPast(s.past, snapshotOf(s)),
+      future: []
+    }
+  }),
+
+  listPlayhead: (listId) => {
+    const s = get()
+    if (listId === s.activeListId) return s.selectedId
+    return cursorFor(s.cues, listId, s.listCursors[listId]).selectedId
+  },
+
+  setListPlayhead: (listId, cueId) => set(s => {
+    if (listId === s.activeListId) return cueId === null ? { ...NO_SELECTION } : selectionFor(cueId)
+    const cursor = cueId === null ? { ...NO_SELECTION } : selectionFor(cueId)
+    return { listCursors: { ...s.listCursors, [listId]: cursor } }
   }),
 
   select: (id) => set(() => id === null ? { ...NO_SELECTION } : selectionFor(id)),
@@ -1410,7 +1722,7 @@ export const useStore = create<CueListState>((set) => ({
     if (resolved.size === 0) return s
     let failures = s.silenceFailures
     const cues = s.cues.map(cue => {
-      if (cue.type !== 'audio' || !resolved.has(cue.id)) return cue
+      if (!carriesMediaFile(cue) || !resolved.has(cue.id)) return cue
       failures = forgetSilenceFailures(failures, [cue.id])
       // A relinked cue is pointed at another file, and another file has not been
       // measured: the measurement pass asks it as soon as the new path is in the cue.
@@ -1473,12 +1785,18 @@ export const useStore = create<CueListState>((set) => ({
 
   markDirty: () => set({ isDirty: true }),
 
-  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history) => set(() => {
-    // Where the operator was standing when the file was saved is not in the file; a load
-    // starts on the show's first cue.
-    const first = cues.find(c => c.parentId === null)?.id ?? cues[0]?.id ?? null
+  loadWorkspace: (cues, name, path, audioSettings, midiSettings, showSettings, identity, triggerGuard, history, lighting, timecode, videoOutputs, cueLists, pictures, oscPatches) => set(() => {
+    // A show opens on its first list — the first tab — and on that list's first cue: where the
+    // operator was standing when the file was saved is not in the file.
+    const lists = heldCueLists(cueLists)
+    const activeListId = lists[0].id
+    const first = firstCueOfList(cues, activeListId)
     return {
       cues,
+      cueLists: lists,
+      activeListId,
+      // Where the last show's lists were left says nothing about this one's.
+      listCursors: {},
       workspaceName: name,
       workspacePath: path,
       // Loading a file adopts the show's identity; a load without one is a new show.
@@ -1506,6 +1824,16 @@ export const useStore = create<CueListState>((set) => ({
       // A file written before the guard existed has none: the normalizer both fills it in
       // and holds a value typed outside its range to the range.
       triggerGuard: normalizeTriggerGuard(triggerGuard),
+      // A show with no lights opens with an empty rig.
+      lighting: heldLighting(lighting),
+      // A show that says nothing about timecode follows it with the defaults.
+      timecode: heldTimecode(timecode),
+      // A show with no outputs has none; one that has them has them held to their ranges.
+      videoOutputs: normalizeVideoOutputs(videoOutputs),
+      // A show that says nothing about its pictures leaves them up until they are stopped.
+      pictures: normalizePictureSettings(pictures),
+      // A show with no OSC patches opens with none.
+      oscPatches: heldOscPatches(oscPatches),
       // The file's own record of its saves. A file that has never been saved has none.
       showHistory: history ?? [],
       // Where the last show's cursor sat says nothing about this one.
@@ -1547,6 +1875,64 @@ export const useStore = create<CueListState>((set) => ({
   updateTriggerGuard: (patch) => set(s => ({
     triggerGuard: normalizeTriggerGuard({ ...s.triggerGuard, ...patch }),
     isDirty: true
+  })),
+
+  setLighting: (lighting) => set(s => ({
+    lighting,
+    isDirty: true,
+    past: pushPast(s.past, snapshotOf(s)),
+    future: []
+  })),
+
+  setTimecode: (patch) => set(s => ({
+    timecode: normalizeTimecodeShowSettings({ ...s.timecode, ...patch }),
+    isDirty: true,
+    past: pushPast(s.past, snapshotOf(s)),
+    future: []
+  })),
+
+  addVideoOutput: () => {
+    const id = crypto.randomUUID()
+    set(s => ({
+      videoOutputs: s.videoOutputs.length >= MAX_OUTPUTS
+        ? s.videoOutputs
+        : [...s.videoOutputs, createOutput(id, `Output ${s.videoOutputs.length + 1}`)],
+      isDirty: true,
+      past: pushPast(s.past, snapshotOf(s)),
+      future: []
+    }))
+    return id
+  },
+
+  updateVideoOutput: (id, patch) => set(s => ({
+    // Held to the ranges a file is: an edit in the panel can no more set a corner off the
+    // output than a hand-edited file can.
+    videoOutputs: normalizeVideoOutputs(s.videoOutputs.map(output => output.id === id ? { ...output, ...patch, id } : output)),
+    isDirty: true,
+    past: pushPast(s.past, snapshotOf(s)),
+    future: []
+  })),
+
+  removeVideoOutput: (id) => set(s => ({
+    // An output that mirrored the one going shows its own pictures again.
+    videoOutputs: normalizeVideoOutputs(s.videoOutputs.filter(output => output.id !== id)),
+    isDirty: true,
+    past: pushPast(s.past, snapshotOf(s)),
+    future: []
+  })),
+
+  setPictures: (patch) => set(s => ({
+    pictures: normalizePictureSettings({ ...s.pictures, ...patch }),
+    isDirty: true,
+    past: pushPast(s.past, snapshotOf(s)),
+    future: []
+  })),
+
+  setOscPatches: (oscPatches) => set(s => ({
+    oscPatches,
+    isDirty: true,
+    past: pushPast(s.past, snapshotOf(s)),
+    future: []
   })),
 
   updateOscInSettings: (patch) => set(s => ({
@@ -1792,7 +2178,7 @@ export const useStore = create<CueListState>((set) => ({
   pushModal: () => set(s => ({ modals: s.modals + 1 })),
 
   popModal: () => set(s => ({ modals: Math.max(0, s.modals - 1) }))
-}))
+})))
 
 /**
  * Hears about a change to the parts of the store it names, and to nothing else.
