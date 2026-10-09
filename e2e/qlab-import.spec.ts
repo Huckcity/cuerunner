@@ -12,7 +12,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { closeApp, launchApp } from './helpers'
-import { pressNightWorkspace } from '../src/main/import/archiveFixture'
+import { alias, pressNightWorkspace, qlabCue, qlabWorkspace } from '../src/main/import/archiveFixture'
 import { startFakeQLab, type FakeQLab } from '../src/main/import/fakeQLab'
 
 let app: ElectronApplication | undefined
@@ -157,6 +157,44 @@ test('a QLab workspace file becomes a new show, with a report on every cue and t
   expect(cue('4.1').parentId).toBe(cue('4').id)
   // The file found on the stick is the file the saved show plays.
   expect(cue('FX1').filePath).toBe(path.join('stick', 'audio', 'door.wav'))
+})
+
+test('Find in Folder finds audio a cloud drive renamed, and names the files when two could be one cue', async () => {
+  test.setTimeout(90_000)
+  // The show's files came back from Google Drive with every ' turned into _.
+  const names = ["IT'S SURE A NICE VIEW HERE.wav", "WORLD'S LARGEST REFRIGERATOR.wav", "SOMETHING'S MISSING.wav"]
+  const show = path.join(root, 'Drive Show')
+  fs.mkdirSync(show, { recursive: true })
+  const workspaceFile = path.join(show, 'Drive Show.qlab5')
+  fs.writeFileSync(workspaceFile, qlabWorkspace({
+    name: 'Drive Show',
+    lists: [{
+      name: 'Main Cue List',
+      cues: names.map((name, index) => qlabCue('AudioCue', {
+        uniqueID: `D${index + 1}`, number: String(index + 1), name: '', fileTarget: alias(`audio/${name}`, `/Users/sm/Drive Show/audio/${name}`)
+      }))
+    }]
+  }))
+  const downloads = path.join(root, 'Downloads')
+  fs.mkdirSync(downloads)
+  for (const name of names) writeWav(path.join(downloads, name.replace(/'/g, '_')))
+  // A second file the last cue could be: neither is chosen.
+  writeWav(path.join(downloads, 'SOMETHING’S MISSING.wav'))
+
+  const page = await start()
+  await openImport(page)
+  await nextPick(workspaceFile)
+  await page.locator('[data-action="qlab-file"]').click()
+  const report = page.getByRole('dialog', { name: 'QLab import report' })
+  await expect(report.getByTestId('qlab-media-missing')).toContainText('3 files are not where QLab said')
+
+  await nextPick(downloads)
+  await report.locator('[data-action="qlab-find-media"]').click()
+  await expect(report).toContainText('Found 2 files in that folder.')
+  await expect(report.getByTestId('qlab-media-missing')).toContainText('1 file is not where QLab said')
+  const ambiguous = report.getByTestId('qlab-media-ambiguous')
+  await expect(ambiguous).toContainText("3 SOMETHING'S MISSING")
+  await expect(ambiguous).toContainText('Could be any of SOMETHING_S MISSING.wav, SOMETHING’S MISSING.wav: relink it from the cue.')
 })
 
 test('a running QLab is read over OSC: its workspaces listed, one picked, its cues brought across', async () => {

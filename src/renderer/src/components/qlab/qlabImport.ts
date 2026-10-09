@@ -33,6 +33,8 @@ export interface QLabImportState {
   report: QLabImportReport | null
   /** How many files the last folder search found, for the line under the missing list. */
   lastFound: number | null
+  /** The cues the last folder search found more than one renamed file for, each with the files it could be. */
+  lastAmbiguous: Array<{ cueId: string; candidates: string[] }>
 }
 
 const INITIAL: QLabImportState = {
@@ -45,7 +47,8 @@ const INITIAL: QLabImportState = {
   workspaces: null,
   workspaceId: null,
   report: null,
-  lastFound: null
+  lastFound: null,
+  lastAmbiguous: []
 }
 
 export const useQLabImport = create<QLabImportState>(() => ({ ...INITIAL }))
@@ -67,7 +70,7 @@ function refuse(message: string): void {
 /** File → Import QLab Workspace…: the dialog that asks where the show comes from. */
 export function openQLabImport(): void {
   // The address the operator typed last time stays: the Mac running QLab has not moved.
-  set({ stage: 'choose', busy: false, error: null, report: null, lastFound: null })
+  set({ stage: 'choose', busy: false, error: null, report: null, lastFound: null, lastAmbiguous: [] })
 }
 
 export function closeQLabImport(): void {
@@ -93,7 +96,7 @@ function open(imported: QLabImported): void {
     imported.loadNotes
   )
   useStore.getState().markDirty()
-  set({ stage: 'report', busy: false, error: null, report: imported.report, lastFound: null })
+  set({ stage: 'report', busy: false, error: null, report: imported.report, lastFound: null, lastAmbiguous: [] })
   useStore.getState().appendLog([{
     level: 'info',
     message: `Imported “${imported.report.workspaceName}” from QLab: ${imported.report.totalCues} cues`
@@ -209,7 +212,7 @@ export async function findQLabMediaInFolder(): Promise<void> {
     }
     now.applyRelinkedMedia(resolved)
     now.setMissingMedia(answer.found.missingMedia)
-    set({ busy: false, lastFound: answer.found.found })
+    set({ busy: false, lastFound: answer.found.found, lastAmbiguous: answer.found.ambiguous })
   } catch (error) {
     refuse(`the folder could not be searched: ${failure(error)}`)
   }

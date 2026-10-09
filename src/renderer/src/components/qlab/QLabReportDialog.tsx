@@ -61,6 +61,7 @@ export function QLabReportDialog({ report }: { report: QLabImportReport }) {
   const busy = useQLabImport(s => s.busy)
   const error = useQLabImport(s => s.error)
   const lastFound = useQLabImport(s => s.lastFound)
+  const lastAmbiguous = useQLabImport(s => s.lastAmbiguous)
   const missingMedia = useStore(s => s.missingMedia)
   const cues = useStore(s => s.cues)
 
@@ -158,6 +159,19 @@ export function QLabReportDialog({ report }: { report: QLabImportReport }) {
               <p className="qlab-hint" role="status">
                 {lastFound === 0 ? 'None of them were in that folder.' : `Found ${plural(lastFound, 'file', 'files')} in that folder.`}
               </p>
+            )}
+            {lastAmbiguous.length > 0 && (
+              // A renamed file two files could be: neither is guessed, and the operator picks.
+              <ul className="qlab-notes qlab-missing" data-testid="qlab-media-ambiguous">
+                {lastAmbiguous.map(entry => (
+                  <li key={entry.cueId}>
+                    <span className="qlab-note-cue">{cueLabel(entry.cueId)}</span>
+                    <span className="qlab-note-detail">
+                      Could be any of {entry.candidates.map(fileName).join(', ')}: relink it from the cue.
+                    </span>
+                  </li>
+                ))}
+              </ul>
             )}
             {missingMedia.length > 0 && (
               <div className="qlab-actions">

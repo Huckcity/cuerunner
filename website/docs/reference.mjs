@@ -1222,10 +1222,15 @@ await rig.blackout()</code></div>
       <p>
         <strong>Import QLab Workspace&hellip;</strong> reads a <code>.qlab5</code> or
         <code>.qlab4</code> workspace, a QLab 5 workspace saved as a folder (the property list
-        inside it), and a <code>.cues</code> file of cues with no list around them. A workspace
-        is an NSKeyedArchiver archive in a binary property list, with its cue lists stored as a
-        second archive inside the first; both are Apple's container formats, read by
-        Cuerunner's own reader. A workspace past <strong>64 MB</strong> is refused before it is
+        inside it), a QLab 5 backup (<code>.qlab5backup</code>, the same archive; in its
+        <em>backups</em> folder its audio is looked for from the folder above, where the
+        workspace was), and a <code>.cues</code> file of cues with no list around them. A
+        workspace is an NSKeyedArchiver archive in a binary property list, with its cue lists
+        stored as a second archive inside the first; both are Apple's container formats, read
+        by Cuerunner's own reader. QLab 5 archives each cue list as a Group cue of mode 0 (a
+        cart, mode 5) under a root group, and each becomes a cue list rather than a group.
+        An audio cue's slices are its <code>AudioSlice</code> markers, each the end of a slice,
+        and its <code>lastSlice</code>; a marker past 127 is not carried. A workspace past <strong>64 MB</strong> is refused before it is
         read, and so is one holding more than <strong>10,000</strong> cues.
       </p>
       <p>
@@ -1233,7 +1238,9 @@ await rig.blackout()</code></div>
         (<code>53000</code> by default), SLIP-framed as QLab's OSC over TCP is, and sends
         <code>/workspaces</code>, <code>/workspace/{id}/connect</code> with the passcode,
         <code>/workspace/{id}/cueLists</code>, and <code>/workspace/{id}/cue_id/{id}/valuesForKeys</code>
-        once for each cue. One message is in flight at a time. The connection has 3 seconds
+        once for each cue — twice for an audio or devamp cue, whose slice markers and devamp
+        settings are asked for on their own so a QLab that does not know them still gives the
+        rest. One message is in flight at a time. The connection has 3 seconds
         to open and every reply 5 seconds to arrive; a reply larger than 16 MB, or a
         conversation past 64 MB, ends the import.
       </p>
@@ -1241,7 +1248,10 @@ await rig.blackout()</code></div>
         The result is a new show with no file, checked by the same reading every
         <code>.cuerunner</code> file goes through. Audio paths are absolute: the QLab
         workspace's folder joined to the path QLab recorded relative to it, or QLab's last
-        known absolute path where there is none. The mapping is in
+        known absolute path where there is none. <strong>Find in Folder&hellip;</strong> reads
+        each folder it looks in to at most 10,000 entries, once, for a file whose name differs
+        only by <code>' ’ : / ? " &lt; &gt; | * \\</code> written as <code>_</code> or by its
+        Unicode form, and takes it only when exactly one does. The mapping is in
         <a href="../guides/qlab.html#mapping">Coming from QLab</a>.
       </p>
       <div class="table-wrap">

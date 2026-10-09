@@ -68,9 +68,10 @@ describe('a running QLab, over OSC', () => {
     expect(group.children?.[0].midi?.msc).toEqual({ format: 1, command: 1, deviceId: 1, cueNumber: '5', cueList: '' })
     expect(group.children?.[1]).toMatchObject({ kind: 'network', preWait: 0.5, network: { kind: 'osc', message: '/ping 1' } })
     expect(film).toMatchObject({ kind: 'video', armed: false })
-    // One connection, asked in order: what is open, connect, the tree, then each cue.
+    // One connection, asked in order: what is open, connect, the tree, then each cue — and the
+    // audio cue's slices again on their own.
     expect(qlab.requests.slice(0, 3)).toEqual(['/workspaces', '/workspace/WS-1/connect', '/workspace/WS-1/cueLists'])
-    expect(qlab.requests.filter(address => address.endsWith('/valuesForKeys'))).toHaveLength(6)
+    expect(qlab.requests.filter(address => address.endsWith('/valuesForKeys'))).toHaveLength(7)
   })
 
   it('matches replies whether or not QLab keeps the workspace in their address', async () => {
@@ -85,7 +86,47 @@ describe('a running QLab, over OSC', () => {
     const [walkIn] = show.lists[0].cues
     expect(walkIn).toMatchObject({ postWait: 2, continueMode: 1, notes: 'House open' })
     expect(walkIn.media).toBeUndefined()
-    expect(qlab.requests.filter(address => address === '/workspace/WS-1/cue_id/A1/valuesForKeys')).toHaveLength(2)
+    // The type's keys, the common ones again, and the slices on their own.
+    expect(qlab.requests.filter(address => address === '/workspace/WS-1/cue_id/A1/valuesForKeys')).toHaveLength(3)
+  })
+
+  it('reads slices and a devamp’s settings the way QLab’s OSC says them, and does without them where it will not', async () => {
+    const track: FakeWorkspace = {
+      id: 'WS-RT', name: 'Tracks.qlab5', lists: [{
+        uniqueID: 'L', name: 'Main', cues: [
+          {
+            uniqueID: 'RT', number: '1', name: 'Track', type: 'Audio',
+            values: {
+              fileTarget: '/Users/sm/track.wav', endTime: 8,
+              sliceMarkers: [{ time: 1, playCount: 1 }, { time: 2, playCount: -1 }, { time: 3, playCount: 0 }],
+              lastSlicePlayCount: 1, lastSliceInfiniteLoop: false
+            }
+          },
+          {
+            uniqueID: 'DV', number: '2', name: 'Out', type: 'Devamp',
+            values: { cueTargetID: 'RT', devampType: 1, startNextCueWhenSliceEnds: true, stopTargetWhenSliceEnds: true }
+          }
+        ]
+      }]
+    }
+    qlab = await startFakeQLab({ workspaces: [track] })
+    const [audio, devamp] = (await readLiveWorkspace('127.0.0.1', qlab.port, 'WS-RT', undefined)).lists[0].cues
+    expect(audio).toMatchObject({
+      slices: [
+        { time: 1, playCount: 1, infiniteLoop: false }, { time: 2, playCount: -1, infiniteLoop: true },
+        { time: 3, playCount: 0, infiniteLoop: false }
+      ],
+      lastSlice: { playCount: 1, infiniteLoop: false },
+      media: { absolute: '/Users/sm/track.wav' }
+    })
+    expect(devamp).toMatchObject({ devampType: 1, startNextAtSliceEnd: true, stopTargetWhenDone: true, target: { uniqueID: 'RT' } })
+
+    // A QLab that refuses the slice keys keeps the cue's file and timing.
+    await qlab.close()
+    qlab = await startFakeQLab({ workspaces: [track], unknownKeys: ['sliceMarkers', 'devampType'] })
+    const [older] = (await readLiveWorkspace('127.0.0.1', qlab.port, 'WS-RT', undefined)).lists[0].cues
+    expect(older).toMatchObject({ endTime: 8, media: { absolute: '/Users/sm/track.wav' } })
+    expect(older.slices).toBeUndefined()
   })
 
   it('sends a passcode, and says so when QLab refuses it', async () => {

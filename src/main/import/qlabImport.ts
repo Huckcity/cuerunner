@@ -33,6 +33,7 @@ import { QLAB_EXTENSIONS, readQLabWorkspace } from './qlabFile'
 import { listQLabWorkspaces, readLiveWorkspace, type LiveOptions } from './qlabLive'
 import { mapQLabShow } from './qlabMap'
 import { isDefaultCueLists } from '../../shared/cueLists'
+import { listFolder, renamedFile, type ListFolder } from '../workspace/mediaNames'
 import type { QLabShow } from './qlabShow'
 
 /** What a show with no name of its own is called once it has come across. */
@@ -136,6 +137,8 @@ const MAX_TAIL_SEGMENTS = 6
  * is relative, and then the end of its old absolute path — the last few folders and the
  * name, then fewer, down to the name alone. Each is one look at one path; nothing is
  * searched for, so two files with the same name in different places are never confused.
+ * Where none of them is there exactly, the folder each names is read for the file under the
+ * name a cloud drive or a zip tool gave it (`mediaNames.ts`), in the same order.
  */
 export function folderCandidates(entry: MissingMedia, folder: string): string[] {
   const candidates: string[] = []
@@ -148,20 +151,39 @@ export function folderCandidates(entry: MissingMedia, folder: string): string[] 
   return candidates
 }
 
-/** Points every missing cue at its file under `folder`, where one is there. */
+/**
+ * Points every missing cue at its file under `folder`, where one is there: by its own name
+ * first, then by the name it was renamed to on the way. A renamed file two files in one folder
+ * could both be is not chosen; the cue stays missing and the answer says which files they were.
+ */
 export function relinkFromFolder(
   workspace: Workspace,
   workspacePath: string | null,
   folder: string,
-  exists: (candidate: string) => boolean = isFile
+  exists: (candidate: string) => boolean = isFile,
+  list: ListFolder = listFolder
 ): QLabFoundMedia {
   const current = resolveWorkspaceMedia(workspace, workspacePath)
   const found = new Map<string, string>()
+  const ambiguous: QLabFoundMedia['ambiguous'] = []
+  const listings = new Map<string, string[] | null>()
   for (const entry of current.missingMedia) {
-    const hit = folderCandidates(entry, folder).find(candidate => exists(candidate))
-    if (hit !== undefined) found.set(entry.cueId, hit)
+    const candidates = folderCandidates(entry, folder)
+    const hit = candidates.find(candidate => exists(candidate))
+    if (hit !== undefined) {
+      found.set(entry.cueId, hit)
+      continue
+    }
+    for (const candidate of candidates) {
+      const renamed = renamedFile(candidate, list, listings)
+      if (renamed === null) continue
+      if ('ambiguous' in renamed) ambiguous.push({ cueId: entry.cueId, candidates: renamed.ambiguous })
+      else if (exists(renamed.path)) found.set(entry.cueId, renamed.path)
+      else continue
+      break
+    }
   }
-  if (found.size === 0) return { ...current, found: 0 }
+  if (found.size === 0) return { ...current, found: 0, ambiguous }
   const workspaceDir = workspacePath === null ? null : dirname(workspacePath)
   const cues = current.workspace.cues.map((cue): Cue => {
     const relinked = cue.type === 'audio' ? found.get(cue.id) : undefined
@@ -176,7 +198,7 @@ export function relinkFromFolder(
     return audio
   })
   const after = resolveWorkspaceMedia({ ...current.workspace, cues }, workspacePath)
-  return { ...after, found: current.missingMedia.length - after.missingMedia.length }
+  return { ...after, found: current.missingMedia.length - after.missingMedia.length, ambiguous }
 }
 
 /** Asks for a folder, then relinks every missing file it holds. A cancel is null. */
@@ -187,7 +209,7 @@ export async function findMediaInFolder(
 ): Promise<QLabFoundMedia | null> {
   const current = resolveWorkspaceMedia(workspace, workspacePath)
   const first = current.missingMedia[0]
-  if (first === undefined) return { ...current, found: 0 }
+  if (first === undefined) return { ...current, found: 0, ambiguous: [] }
   const picked = await dialog.showOpenDialog(win, {
     title: 'Find Missing Audio in a Folder',
     buttonLabel: 'Look Here',

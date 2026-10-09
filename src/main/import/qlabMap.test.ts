@@ -3,9 +3,11 @@ import path from 'node:path'
 import type {
   AudioCue, ControlCue, Cue, FadeCue, GroupCue, MidiCue, MscCue, OscCue, StopCue, DevampCue, WaitCue
 } from '../../shared/cue'
+import { AUDIO_MAX_SLICES } from '../../shared/audio'
+import { slicePieces, SLICE_SKIP, SLICE_VAMP } from '../../shared/slices'
 import { mapQLabShow, mediaPath, oscTokens, parseOscMessage } from './qlabMap'
 import { parseQLabWorkspace } from './qlabFile'
-import { pressNightWorkspace } from './archiveFixture'
+import { pressNightWorkspace, rehearsalTrackWorkspace } from './archiveFixture'
 import type { QLabCue, QLabShow } from './qlabShow'
 
 let counter = 0
@@ -54,7 +56,7 @@ describe('the Press Night workspace, mapped', () => {
     const row = (qlabType: string, became: string | null) =>
       mapped.types.find(entry => entry.qlabType === qlabType && entry.becameType === became)?.count
     expect(row('Audio', 'audio')).toBe(6)
-    expect(row('Memo', 'wait')).toBe(3)
+    expect(row('Memo', 'memo')).toBe(3)
     expect(row('MIDI', 'midi')).toBe(1)
     expect(row('MIDI', 'msc')).toBe(1)
     expect(row('MIDI', null)).toBe(1)
@@ -280,6 +282,164 @@ describe('fade, stop and devamp', () => {
   it('keeps a stop with no target a stop of nothing, not of everything', () => {
     const { cues } = mapQLabShow(show([rec('stop', { number: '2' })]), ids)
     expect(byNumber<StopCue>(cues, '2').targetCueIds).toEqual([])
+  })
+})
+
+describe('slices', () => {
+  const slice = (time: number, playCount: number, infiniteLoop = false) => ({ time, playCount, infiniteLoop })
+  const sliced = (fields: Partial<QLabCue>) =>
+    mapQLabShow(show([rec('audio', { uniqueID: 'A', number: '1', media: { relative: 'a.wav', absolute: '' }, startTime: 0, endTime: 10, ...fields })]), ids)
+  const audioOf = (fields: Partial<QLabCue>) => byNumber<AudioCue>(sliced(fields).cues, '1')
+
+  it('takes each QLab marker as where a slice ends, its count staying on the music before it', () => {
+    // QLab's `time` is the end of the slice it counts: three markers cut four pieces, and the
+    // piece after the last marker is `lastSlice`.
+    const audio = audioOf({
+      slices: [slice(2, 3), slice(4, 1, true), slice(6, 1)],
+      lastSlice: { playCount: 2, infiniteLoop: false }
+    })
+    expect(audio.slices).toEqual({ markers: [2000, 4000, 6000], playCounts: [3, SLICE_VAMP, 1, 2] })
+    expect(audio.loopCount).toBe(0)
+    expect(slicePieces(audio.slices!, audio.startTime, audio.endTime!)).toEqual([
+      { startTime: 0, endTime: 2000, playCount: 3 },
+      { startTime: 2000, endTime: 4000, playCount: -1 },
+      { startTime: 4000, endTime: 6000, playCount: 1 },
+      { startTime: 6000, endTime: 10000, playCount: 2 }
+    ])
+  })
+
+  it('makes a slice that loops for ever a vamp, whatever count it kept', () => {
+    // A real show's count-in vamp is archived with a play count of 4 and the loop ticked.
+    expect(audioOf({ slices: [slice(1.4771349818582276, 4, true)], lastSlice: { playCount: 0, infiniteLoop: true } }).slices)
+      .toEqual({ markers: [1477.135], playCounts: [SLICE_VAMP, SLICE_VAMP] })
+  })
+
+  it('skips a slice QLab set to play 0 times, the last one included, and says it was read from the data', () => {
+    const mapped = sliced({
+      slices: [slice(0.05193749815225601, 0), slice(1.4771349818582276, 4, true), slice(24.33089976029038, 0), slice(70.08790264101825, 1)],
+      lastSlice: { playCount: 0, infiniteLoop: false }
+    })
+    expect(byNumber<AudioCue>(mapped.cues, '1').slices).toEqual({
+      markers: [51.937, 1477.135, 24330.9, 70087.903],
+      playCounts: [SLICE_SKIP, SLICE_VAMP, SLICE_SKIP, 1, SLICE_SKIP]
+    })
+    expect(mapped.notes).toEqual([expect.objectContaining({
+      cueId: '', name: '1 audio cue', qlabType: 'Audio', kind: 'approximated',
+      detail: expect.stringContaining('QLab does not document a count of 0')
+    })])
+  })
+
+  it('keeps markers to the microsecond, in order, one at each time', () => {
+    expect(audioOf({ slices: [slice(4, 1), slice(2.0000004, 2), slice(4, 5)], lastSlice: { playCount: 1, infiniteLoop: false } }).slices)
+      .toEqual({ markers: [2000, 4000], playCounts: [2, 1, 1] })
+  })
+
+  it('carries more markers than it once could — a real cue had 40 — and past the engine’s count plays the rest through', () => {
+    const forty = Array.from({ length: 40 }, (_, i) => slice(i * 0.25 + 0.25, i % 3 === 1 ? 1 : i % 3 === 2 ? 0 : 1, i % 3 === 1))
+    const forties = audioOf({ slices: forty, endTime: 20, lastSlice: { playCount: 0, infiniteLoop: false } }).slices!
+    expect(forties.markers).toHaveLength(40)
+    expect(forties.playCounts).toHaveLength(41)
+
+    const many = Array.from({ length: AUDIO_MAX_SLICES + 10 }, (_, i) => slice((i + 1) * 0.05, 1, i % 2 === 0))
+    const mapped = sliced({ slices: many, endTime: 20, lastSlice: { playCount: 1, infiniteLoop: true } })
+    const capped = byNumber<AudioCue>(mapped.cues, '1').slices!
+    expect(capped.markers).toHaveLength(AUDIO_MAX_SLICES - 1)
+    expect(capped.playCounts).toHaveLength(AUDIO_MAX_SLICES)
+    expect(capped.playCounts[AUDIO_MAX_SLICES - 1]).toBe(1)
+    expect(mapped.notes.map(note => note.detail)).toContain(
+      `QLab cuts it into ${AUDIO_MAX_SLICES + 11} slices and Cuerunner carries ${AUDIO_MAX_SLICES}: from 6.35 s it plays straight to the end`
+    )
+  })
+
+  it('reads a cue with no markers as its region: its last slice is the whole cue', () => {
+    expect(audioOf({ slices: [], lastSlice: { playCount: 1, infiniteLoop: false } })).toMatchObject({ loopCount: 0 })
+    expect(audioOf({ slices: [], lastSlice: { playCount: 1, infiniteLoop: false } }).slices).toBeUndefined()
+    expect(audioOf({ slices: [], lastSlice: { playCount: 1, infiniteLoop: true } }).loopCount).toBe(-1)
+    expect(audioOf({ slices: [], lastSlice: { playCount: 3, infiniteLoop: false } }).loopCount).toBe(2)
+    // A count of 0 with nothing else would play nothing: a cue copied from a sliced one keeps
+    // its 0 when its markers go, and a real show plays such a cue. It plays once, and says so.
+    const copied = sliced({ slices: [], lastSlice: { playCount: 0, infiniteLoop: false } })
+    expect(byNumber<AudioCue>(copied.cues, '1')).toMatchObject({ loopCount: 0 })
+    expect(copied.notes.map(note => note.detail)).toEqual(['QLab set its one slice to play 0 times; with no markers it plays once here'])
+  })
+
+  it('says so when QLab loops the whole of a sliced cue as well', () => {
+    const mapped = sliced({ slices: [slice(2, 1, true)], infiniteLoop: true })
+    expect(byNumber<AudioCue>(mapped.cues, '1')).toMatchObject({ loopCount: 0, slices: { markers: [2000], playCounts: [-1, 1] } })
+    expect(mapped.notes.map(note => note.detail)).toContain(
+      'QLab also loops the whole cue; with slices Cuerunner plays the slices’ own counts, once through'
+    )
+  })
+
+  it('reads the rehearsal-track fixture end to end, from the archive QLab 5 writes', () => {
+    const mapped = mapQLabShow(parseQLabWorkspace(rehearsalTrackWorkspace(), 'Rehearsal Tracks.qlab5'), ids)
+    expect(mapped.cueLists).toEqual([{ id: 'main', name: 'Main Cue List' }])
+    expect(mapped.cues.map(cue => [cue.number, cue.type, cue.parentId])).toEqual([
+      ['1', 'audio', null], ['1.1', 'devamp', null], ['', 'memo', null], ['1.2', 'devamp', null]
+    ])
+    expect(byNumber<AudioCue>(mapped.cues, '1')).toMatchObject({
+      name: 'track', startTime: 0, endTime: 8000, loopCount: 0,
+      slices: { markers: [1000, 2000, 3000, 5000, 6000, 7000], playCounts: [1, -1, 0, 1, -1, 0, 1] }
+    })
+  })
+})
+
+describe('devamp', () => {
+  const sliced = rec('audio', {
+    uniqueID: 'T', number: '1', media: { relative: 'a.wav', absolute: '' }, endTime: 10,
+    slices: [{ time: 2, playCount: 1, infiniteLoop: true }]
+  })
+  const plain = rec('audio', { uniqueID: 'P', number: '2', media: { relative: 'b.wav', absolute: '' }, infiniteLoop: true })
+  const devamp = (fields: Partial<QLabCue>) =>
+    mapQLabShow(show([sliced, plain, rec('devamp', { number: '3', target: { uniqueID: 'T', number: '' }, ...fields })]), ids)
+
+  it('devamps the slice that is looping, as QLab 5’s type 1 does, and moves on to the next', () => {
+    const mapped = devamp({ devampType: 1, startNextAtSliceEnd: false, stopTargetWhenDone: false })
+    const cue = byNumber<DevampCue>(mapped.cues, '3')
+    expect(cue).toMatchObject({ type: 'devamp', targetCueId: 'T' })
+    expect(cue.devampMode).toBeUndefined()
+    expect(mapped.notes).toEqual([])
+  })
+
+  it('says what QLab’s type 2, the looping cue, becomes on a sliced target, and is exact on a plain loop', () => {
+    expect(devamp({ devampType: 2 }).notes.map(note => note.detail)).toEqual([
+      'QLab devamps the target’s own loop and ignores its slices; here the slice it is in finishes its pass and the cue goes on to the next slice'
+    ])
+    const onPlain = mapQLabShow(show([plain, rec('devamp', { number: '3', target: { uniqueID: 'P', number: '' }, devampType: 2 })]), ids)
+    expect(onPlain.notes).toEqual([])
+  })
+
+  it('stops the target at the end of the slice where QLab both starts the next cue and stops it, and says the next cue waits', () => {
+    const mapped = devamp({ devampType: 1, startNextAtSliceEnd: true, stopTargetWhenDone: true })
+    expect(byNumber<DevampCue>(mapped.cues, '3').devampMode).toBe('stop')
+    expect(mapped.notes.map(note => note.detail)).toEqual([
+      'QLab starts the next cue the moment the target reaches the end of its slice and stops it there; ' +
+      'here the target stops there, and the next cue waits for its own GO'
+    ])
+    expect(devamp({ startNextAtSliceEnd: true }).notes.map(note => note.detail)).toEqual([
+      'QLab starts the next cue the moment the target reaches the end of its slice; here the next cue waits for its own GO'
+    ])
+  })
+
+  it('leaves the stop checkbox alone without the start-next one, as QLab does', () => {
+    expect(byNumber<DevampCue>(devamp({ stopTargetWhenDone: true }).cues, '3').devampMode).toBeUndefined()
+  })
+
+  it('finds its target by QLab’s id, whatever the target is called', () => {
+    // Most of a real show's audio cues have no name of their own; QLab shows the file's.
+    const unnamed = rec('audio', { uniqueID: '9B5766B9-5A29-4684-ACA1-4AAEDE561291', number: '1', name: '', media: { relative: 'audio/(rt) 01 WELCOME TO THE ROCK.mp3', absolute: '' } })
+    const { cues } = mapQLabShow(show([unnamed, rec('devamp', { name: 'Devamp bar 32', target: { uniqueID: unnamed.uniqueID, number: '' } })]), ids)
+    expect(cues[0].name).toBe('(rt) 01 WELCOME TO THE ROCK')
+    expect((cues[1] as DevampCue).targetCueId).toBe(cues[0].id)
+  })
+})
+
+describe('memo', () => {
+  it('becomes a memo cue, armed, with its name and notes', () => {
+    const { cues, types, notes } = mapQLabShow(show([rec('memo', { number: '5', name: 'Auto Segue Screech In', notes: 'Watch the MD' })]), ids)
+    expect(cues[0]).toEqual(expect.objectContaining({ type: 'memo', name: 'Auto Segue Screech In', notes: 'Watch the MD', isArmed: true }))
+    expect(types).toEqual([{ qlabType: 'Memo', becameType: 'memo', count: 1 }])
+    expect(notes).toEqual([])
   })
 })
 

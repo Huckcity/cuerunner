@@ -155,12 +155,32 @@ describe('the report', () => {
       found: {
         workspace: { ...imported().workspace, cues: [{ ...WALK_IN, filePath: '/Volumes/Stick/audio/walk-in.wav' }, FILM] },
         missingMedia: [],
-        found: 1
+        found: 1,
+        ambiguous: []
       }
     })
     await act(() => findQLabMediaInFolder())
     expect((useStore.getState().cues[0] as AudioCue).filePath).toBe('/Volumes/Stick/audio/walk-in.wav')
     expect(container.querySelector('[data-testid="qlab-media-ok"]')).not.toBeNull()
     expect(container.textContent).toContain('Found 1 file in that folder.')
+    expect(container.querySelector('[data-testid="qlab-media-ambiguous"]')).toBeNull()
+  })
+
+  it('names the files a renamed one could be, when the folder holds two, and leaves the cue missing', async () => {
+    const missing = useStore.getState().missingMedia
+    bridge().findMedia.mockResolvedValueOnce({
+      ok: true,
+      found: {
+        workspace: imported().workspace,
+        missingMedia: missing,
+        found: 0,
+        ambiguous: [{ cueId: WALK_IN.id, candidates: ['/Volumes/Stick/walk_in.wav', '/Volumes/Stick/walk’in.wav'] }]
+      }
+    })
+    await act(() => findQLabMediaInFolder())
+    const ambiguous = container.querySelector('[data-testid="qlab-media-ambiguous"]')
+    expect(ambiguous?.textContent).toContain('1 Walk-in')
+    expect(ambiguous?.textContent).toContain('Could be any of walk_in.wav, walk’in.wav: relink it from the cue.')
+    expect(container.querySelector('[data-testid="qlab-media-missing"]')?.textContent).toContain('1 file is not where QLab said')
   })
 })
