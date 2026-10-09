@@ -32,6 +32,7 @@ import { TIMECODE_SHOW_SHAPE } from '../../shared/timecodeShape'
 import { CUE_LISTS_SHAPE } from '../../shared/cueListsShape'
 import { cueListsRefusal, heldCueLists, MAIN_CUE_LIST_ID, type CueListInfo } from '../../shared/cueLists'
 import { OSC_PATCH_SHAPE, oscPatchesRefusal } from '../../shared/oscPatches'
+import { slicesRefusal } from '../../shared/slices'
 import { timecodeShowRefusal, type TimecodeShowSettings } from '../../shared/timecode'
 import { hasCueList, isUnnamedShow, normalizeTriggerGuard, UNTITLED_SHOW } from '../../shared/workspace'
 import {
@@ -621,6 +622,14 @@ function refuseForeignCues(cues: readonly Cue[], source: string): void {
       : undefined
     if (declared === undefined) continue
     refuseForeignFields(cue, declared, '', -1, source, CUE_VOICE, cue)
+    // Slices are held to what the declaration cannot say of two lists of numbers: one count
+    // per piece, each one this build plays, markers in order, and no more than a start carries.
+    if (cue.type === 'audio') {
+      const refusal = slicesRefusal((cue as AudioCue).slices)
+      if (refusal !== null) {
+        throw new Refusal(`${refusalOpening(CUE_VOICE, cue)} ${refusal} — ${source} was probably saved by another build`)
+      }
+    }
   }
 }
 

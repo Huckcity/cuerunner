@@ -9,8 +9,11 @@ import {
   slicedLengthMs,
   slicePieces,
   slicesInUse,
+  slicesRefusal,
+  SLICE_SKIP,
   SLICE_VAMP
 } from './slices'
+import { AUDIO_MAX_SLICES } from './audio'
 
 describe('slices', () => {
   const slices = { markers: [1000, 2000], playCounts: [2, SLICE_VAMP, 1] }
@@ -60,12 +63,41 @@ describe('slices', () => {
     expect(moveMarker(slices, 1, 100).markers).toEqual([1000, 1001])
   })
 
-  it('count passes from one, or until released', () => {
-    expect(setPlayCount(slices, 2, 0).playCounts[2]).toBe(1)
+  it('count passes from none, which skips the piece, or until released', () => {
+    expect(setPlayCount(slices, 2, 0).playCounts[2]).toBe(SLICE_SKIP)
     expect(setPlayCount(slices, 2, -5).playCounts[2]).toBe(SLICE_VAMP)
     expect(setPlayCount(slices, 2, 4.4).playCounts[2]).toBe(4)
+    expect(setPlayCount(slices, 2, 0.4).playCounts[2]).toBe(SLICE_SKIP)
     expect(playCountLabel(SLICE_VAMP)).toBe('∞')
+    expect(playCountLabel(SLICE_SKIP)).toBe('skip')
     expect(playCountLabel(3)).toBe('×3')
+  })
+
+  it('send a skipped piece to the engine as it is, and count no time for it', () => {
+    // The engine passes over a piece that plays no times (native/audio/tests/slices.mjs); the
+    // window only has to say so, and leave it out of how long the cue runs.
+    const cut = { markers: [1000, 2000], playCounts: [1, SLICE_SKIP, 1] }
+    expect(slicePieces(cut, 0, 3000)).toEqual([
+      { startTime: 0, endTime: 1000, playCount: 1 },
+      { startTime: 1000, endTime: 2000, playCount: 0 },
+      { startTime: 2000, endTime: 3000, playCount: 1 }
+    ])
+    expect(slicedLengthMs(slicePieces(cut, 0, 3000))).toBe(2000)
+    expect(slicesInUse({ markers: [], playCounts: [SLICE_SKIP] })).toBe(true)
+  })
+
+  it('hold a file’s slices to what this build writes, bounded by what a start carries', () => {
+    expect(slicesRefusal(undefined)).toBeNull()
+    expect(slicesRefusal(null)).toBeNull()
+    expect(slicesRefusal({ markers: [52.0194, 1477.135], playCounts: [0, -1, 999] })).toBeNull()
+    expect(slicesRefusal({ markers: [], playCounts: [] })).toBe('a slice play count missing or to spare')
+    expect(slicesRefusal({ markers: [1, 2], playCounts: [1, 1000, 1] })).toBe('a slice play count of 1000')
+    expect(slicesRefusal({ markers: [2, 2], playCounts: [1, 1, 1] })).toBe('slice markers out of order')
+    expect(slicesRefusal({ markers: [-1], playCounts: [1, 1] })).toBe('a slice marker that is not a time in the file')
+    expect(slicesRefusal([1, 2])).toBe('slices that are not markers and counts')
+    const many = Array.from({ length: AUDIO_MAX_SLICES }, (_, i) => i + 1)
+    expect(slicesRefusal({ markers: many, playCounts: [...many, 1].map(() => 1) }))
+      .toBe(`${AUDIO_MAX_SLICES} slice markers, and a cue has at most ${AUDIO_MAX_SLICES - 1}`)
   })
 
   it('read what a file carries, sorted, deduplicated and with a count per piece', () => {

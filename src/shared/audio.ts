@@ -700,7 +700,11 @@ export interface AudioSlice {
   /** File ms. */
   startTime: number
   endTime: number
-  /** Passes before the voice moves on; -1 plays it until a release moves it on. */
+  /**
+   * Passes before the voice moves on; -1 plays it until a release moves it on; 0 skips it —
+   * the voice goes from the slice before it straight into the one after, and a skipped last
+   * slice ends the voice where it begins.
+   */
   playCount: number
 }
 
@@ -708,8 +712,12 @@ export interface AudioSlice {
 export const AUDIO_CURVE_POINTS = 65
 /** Output patch slots the engine holds. */
 export const AUDIO_PATCH_SLOTS = 16
-/** Slices one cue's file can carry. */
-export const AUDIO_MAX_SLICES = 32
+/**
+ * Slices one cue's file can carry: the engine's `kMaxSlices`. Room for a long rehearsal
+ * track cut at every vamp and every cut bar — a real show's longest had 41 — at 24 bytes a
+ * slice in a start command and per voice.
+ */
+export const AUDIO_MAX_SLICES = 128
 
 export function defaultAudioStartOptions(): AudioStartOptions {
   return {

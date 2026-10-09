@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Slices, read off the engine's real output in offline mode: a file cut into regions that
- * each play a number of times — or until released, a vamp — in order, with every boundary
- * landing on its sample. The file's every sample says which frame of it it is, so the output
+ * each play a number of times — none, skipped, or until released, a vamp — in order, with
+ * every boundary landing on its sample. The file's every sample says which frame of it it is, so the output
  * says exactly which part of the file was playing at each frame.
  *
  *   node native/audio/tests/slices.mjs [--binary path]
@@ -144,6 +144,107 @@ const HALF = RATE / 2 // one slice: 500 ms
   check('the release plays on from where the loop was, past its end', detail === '', detail)
 }
 
+/** Slices in 500 ms pieces from the top of the file, one count each. */
+const pieces = (...counts) => counts.map((playCount, i) => ({ startTime: i * 500, endTime: (i + 1) * 500, playCount }))
+/** One cue started at 0 with these slices (and whatever else), rendered for `seconds`. */
+function sliced(slices, { seconds = 3, extra = [], options = {} } = {}) {
+  return render(workDir, {
+    frames: RATE * seconds,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'a', filePath: rampPath },
+      { atMs: 0, verb: 'start', cueId: 'a', options: { ...START, ...options, slices } },
+      ...extra
+    ]
+  })
+}
+const endedOf = summary => summary.events.find(event => event.type === 'ended' && event.cueId === 'a')
+
+{
+  console.log('\na slice that plays no times is skipped: the one before runs into the one after, to the sample')
+  const { summary, wav } = sliced(pieces(1, 0, 1))
+  check('the start is taken', reply(summary, 1).ok === true, JSON.stringify(reply(summary, 1)))
+  let detail = plays(wav, 0, HALF, t => t)
+  check('slice 1 plays', detail === '', detail)
+  detail = plays(wav, HALF, 2 * HALF, t => 2 * HALF + (t - HALF))
+  check('then slice 3 from its first sample, slice 2 never heard', detail === '', detail)
+  const ended = endedOf(summary)
+  check('the cue ends complete after the two slices it plays (1 s)', ended?.reason === 'complete' && Math.abs(ended.at - 1000) < 0.05,
+    JSON.stringify(ended))
+}
+
+{
+  console.log('\nskipped slices in a row are all passed over')
+  const { summary, wav } = sliced(pieces(1, 0, 0, 1))
+  const detail = plays(wav, HALF, 2 * HALF, t => 3 * HALF + (t - HALF))
+  check('slice 1 runs straight into slice 4', detail === '', detail)
+  const ended = endedOf(summary)
+  check('and the cue ends at 1 s', ended?.reason === 'complete' && Math.abs(ended.at - 1000) < 0.05, JSON.stringify(ended))
+}
+
+{
+  console.log('\na skipped last slice ends the cue where it begins')
+  const { summary, wav } = sliced(pieces(2, 0))
+  const detail = plays(wav, 0, 2 * HALF, t => t % HALF)
+  check('slice 1 plays its two passes', detail === '', detail)
+  const ended = endedOf(summary)
+  check('the cue ends complete at 1 s, not after the skipped slice', ended?.reason === 'complete' && Math.abs(ended.at - 1000) < 0.05,
+    JSON.stringify(ended))
+  check('silent after it', wav.samples[(2 * HALF + 10) * 2] === 0)
+}
+
+{
+  console.log('\na devamp out of a vamp goes past the skipped slice after it')
+  // Slice 2 vamps; released at 1.8 s, in the pass that runs 1.5–2 s of output.
+  const { summary, wav } = sliced(pieces(1, -1, 0, 1), { seconds: 4, extra: [{ atMs: 1800, verb: 'release', cueId: 'a' }] })
+  let detail = plays(wav, 3 * HALF, 4 * HALF, t => HALF + (t - 3 * HALF))
+  check('the pass the release landed in plays to its end', detail === '', detail)
+  detail = plays(wav, 4 * HALF, 5 * HALF, t => 3 * HALF + (t - 4 * HALF))
+  check('then slice 4 from its first sample: slice 3 is skipped', detail === '', detail)
+  const ended = endedOf(summary)
+  check('the cue ends at 2.5 s', ended?.reason === 'complete' && Math.abs(ended.at - 2500) < 0.05, JSON.stringify(ended))
+}
+
+{
+  console.log('\na skipped first slice: the cue starts in the one after it')
+  const { summary, wav } = sliced(pieces(0, 1))
+  const detail = plays(wav, 0, HALF, t => HALF + t)
+  check('the first frame out is the first frame of slice 2', detail === '', detail)
+  const ended = endedOf(summary)
+  check('and the cue ends after it, at 0.5 s', ended?.reason === 'complete' && Math.abs(ended.at - 500) < 0.05, JSON.stringify(ended))
+}
+
+{
+  console.log('\na start inside a skipped slice starts at the next one played')
+  const { wav } = sliced(pieces(1, 0, 1), { seconds: 1, options: { startTime: 700 } })
+  const detail = plays(wav, 0, HALF, t => 2 * HALF + t)
+  check('it plays from 1 s, where slice 3 begins', detail === '', detail)
+}
+
+{
+  console.log('\na cue whose every slice is skipped plays nothing and ends')
+  const { summary, wav } = sliced(pieces(0, 0), { seconds: 1 })
+  check('the start is taken', reply(summary, 1).ok === true, JSON.stringify(reply(summary, 1)))
+  const ended = endedOf(summary)
+  check('it ends complete at once', ended?.reason === 'complete' && ended.at < 20, JSON.stringify(ended))
+  check('silent', Math.max(...Array.from(wav.samples.slice(0, HALF * 2), Math.abs)) === 0)
+}
+
+{
+  console.log('\nhow many slices a start may carry')
+  const many = count => Array.from({ length: count }, (_, i) => ({ startTime: i * 10, endTime: (i + 1) * 10, playCount: 1 }))
+  const { summary } = render(workDir, {
+    frames: 4800,
+    commands: [
+      { atMs: 0, verb: 'prepare', cueId: 'a', filePath: rampPath },
+      { atMs: 0, verb: 'start', cueId: 'a', options: { ...START, slices: many(128) } },
+      { atMs: 0, verb: 'start', cueId: 'b', options: { ...START, slices: many(129) } }
+    ]
+  })
+  check('128 slices are taken', reply(summary, 1).ok === true, JSON.stringify(reply(summary, 1)))
+  check('129 are refused, by name', reply(summary, 2).ok === false && /at most 128 slices/.test(reply(summary, 2).error.message),
+    JSON.stringify(reply(summary, 2)))
+}
+
 {
   console.log('\nwhat slices refuse')
   const { summary } = render(workDir, {
@@ -151,13 +252,14 @@ const HALF = RATE / 2 // one slice: 500 ms
     commands: [
       { atMs: 0, verb: 'prepare', cueId: 'a', filePath: rampPath },
       { atMs: 0, verb: 'start', cueId: 'a', options: { ...START, slices: [{ startTime: 500, endTime: 400, playCount: 1 }] } },
-      { atMs: 0, verb: 'start', cueId: 'a', options: { ...START, slices: [{ startTime: 0, endTime: 400, playCount: 0 }] } },
+      { atMs: 0, verb: 'start', cueId: 'a', options: { ...START, slices: [{ startTime: 0, endTime: 400, playCount: -2 }] } },
       { atMs: 0, verb: 'start', cueId: 'a', options: { ...START, slices: [{ startTime: 400, endTime: 500 }, { startTime: 0, endTime: 100 }] } }
     ]
   })
   check('a slice that ends before it starts', reply(summary, 1).ok === false && /must end after it starts/.test(reply(summary, 1).error.message),
     JSON.stringify(reply(summary, 1)))
-  check('a slice that plays no times', reply(summary, 2).ok === false && /plays once or more/.test(reply(summary, 2).error.message))
+  check('a count below -1', reply(summary, 2).ok === false && /0 times \(skipped\) or more/.test(reply(summary, 2).error.message),
+    JSON.stringify(reply(summary, 2)))
   check('slices out of order', reply(summary, 3).ok === false && /order/.test(reply(summary, 3).error.message))
 }
 

@@ -40,7 +40,7 @@ struct FadeRamp {
 struct VoiceSlice {
   double startFrame = 0.0;
   double endFrame = 0.0;
-  int playCount = 1;  // -1: until released
+  int playCount = 1;  // -1: until released (a skipped slice, 0, is never held)
 };
 
 /**

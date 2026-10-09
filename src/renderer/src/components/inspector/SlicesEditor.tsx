@@ -10,6 +10,7 @@ import {
   slicedLengthMs,
   slicePieces,
   slicesInUse,
+  SLICE_SKIP,
   SLICE_VAMP,
   type CueSlices
 } from '../../../../shared/slices'
@@ -23,8 +24,9 @@ const seconds = (ms: number): number => Math.round(ms / 10) / 100
 
 /**
  * A cue's slices: markers in its file, and how many times each piece between them plays — a
- * number of passes, or until a devamp moves it on. The bar is the region as it will play, cut
- * at the markers inside it; the list is where a marker is moved or taken out and a count set.
+ * number of passes, none (the piece is skipped), or until a devamp moves it on. The bar is the
+ * region as it will play, cut at the markers inside it; the list is where a marker is moved or
+ * taken out and a count set.
  */
 export function SlicesEditor({ cue }: Props) {
   const update = useStore(s => s.updateCue)
@@ -54,6 +56,7 @@ export function SlicesEditor({ cue }: Props) {
               key={`${piece.startTime}-${index}`}
               className="slice-piece"
               data-vamp={piece.playCount < 0}
+              data-skip={piece.playCount === SLICE_SKIP}
               style={{ flexGrow: Math.max(1, piece.endTime - piece.startTime) }}
               title={`${seconds(piece.startTime)}–${seconds(piece.endTime)} s`}
             >
@@ -89,8 +92,8 @@ export function SlicesEditor({ cue }: Props) {
                 Vamp
               </label>
               {count >= 0 && (
-                <NumberField when="typed" min={1} step={1} value={count} aria-label={`Slice ${index + 1} plays`}
-                  className="slice-count"
+                <NumberField when="typed" min={0} step={1} value={count} aria-label={`Slice ${index + 1} plays`}
+                  className="slice-count" title="Passes it plays; 0 skips it"
                   onValue={value => { if (value !== null) set(setPlayCount(slices, index, value)) }} />
               )}
               {from !== null && (

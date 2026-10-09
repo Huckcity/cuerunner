@@ -246,7 +246,7 @@ export const REFERENCE = [
             <tr><td>Output patch</td><td>Device channels</td><td>Plays through one of the show's <strong>output patches</strong> (Settings → Audio) instead of naming device outputs: the routing then addresses the patch's own channels, on the device the patch names, and the patch's fader and mute in the <strong>Mixer</strong> apply. A cue whose patch is deleted plays on the device's channels.</td></tr>
             <tr><td>Loudness</td><td>not measured</td><td><strong>Normalize</strong> measures the file (EBU R128 integrated loudness and true peak) and sets the <strong>Trim</strong> so the cue plays at the show's target (−23 LUFS unless Settings → Audio says otherwise), its true peak held under the ceiling (−1 dBTP) and the trim inside its range. The reading stays on the cue. Select several cues and choose <strong>Normalize loudness</strong> from the right-click menu to do them all as one undo step.</td></tr>
             <tr><td>Audition</td><td>—</td><td><strong>Audition cue</strong> plays the cue as the show would — region, loops, slices, level, fades — and <strong>Whole file</strong> plays the file from its start, both on the show's <strong>audition output</strong> only. Nothing in the show moves: no row lights and nothing advances. Press again to stop. The right-click menu auditions a selection, one cue after another. With no audition output chosen it says so and plays nothing.</td></tr>
-            <tr><td>Slices</td><td>none</td><td>On the <strong>Slices</strong> tab: markers cut the region into slices, and each plays a number of times or is a <strong>Vamp</strong> that loops until a devamp cue moves it on. Playback follows the slices to the sample. With slices the loop count is not used; with none the cue is its region and its loop count, as it always was.</td></tr>
+            <tr><td>Slices</td><td>none</td><td>On the <strong>Slices</strong> tab: markers cut the region into slices, up to 128, and each plays a number of times, <strong>0</strong> to skip it, or is a <strong>Vamp</strong> that loops until a devamp cue moves it on. Playback follows the slices to the sample: a skipped slice is jumped over from the end of the slice before, and a skipped last slice ends the cue where it begins. With slices the loop count is not used; with none the cue is its region and its loop count, as it always was.</td></tr>
           </tbody>
         </table>
       </div>
@@ -272,7 +272,7 @@ export const REFERENCE = [
             </tr>
             <tr>
               <td><strong>Devamp</strong></td>
-              <td><strong>Target</strong> — a looping audio or video cue. It lets go of the lap it is on and plays out to the end of its file; a video's picture with its sound. A sliced cue finishes the pass of the slice it is in and goes on into the next slice. <strong>Then</strong>: <strong>Play on into the next slice</strong>, or <strong>Stop at the end of the slice</strong> — which also ends a plain loop at the end of its lap.</td>
+              <td><strong>Target</strong> — a looping audio or video cue. It lets go of the lap it is on and plays out to the end of its file; a video's picture with its sound. A sliced cue finishes the pass of the slice it is in and goes on into the next slice it plays, past any set to 0. <strong>Then</strong>: <strong>Play on into the next slice</strong>, or <strong>Stop at the end of the slice</strong> — which also ends a plain loop at the end of its lap.</td>
             </tr>
             <tr>
               <td><strong>Control</strong></td>

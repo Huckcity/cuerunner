@@ -199,7 +199,10 @@ constexpr int kMaxOutputFrames = 4096;
  * refused where it is read, with a sentence that names it.
  */
 constexpr int kMaxPatches = 16;
-constexpr int kMaxSlices = 32;
+// 128 slices: a long rehearsal track cut at every vamp and cut bar fits (a real show's
+// longest cue had 41), at 24 bytes a slice in each queued start and per voice — about 3 KiB
+// a command and 192 KiB across every voice, none of it read per frame.
+constexpr int kMaxSlices = 128;
 constexpr int kMaxInputFeeds = 8;
 /**
  * The output devices the engine can play beside the one it opened (aux_output.h): each one a
@@ -240,7 +243,8 @@ inline double curveTableValue(const CurveTable& table, double t) {
 
 /**
  * One slice of a file: a region the voice plays `playCount` times before it moves on to the
- * next, or until it is released when the count is -1 — a vamp. Times are file ms.
+ * next, or until it is released when the count is -1 — a vamp. A count of 0 skips it: the
+ * voice goes from the slice before it straight into the one after. Times are file ms.
  */
 struct SliceSpec {
   double startMs = 0.0;
