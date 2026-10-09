@@ -81,7 +81,7 @@ export function SlicesSummary({ cue }: Props) {
           })}
         </ol>
       )}
-      <p className="inspector-hint">Double-click the waveform to add a marker.</p>
+      <p className="inspector-hint" data-scope="panel">Double-click the waveform to add a marker.</p>
     </div>
   )
 }

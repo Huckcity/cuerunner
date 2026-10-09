@@ -215,7 +215,9 @@ export const SliceLayer = memo(function SliceLayer({ cue, fileMs, view, lane, on
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault()
       e.stopPropagation()
-      setCount(index, nudgeCount(count, e.key === 'ArrowUp' ? 1 : -1), gesture('count', index))
+      // Read from the store rather than the render: a held arrow's repeats outrun the redraw.
+      const current = slicesOf(currentCue()).playCounts[index] ?? count
+      setCount(index, nudgeCount(current, e.key === 'ArrowUp' ? 1 : -1), gesture('count', index))
       return
     }
     if (e.ctrlKey || e.metaKey || e.altKey) return
