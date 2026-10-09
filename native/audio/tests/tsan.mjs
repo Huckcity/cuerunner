@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * The engine under ThreadSanitizer: a minute of the soak's show, then the stop-under-load
- * test, against a build made with `-fsanitize=thread`. Any report fails the run.
+ * test, then 24 streamed voices on the read-ahead (seamless.mjs `--live-only`), against a
+ * build made with `-fsanitize=thread`. Any report fails the run.
  *
  * It exists because the races this finds do not fail a test. A torn read of the mix
  * snapshot, a stream slot read while it was being built and a connection thread that outlives
@@ -84,6 +85,10 @@ try {
     const env = { TSAN_OPTIONS: `halt_on_error=0:log_path=${join(logDir, 'tsan')}` }
     const soak = step(`the soak, ${minutes} min`, process.execPath, ['native/audio/tests/soak.mjs', '--minutes', minutes, '--binary', binary], env)
     const race = step('stopping under load', process.execPath, ['native/audio/tests/shutdown-race.mjs', '--binary', binary], env)
+    // The read-ahead's pads change hands between the decode thread, a command thread and the
+    // audio thread without a lock the audio thread takes (spine AD-29): 24 streamed voices
+    // vamping, skipping and reading straight through, on a real decode thread.
+    const pads = step('streamed vamps under load', process.execPath, ['native/audio/tests/seamless.mjs', '--live-only', '--binary', binary], env)
     const reports = readdirSync(logDir, { withFileTypes: true }).filter((entry) => entry.isFile())
     for (const report of reports) {
       const text = readFileSync(join(logDir, report.name), 'utf8')
@@ -91,7 +96,7 @@ try {
       console.error(`tsan: ${report.name}\n${[...new Set(summaries)].join('\n')}`)
     }
     if (reports.length > 0) console.error(`tsan: ${reports.length} report file(s) — the engine has a data race`)
-    status = soak === 0 && race === 0 && reports.length === 0 ? 0 : 1
+    status = soak === 0 && race === 0 && pads === 0 && reports.length === 0 ? 0 : 1
     if (status === 0) console.log('tsan — clean')
   }
 } finally {

@@ -130,7 +130,9 @@ constexpr int kMaxOutputChannels = static_cast<int>(limitValue(LimitId::MaxOutpu
 constexpr int kMaxCueIdLen = 64;
 constexpr int kMaxPathLen = 4096;
 constexpr int kMaxRampParams = 4;
-constexpr int kMaxStreams = 16;
+// Streaming slots: one per voice that streams. Engine-internal, not a declared bound — the
+// declared streaming budget (`streamMaxTotalBytes`) is what limits how many can be open.
+constexpr int kMaxStreams = 32;
 constexpr int kMaxRampsPerParam = 4;
 constexpr int kMaxWaveformPoints = static_cast<int>(limitValue(LimitId::MaxWaveformPoints));
 constexpr int kMaxOnsets = 20000;
@@ -301,8 +303,12 @@ struct VoiceSnapshot {
   double startedAtMs = 0.0;
   int loopsCompleted = 0;
   bool active = false;
-  /** The streaming ring this voice holds, in bytes; 0 for a cache-backed voice. */
+  /** The streaming ring (and its pads) this voice holds, in bytes; 0 for a cache-backed voice. */
   int64_t streamBytes = 0;
+  /** The slice the voice is in — its place in the cue's `slices`, skipped ones counted — and
+   *  the pass of it this is, from 1; -1 and 0 for a voice without slices. */
+  int sliceIndex = -1;
+  int slicePass = 0;
 };
 
 // Snapshot of everything the mixer publishes each block, carried by a SnapshotCell
@@ -441,6 +447,10 @@ struct Command {
   int cacheChannels = 0;
   int cacheSampleRate = 0;
   int streamSlot = -1;
+  // A seek's landing, decoded before the seek was sent (stream.h): the stream slot it is in
+  // and its pad, or -1. The audio thread lets the pad go once the seek is applied.
+  int seekSlot = -1;
+  int seekPad = -1;
   bool hasSourceInfo = false;
   char filePath[kMaxPathLen] = {};
   uint64_t ackId = 0;

@@ -330,11 +330,47 @@ class Mp3Source final : public Source {
   int64_t readFrames(float* out, int64_t frames) override {
     return static_cast<int64_t>(drmp3_read_pcm_frames_f32(&mp3_, static_cast<drmp3_uint64>(frames), out));
   }
+  /**
+   * To the sample. dr_mp3 keeps its position (`currentPCMFrame`) counting the encoder delay a
+   * gapless (LAME) file starts with, but reads and seeks in frames that leave it out, and a
+   * seek compares the two: on a decoder already past the delay every seek landed the delay
+   * early — 1105 frames, 23 ms, on a LAME file — whether forward from where it was or through
+   * the seek table. Only a seek from the top of the file came out right. So the position is
+   * read back with the delay taken off, and the rest of the way is read forward.
+   */
   bool seekToFrame(int64_t frame) override {
-    return drmp3_seek_to_pcm_frame(&mp3_, static_cast<drmp3_uint64>(frame)) == DRMP3_TRUE;
+    if (frame < 0) frame = 0;
+    int64_t here = position();
+    // Forward, and near enough (or with no table to jump with): read on to it.
+    const bool table = !index_->seekPoints.empty();
+    if (frame < here || (table && frame - here > static_cast<int64_t>(info_.sampleRate) * 30)) {
+      if (drmp3_seek_to_pcm_frame(&mp3_, static_cast<drmp3_uint64>(frame)) != DRMP3_TRUE) return false;
+      here = position();
+      if (here > frame) {
+        if (drmp3_seek_to_pcm_frame(&mp3_, 0) != DRMP3_TRUE) return false;
+        here = 0;
+      }
+    }
+    // Read and dropped: dr_mp3 reads into a buffer even when nothing is wanted from it.
+    std::vector<float> scratch;
+    while (frame > here) {
+      const int64_t chunk = std::min<int64_t>(frame - here, 4096);
+      scratch.resize(static_cast<size_t>(chunk) * static_cast<size_t>(std::max(1, info_.channels)));
+      const drmp3_uint64 got = drmp3_read_pcm_frames_f32(&mp3_, static_cast<drmp3_uint64>(chunk), scratch.data());
+      if (got == 0) return false;
+      here += static_cast<int64_t>(got);
+    }
+    return true;
   }
 
  private:
+  /** Where the next frame read comes from, in the frames reads count (the delay left out). */
+  int64_t position() const {
+    const int64_t raw = static_cast<int64_t>(mp3_.currentPCMFrame);
+    const int64_t delay = static_cast<int64_t>(mp3_.delayInPCMFrames);
+    return raw > delay ? raw - delay : 0;
+  }
+
   drmp3 mp3_{};
   bool initialized_ = false;
   FileIo io_{};
@@ -477,9 +513,12 @@ bool AiffSource::open(const std::string& path, std::string& error) {
   const int64_t limit = std::ftell(file_);
   std::fseek(file_, 0, SEEK_SET);
 
-  int64_t pos = 0;
-  std::vector<unsigned char> header;
-  if (!readChunk(pos, limit, header) || header.size() < 12 || std::memcmp(header.data(), "FORM", 4) != 0) {
+  // The FORM header alone — its id, its size and its form type — and the chunks after it. Read
+  // as a chunk, FORM is the whole file: that read every sample into memory and left nothing
+  // after it to find COMM or SSND in, so no AIFF ever opened.
+  int64_t pos = 12;
+  std::vector<unsigned char> header(12);
+  if (limit < 12 || std::fread(header.data(), 1, 12, file_) != 12 || std::memcmp(header.data(), "FORM", 4) != 0) {
     error = "not an AIFF file";
     return false;
   }

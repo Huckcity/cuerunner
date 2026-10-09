@@ -33,6 +33,8 @@ function progress(overrides: Partial<AudioProgress> = {}): AudioProgress {
     runFraction: 0.25,
     loopsCompleted: 0,
     startedAtMs: 100,
+    streamBytes: 0,
+    slice: null,
     ...overrides
   }
 }

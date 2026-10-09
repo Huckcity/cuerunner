@@ -12,7 +12,8 @@ function run(state: RunningCue['state'], startedAt: number): RunningCue {
 function audio(elapsedMs: number, durationMs: number): AudioProgress {
   return {
     cueId: 'c', runId: 'r', state: 'playing', playing: true, elapsedMs, durationMs,
-    fraction: elapsedMs / durationMs, runFraction: elapsedMs / durationMs, loopsCompleted: 0, startedAtMs: 0
+    fraction: elapsedMs / durationMs, runFraction: elapsedMs / durationMs, loopsCompleted: 0, startedAtMs: 0,
+    streamBytes: 0, slice: null
   }
 }
 

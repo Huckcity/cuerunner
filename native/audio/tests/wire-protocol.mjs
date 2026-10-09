@@ -359,6 +359,37 @@ try {
       JSON.stringify({ start: cachedStart, voice: cachedVoice, media: cachedInfo.result?.media })
     )
 
+    // The `progress` reply carries the fields its declaration names and no others, and a
+    // sliced voice says which piece of its cue it is in and which pass — numbered as the
+    // cue's own `slices`, the skipped piece counted — while one without slices says null.
+    const progressFields = Object.keys(declaration.replies?.progress ?? {}).sort()
+    const plainProgress = await client.request('progress', { cueId: 'tone' })
+    check(
+      'a progress reply carries exactly its declared fields, slice null without slices',
+      plainProgress.ok === true && JSON.stringify(Object.keys(plainProgress.result ?? {}).sort()) === JSON.stringify(progressFields) &&
+        progressFields.includes('slice') && plainProgress.result.slice === null,
+      JSON.stringify({ declared: progressFields, reply: plainProgress })
+    )
+    await client.request('prepare', { cueId: 'sliced', filePath: fixturePath })
+    await client.request('start', {
+      cueId: 'sliced',
+      whenMs: 0,
+      options: { slices: [{ startTime: 0, endTime: 100, playCount: 1 }, { startTime: 100, endTime: 200, playCount: 0 }, { startTime: 200, endTime: 300, playCount: -1 }] }
+    })
+    let slicedProgress = null
+    for (let attempt = 0; attempt < 100; attempt++) {
+      slicedProgress = await client.request('progress', { cueId: 'sliced' })
+      if (slicedProgress.result?.slice?.pass >= 2) break
+      await sleep(20)
+    }
+    check(
+      'a sliced voice reports the piece it is in, counting the skipped one, and its pass',
+      slicedProgress?.ok === true && slicedProgress.result?.slice?.index === 2 && slicedProgress.result.slice.pass >= 2 &&
+        JSON.stringify(Object.keys(slicedProgress.result.slice).sort()) === JSON.stringify(['index', 'pass']),
+      JSON.stringify(slicedProgress)
+    )
+    await client.request('stop', { cueId: 'sliced', fadeMs: 0 })
+
     // The schedule horizon refuses, and it covers every verb whose declaration carries a
     // `whenMs` — derived from the declaration rather than a second list here, so a verb
     // that gains one is covered the moment its declaration does.

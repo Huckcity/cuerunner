@@ -90,6 +90,15 @@ describe('the wire declaration', () => {
     expect(JSON.parse(output)).toEqual({ ...AUDIO_WIRE, limits: AUDIO_LIMITS })
   })
 
+  it('declares the slice a voice is in on the progress reply, in protocol 4', () => {
+    // The UI reads a sliced voice's place from here: `{ index, pass }`, or null without
+    // slices. Part of protocol 4's table, which had not shipped when it joined.
+    expect(AUDIO_PROTOCOL_VERSION).toBe(4)
+    expect(AUDIO_WIRE.replies.progress.slice).toEqual({ type: 'object', nullable: true })
+    const output = JSON.parse(execFileSync(ensureBinary(), ['--protocol'], { encoding: 'utf8' }))
+    expect(output.replies.progress.slice).toEqual({ type: 'object', nullable: true })
+  })
+
   it('refuses a connection that declares another protocol, before a verb is written', async () => {
     // An engine whose declaration is not this build's speaks another meaning of the
     // number, and it is refused while the connection is still empty — no `info`, no verb —

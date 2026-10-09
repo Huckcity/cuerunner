@@ -4,6 +4,7 @@
 #include "matroska.h"
 #include "util.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -350,7 +351,7 @@ class FfmpegPipeSource final : public Source {
     info_.channels = meta.channels > 0 ? meta.channels : 2;
     info_.frames = meta.frames;
     info_.canSeek = true;
-    if (!spawn(0.0, error)) return false;
+    if (!spawn(0, error)) return false;
 
     // A helper that cannot decode exits at once. Read one frame now so a broken or
     // absent decoder is reported as a decoder error rather than looking like a silent,
@@ -365,6 +366,7 @@ class FfmpegPipeSource final : public Source {
     }
     pending_.assign(probe.begin(), probe.end());
     pendingOffset_ = 0;
+    positionFrames_ = 0;  // the probe's frame is handed out again by the first read
     return true;
   }
 
@@ -389,26 +391,42 @@ class FfmpegPipeSource final : public Source {
       const size_t got = std::fread(out + produced * static_cast<int64_t>(channels), 1, want, stream_);
       produced += static_cast<int64_t>(got / (channels * sizeof(float)));
     }
+    positionFrames_ += produced;
     return produced;
   }
 
   bool seekToFrame(int64_t frame) override {
     if (frame < 0) frame = 0;
     if (frame == positionFrames_) return true;
-    const double seconds = static_cast<double>(frame) / static_cast<double>(info_.sampleRate);
     std::string error;
     pending_.clear();
     pendingOffset_ = 0;
-    if (!spawn(seconds, error)) {
+    if (!spawn(frame, error)) {
       logError("the M4A decoder could not seek: %s", error.c_str());
       return false;
     }
-    positionFrames_ = frame;
     return true;
   }
 
  private:
-  bool spawn(double startSeconds, std::string& error) {
+  /**
+   * The helper, decoding from `startFrame`. ffmpeg's own seek (`-ss` before the input) lands on
+   * the packet that holds the time and decodes from there with nothing behind it, so an AAC
+   * decoder's first frames out are its warm-up, not the music: a transient of up to half full
+   * scale. So it seeks to a little before (`kSeekPrerollSeconds`) and trims the rest on the
+   * output side (`-ss` after the input), which decodes through the pre-roll and cuts at the
+   * sample. Each half is a whole number of frames: ffmpeg rounds a time to the nearest sample,
+   * so a time that is exactly a frame lands on it.
+   */
+  bool spawn(int64_t startFrame, std::string& error) {
+    const int64_t rate = std::max(1, info_.sampleRate);
+    const int64_t preroll = std::min<int64_t>(std::max<int64_t>(0, startFrame), rate / 5);  // 200 ms
+    const double inputSeconds = static_cast<double>(startFrame - preroll) / static_cast<double>(rate);
+    const double outputSeconds = static_cast<double>(preroll) / static_cast<double>(rate);
+    char inputSeek[32];
+    char outputSeek[32];
+    std::snprintf(inputSeek, sizeof(inputSeek), "%.6f", inputSeconds);
+    std::snprintf(outputSeek, sizeof(outputSeek), "%.6f", outputSeconds);
     closeChild();
     int fds[2];
     if (::pipe(fds) != 0) {
@@ -428,14 +446,17 @@ class FfmpegPipeSource final : public Source {
       ::close(fds[1]);
       std::string rate = std::to_string(info_.sampleRate);
       std::string channels = std::to_string(info_.channels);
-      std::string start = std::to_string(startSeconds);
       std::vector<std::string> args = {ffmpeg_, "-v", "error", "-nostdin"};
-      if (startSeconds > 0.0) {
+      if (inputSeconds > 0.0) {
         args.push_back("-ss");
-        args.push_back(start);
+        args.push_back(inputSeek);
       }
       args.push_back("-i");
       args.push_back(path_);
+      if (outputSeconds > 0.0) {
+        args.push_back("-ss");
+        args.push_back(outputSeek);
+      }
       // Sound only: a video's picture and subtitles are not this helper's to read, and the
       // pinned build has no decoder for them to try.
       args.push_back("-vn");
@@ -463,7 +484,7 @@ class FfmpegPipeSource final : public Source {
       return false;
     }
     pid_ = pid;
-    positionFrames_ = static_cast<int64_t>(startSeconds * info_.sampleRate);
+    positionFrames_ = startFrame;
     return true;
   }
 

@@ -682,6 +682,14 @@ export const GUIDES = [
         recording repeats after a vamp — and the music goes from the slice before straight into
         the slice after; a last slice of 0 ends the cue where it begins.
       </p>
+      <p>
+        None of these jumps leaves a gap — a loop going round, a skipped slice, a devamp, a
+        Control cue's load to a later slice — whether the file is a long one played from disk
+        or a short one held in memory. Where the music either side of a jump does not meet, the
+        jump is made over a 3&nbsp;ms crossfade, so a slice cut away from a zero crossing does
+        not click; where it does meet, it is joined sample for sample. Each pass and each slice
+        still starts on its own sample, so a devamp lands where it always did.
+      </p>
     </section>
 
     <section class="panel reveal delay-2">

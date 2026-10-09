@@ -63,6 +63,9 @@ struct EngineOptions {
   /** Offline: where the test output devices tee what they play, beside the render's own WAV.
    *  A device backend tees them beside `capturePath`. */
   std::string testOutputCapture;
+  /** Tests only: a pause before every read a streaming decoder makes, standing in for a slow
+   *  disk (`--test-read-delay-us`). */
+  int64_t testReadDelayUs = 0;
 };
 
 struct EngineError {

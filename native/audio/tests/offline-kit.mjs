@@ -80,12 +80,12 @@ export function readFloatWav(path) {
  * for each test output device named in `devices`, what that device played (its tee, written
  * beside the render's own WAV).
  */
-export function render(workDir, script, { keepWav = true, devices = [] } = {}) {
+export function render(workDir, script, { keepWav = true, devices = [], args = [] } = {}) {
   const tag = Math.floor(Math.random() * 1e9)
   const scriptPath = join(workDir, `script-${tag}.json`)
   const outPath = join(workDir, `out-${tag}.wav`)
   writeFileSync(scriptPath, JSON.stringify({ sampleRate: 48000, channels: 2, blockFrames: 512, stopWhenIdle: false, ...script }))
-  const stdout = execFileSync(binary, ['--offline-render', scriptPath, '--out', outPath, '--backend', 'offline'],
+  const stdout = execFileSync(binary, ['--offline-render', scriptPath, '--out', outPath, '--backend', 'offline', ...args],
     { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
   const summary = JSON.parse(stdout.trim().split('\n').pop())
   const wav = keepWav ? readFloatWav(outPath) : null
