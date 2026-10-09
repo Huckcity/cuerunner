@@ -37,7 +37,8 @@
  * `shape`, a release's `stopAtSliceEnd`) and the loudness meter (`loudness`) joined the same
  * table before 4 shipped, for the same reason — and so did the extra output devices (a patch's
  * `device`, `outputs` through `outputStatus`, the meters' `devices`, and a device notification
- * simulated for one of the test outputs).
+ * simulated for one of the test outputs), and the `progress` reply's declared fields with the
+ * `slice` a sliced voice is in (`AUDIO_WIRE.replies`).
  */
 export const AUDIO_PROTOCOL_VERSION = 4
 
@@ -170,6 +171,30 @@ const AUDIO_WIRE_EVENTS = {
 } as const satisfies {
   readonly [Name in AudioEventType]: WireEventFields<Extract<AudioEngineEvent, { type: Name }>>
 }
+
+/**
+ * The replies whose fields both ends declare, and the top-level fields each carries — the
+ * native truth `voiceToJson()` writes for `progress` (and for each of `info().activeCues`).
+ * The UI reads a sliced voice's place off `progress.slice`, so its shape is part of the wire,
+ * held both ways like an event's: every field `AudioProgress` names, and no other.
+ */
+const AUDIO_WIRE_REPLIES = {
+  progress: {
+    cueId: { type: 'string' },
+    runId: { type: 'string' },
+    state: { type: 'string' },
+    playing: { type: 'boolean' },
+    elapsedMs: { type: 'number' },
+    durationMs: { type: 'number' },
+    fraction: { type: 'number' },
+    runFraction: { type: 'number' },
+    startedAtMs: { type: 'number' },
+    loopsCompleted: { type: 'number' },
+    streamBytes: { type: 'number' },
+    // `{ index, pass }` for a sliced voice; null — a meaning of its own — for one without slices.
+    slice: { type: 'object', nullable: true }
+  }
+} as const satisfies { readonly progress: WireEventFields<AudioProgress> }
 
 /** The wire kind a field's own TypeScript type is written as — the five the requests use. */
 type WireKindOf<T> = Exclude<T, null> extends string
@@ -460,11 +485,13 @@ export const AUDIO_WIRE = {
     /** Every extra output device: whether it plays, its clock against the main one, its buffer. */
     outputStatus: {}
   },
-  events: AUDIO_WIRE_EVENTS
+  events: AUDIO_WIRE_EVENTS,
+  replies: AUDIO_WIRE_REPLIES
 } as const satisfies {
   protocol: number
   verbs: Record<string, Record<string, AudioWireField>>
   events: typeof AUDIO_WIRE_EVENTS & EventSetCheck
+  replies: typeof AUDIO_WIRE_REPLIES
 }
 
 /** Every verb the wire carries, as a union of its names. */
@@ -794,6 +821,16 @@ export type AudioVoiceState = 'scheduled' | 'playing' | 'fading' | 'stopped'
 /** Why a run stopped. `complete` is a natural end; anything else was commanded or a fault. */
 export type AudioEndReason = 'complete' | 'stopped' | 'replaced' | 'cancelled' | 'device-lost' | 'error'
 
+/**
+ * Where a sliced voice is in its cue's slices: the piece it is in now — its 0-based place in
+ * the cue's `slices`, a skipped (0-count) piece counted in the numbering though it is never
+ * in — and the pass of that piece it is on, from 1.
+ */
+export interface AudioSliceProgress {
+  index: number
+  pass: number
+}
+
 export interface AudioProgress {
   cueId: string
   runId: string
@@ -810,13 +847,10 @@ export interface AudioProgress {
   loopsCompleted: number
   /** Sample-clock ms the run was scheduled to start at. */
   startedAtMs: number
-  /**
-   * The slice the voice is in, for a cue sent with slices: `index` counts the pieces it was
-   * sent from 0, skipped ones included, and `pass` is which pass of that piece this is, from
-   * 1. Null for a voice without slices; absent from an engine that does not report it, where
-   * the window works the piece out from `elapsedMs` instead.
-   */
-  slice?: { index: number; pass: number } | null
+  /** The ring and pads a streamed voice holds, in bytes; 0 for a cache-backed voice. */
+  streamBytes: number
+  /** The slice the voice is in and its pass; null for a voice without slices. */
+  slice: AudioSliceProgress | null
 }
 
 /** What a `start` resolves to: the identity every later event for this run carries. */
@@ -981,6 +1015,8 @@ export interface AudioActiveCue {
    * protocol and sends none; a caller treats that as unknown, not as zero.
    */
   streamBytes?: number
+  /** The slice the voice is in and its pass, as `progress` reports it; null without slices. */
+  slice?: AudioSliceProgress | null
 }
 
 export interface AudioCacheStats {

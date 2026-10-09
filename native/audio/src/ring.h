@@ -74,11 +74,22 @@ class StreamRing {
   }
   void release(int64_t throughFrame) { readFrame_.store(throughFrame, std::memory_order_release); }
 
-  // Seek handshake: the consumer asks for a frame, the producer flushes, repositions
-  // the decoder and bumps the generation. Until then the consumer renders silence.
+  // Seek handshake: the consumer asks for a frame, the producer flushes, repositions the
+  // decoder, resets the window and only then clears the request — so while a request is
+  // pending the window is not the consumer's to read or release, and once it is cleared the
+  // window is the new one. A newer request made meanwhile is left pending, for the next pass.
   void requestSeek(int64_t frame) { seekTarget_.store(frame, std::memory_order_release); }
   bool seekPending() const { return seekTarget_.load(std::memory_order_acquire) >= 0; }
-  int64_t takeSeekTarget() { return seekTarget_.exchange(-1, std::memory_order_acq_rel); }
+  int64_t pendingSeekTarget() const { return seekTarget_.load(std::memory_order_acquire); }
+  bool finishSeek(int64_t frame) {
+    int64_t expected = frame;
+    return seekTarget_.compare_exchange_strong(expected, -1, std::memory_order_acq_rel);
+  }
+  /** Whether the window holds `frame` for the consumer: published, not released, not moving. */
+  bool holds(int64_t frame) const {
+    if (seekPending()) return false;
+    return frame >= readFrame_.load(std::memory_order_acquire) && frame < writeFrame_.load(std::memory_order_acquire);
+  }
   void resetForSeek(int64_t frame) {
     readFrame_.store(frame, std::memory_order_release);
     writeFrame_.store(frame, std::memory_order_release);

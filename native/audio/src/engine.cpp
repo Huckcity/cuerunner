@@ -569,6 +569,7 @@ bool Engine::start(const EngineOptions& options, EngineError& error) {
   if (running_.load()) return true;
   options_ = options;
   cache_.configure(options_.cacheMaxBytes, options_.cacheMaxFiles, options_.cacheMaxFileBytes);
+  streams_.setTestReadDelayUs(options_.testReadDelayUs);
   inputs_.configure(options_.backend == "offline", options_.testInputs);
   auxOutputs_.configure(options_.backend == "offline", options_.testOutputs, options_.backend,
                         options_.backend == "offline" ? options_.testOutputCapture : options_.capturePath);
@@ -727,7 +728,7 @@ void Engine::handleBackgroundWork() {
   ReclaimItem item;
   while (reclaim_.pop(item)) {
     if (item.cacheEntry != nullptr) cache_.release(static_cast<CacheEntry*>(item.cacheEntry));
-    if (item.streamSlot >= 0) streams_.release(item.streamSlot);
+    if (item.streamSlot >= 0) streams_.release(item.streamSlot, false);
   }
   streams_.fillAll();
 
@@ -931,8 +932,14 @@ void Engine::applyQueuedCommands() {
 void Engine::releaseCommandResources(Command& command) {
   if (command.cacheEntry != nullptr) cache_.release(static_cast<CacheEntry*>(command.cacheEntry));
   if (command.streamSlot >= 0) streams_.release(command.streamSlot);
+  if (command.seekPad >= 0 && command.seekPad < kPadsPerStream) {
+    // A seek that never reached the audio thread leaves its landing to the read-ahead.
+    StreamSlot* slot = streams_.at(command.seekSlot);
+    if (slot != nullptr) slot->pads[command.seekPad].pinned.store(false, std::memory_order_release);
+  }
   command.cacheEntry = nullptr;
   command.streamSlot = -1;
+  command.seekPad = -1;
 }
 
 void Engine::silentLoop() {
@@ -1178,8 +1185,10 @@ bool Engine::startCue(const std::string& cueId, double whenMs, const StartOption
     SourceInfo info;
     std::string streamError;
     StreamRefusal refusal = StreamRefusal::None;
+    // The start's options go with it: the ring is filled from where the voice starts, and
+    // the read-ahead follows the voice's plan — its loops and its skips (AD-29).
     const int slot = streams_.acquire(file.path, options_.streamPrerollMs, options_.streamMaxBytesPerVoice,
-                                      options_.streamMaxTotalBytes, refusal, streamError, info);
+                                      options_.streamMaxTotalBytes, refusal, streamError, info, &options, cueId);
     if (slot < 0) {
       // The declared total budget refuses with its own code; anything else that stopped
       // the open keeps the `decode` the wire has always answered it with.
@@ -1255,6 +1264,15 @@ bool Engine::seekCue(const std::string& cueId, double positionMs, double whenMs,
   copyStr(command.cueId, sizeof(command.cueId), cueId);
   command.positionMs = positionMs;
   command.whenMs = whenMs;
+  // A streamed voice lands on the place asked for out of a pad decoded here, before the seek
+  // is sent, rather than waiting on its ring to move there (AD-29). A place its ring already
+  // holds needs no pad; a voice that is cached, or not streaming, has nothing to prepare.
+  int seekSlot = -1;
+  const int seekPad = streams_.prepareSeek(cueId, positionMs, seekSlot);
+  if (seekPad >= 0) {
+    command.seekSlot = seekSlot;
+    command.seekPad = seekPad;
+  }
   AckResult ack;
   if (!submitCommand(command, ack, error)) return false;
   out.atMs = clockMs();

@@ -66,6 +66,7 @@ void Mixer::configure(int deviceChannels, int sampleRate) {
         static_cast<double>(sampleRate_)));
   }
   sampleRate_ = rate;
+  joinFrames_ = joinCrossfadeFrames(rate);
 }
 
 void Mixer::reset() {
@@ -143,21 +144,66 @@ double Mixer::paramValue(const Voice& voice, int param, int64_t frame) const {
   }
 }
 
-bool Mixer::sampleOf(const Voice& voice, int64_t frame, int channel, float& out) const {
-  if (frame < 0 || channel < 0 || channel >= voice.channels) return false;
+/**
+ * One frame of the voice's file, interleaved. A cached voice has the whole file; a streamed
+ * one looks where its last frame was found first (`src`: a pad, or -1 for the ring), then in
+ * the ring, then in its other pads, and `src` says where this one was found.
+ */
+const float* Mixer::frameAt(const Voice& voice, int64_t frame, int& src) const {
+  if (frame < 0) return nullptr;
   if (voice.cachedData != nullptr) {
-    if (frame >= voice.cachedFrames) return false;
-    out = voice.cachedData[frame * voice.channels + channel];
-    return true;
+    return frame < voice.cachedFrames ? voice.cachedData + frame * voice.channels : nullptr;
   }
-  if (voice.streamSlot >= 0) {
-    const StreamSlot* slot = streams_.at(voice.streamSlot);
-    if (slot == nullptr || !slot->inUse.load(std::memory_order_acquire)) return false;
-    if (frame < slot->ring.readFrame() || frame >= slot->ring.writeFrame()) return false;
-    out = slot->ring.readPtr(frame)[channel];
-    return true;
+  if (voice.streamSlot < 0) return nullptr;
+  const StreamSlot* slot = streams_.at(voice.streamSlot);
+  if (slot == nullptr || !slot->inUse.load(std::memory_order_acquire)) return nullptr;
+  auto fromPad = [&](int k) {
+    const StreamPad& pad = slot->pads[k];
+    return pad.pcm.data() + (frame - pad.target.load(std::memory_order_relaxed)) * slot->channels;
+  };
+  if (src >= 0 && src < kPadsPerStream && slot->pads[src].holds(frame)) return fromPad(src);
+  if (slot->ring.holds(frame)) {
+    src = -1;
+    return slot->ring.readPtr(frame);
   }
-  return false;
+  for (int k = 0; k < kPadsPerStream; k++) {
+    if (slot->pads[k].holds(frame)) {
+      src = k;
+      return fromPad(k);
+    }
+  }
+  return nullptr;
+}
+
+bool Mixer::readSample(const Voice& voice, double position, int& src, float* out) const {
+  const int64_t base = static_cast<int64_t>(std::floor(position));
+  const double frac = position - static_cast<double>(base);
+  const float* first = frameAt(voice, base, src);
+  if (first == nullptr) return false;
+  const float* second = first;
+  if (frac > 0.0) {
+    int nextSrc = src;
+    second = frameAt(voice, base + 1, nextSrc);
+    if (second == nullptr) {
+      // The last frame of the file has nothing after it to be read towards; anything else
+      // missing is a frame that is not there yet.
+      bool atEnd = false;
+      if (voice.cachedData != nullptr) {
+        atEnd = base + 1 >= voice.cachedFrames;
+      } else if (voice.streamSlot >= 0) {
+        const StreamSlot* slot = streams_.at(voice.streamSlot);
+        atEnd = slot != nullptr && slot->eof.load(std::memory_order_acquire) && !slot->ring.seekPending() &&
+                base + 1 >= slot->ring.writeFrame();
+      }
+      if (!atEnd) return false;
+      second = first;
+    }
+  }
+  for (int channel = 0; channel < voice.channels; channel++) {
+    out[channel] = static_cast<float>(static_cast<double>(first[channel]) +
+                                      (static_cast<double>(second[channel]) - static_cast<double>(first[channel])) * frac);
+  }
+  return true;
 }
 
 void Mixer::emit(const Event& event) {
@@ -363,74 +409,28 @@ Voice* Mixer::startVoice(const Command& cmd) {
 
   const StartOptions& options = cmd.options;
   const double sourceEnd = voice->sourceFrames >= 0 ? static_cast<double>(voice->sourceFrames) : kUnboundedSegment;
-  double segmentStart = options.startTimeMs * static_cast<double>(voice->sampleRate) / 1000.0;
-  if (segmentStart < 0.0) segmentStart = 0.0;
-  if (segmentStart > sourceEnd) segmentStart = sourceEnd;
-  double segmentEnd = options.endTimeMs >= 0.0
-                          ? options.endTimeMs * static_cast<double>(voice->sampleRate) / 1000.0
-                          : sourceEnd;
-  if (segmentEnd > sourceEnd) segmentEnd = sourceEnd;
-  if (segmentEnd < segmentStart) segmentEnd = segmentStart;
-
-  voice->segmentStartFrame = segmentStart;
-  voice->segmentEndFrame = segmentEnd;
-  voice->position = segmentStart;
-
-  // Slices replace the one region and its loop count: the voice starts in the slice that
-  // holds its start (a seek can start it part-way through the cue) and plays them in order.
-  //
-  // A slice that plays no times is left out here, once, rather than tested at every edge: the
-  // slice before it then ends where a slice that does not start there begins, and the move
-  // between them is the jump `advanceSlices` already makes for slices that do not touch — the
-  // next frame is the first frame after the skip. Skipped slices at the end leave the last kept
-  // one the voice's last, so the voice ends where the skip begins.
-  if (options.sliceCount > 0 && voice->inputFeed < 0) {
-    int kept = 0;
-    int skipped = 0;
-    for (int i = 0; i < options.sliceCount && i < kMaxSlices; i++) {
-      const SliceSpec& spec = options.slices[i];
-      if (spec.playCount == 0) {
-        skipped++;
-        continue;
-      }
-      double start = spec.startMs * static_cast<double>(voice->sampleRate) / 1000.0;
-      double end = spec.endMs * static_cast<double>(voice->sampleRate) / 1000.0;
-      start = std::max(0.0, std::min(start, sourceEnd));
-      end = std::max(start, std::min(end, sourceEnd));
-      if (end <= start) continue;
-      VoiceSlice* slices = slicesOf(*voice);
-      slices[kept].startFrame = start;
-      slices[kept].endFrame = end;
-      slices[kept].playCount = spec.playCount < 0 ? -1 : spec.playCount;
-      kept++;
-    }
-    voice->sliceCount = kept;
-    const VoiceSlice* slices = slicesOf(*voice);
-    if (skipped > 0 && (kept == 0 || slices[kept - 1].endFrame <= segmentStart)) {
-      // Every slice from where it starts is skipped: there is nothing to play, and the empty
-      // region ends the voice as it begins, complete — not the whole region played instead.
-      voice->sliceCount = 0;
-      voice->segmentStartFrame = segmentStart;
-      voice->segmentEndFrame = segmentStart;
-      voice->position = segmentStart;
-    } else if (kept > 0) {
-      int index = 0;
-      while (index < kept - 1 && slices[index].endFrame <= segmentStart) index++;
-      voice->sliceIndex = index;
-      voice->segmentStartFrame = slices[index].startFrame;
-      voice->segmentEndFrame = slices[index].endFrame;
-      voice->position = std::max(segmentStart, slices[index].startFrame);
-      if (voice->position >= voice->segmentEndFrame) voice->position = voice->segmentStartFrame;
-    }
-  }
+  // The region, or the slices that replace it and its loop count, from the plan the stream
+  // pool built the same way (plan.h): the voice starts in the slice that holds its start (a
+  // seek can start it part-way through the cue) and plays them in order. A plan whose every
+  // slice from the start is skipped is an empty region, which ends the voice as it begins —
+  // complete, not the whole region played instead.
+  const PlannedStart plan = planVoice(options, voice->sampleRate, sourceEnd, voice->inputFeed >= 0, slicesOf(*voice));
+  voice->segmentStartFrame = plan.segmentStart;
+  voice->segmentEndFrame = plan.segmentEnd;
+  voice->position = plan.position;
+  voice->sliceCount = plan.sliceCount;
+  voice->sliceIndex = plan.sliceIndex;
 
   if (voice->streamSlot >= 0) {
-    // A freshly acquired ring holds nothing yet, so the voice is positioning until the
-    // first fill covers the frame it is asking for — whether or not it starts at an
-    // offset. Counting those frames as starvation made an ordinary streamed start read
-    // as "the audio waited for the disk".
-    if (voice->position > 0.0) requestStreamSeek(*voice, static_cast<int64_t>(voice->position));
-    else voice->awaitingSeek = true;
+    // The ring was filled from where the voice starts before the slot was handed over, so
+    // the first frame is there. A ring that does not hold it is sent there, and the wait is
+    // counted: nothing a start does is silence that goes unreported.
+    publishRegion(*voice);
+    const StreamSlot* slot = streams_.at(voice->streamSlot);
+    const int64_t first = static_cast<int64_t>(std::floor(voice->position));
+    if (slot != nullptr && (first < slot->ring.readFrame() || first >= slot->ring.readFrame() + slot->ring.capacityFrames())) {
+      requestStreamSeek(*voice, first);
+    }
   }
   voice->loopCount = options.loopCount;
   voice->volume = options.volume;
@@ -719,6 +719,7 @@ void Mixer::apply(const Command& cmd) {
         voice->segmentEndFrame = releasedEnd;
         voice->loopCount = 0;
         voice->loopsCompleted = 0;
+        if (voice->streamSlot >= 0) publishRegion(*voice);
         if (releasedEnd <= 0.0) finishVoice(*voice, now, EndReason::Complete);
         applied = true;
       }
@@ -743,26 +744,25 @@ void Mixer::apply(const Command& cmd) {
         }
         if (target < voice->segmentStartFrame) target = voice->segmentStartFrame;
         if (target > voice->segmentEndFrame) target = voice->segmentEndFrame;
+        const double continuation = voice->position;
         voice->position = target;
-        if (voice->streamSlot >= 0) {
-          StreamSlot* slot = streams_.at(voice->streamSlot);
-          if (slot != nullptr) {
-            // The ring is addressed in absolute source frames, so a target the window
-            // already covers is decoded and waiting: the jump plays out of the pre-roll
-            // and nothing has to be repositioned. Asking for it anyway throws away
-            // frames that were already read, reads them back off the disk, and leaves
-            // the window empty under a voice that is playing — silence to the operator,
-            // and an underrun to the counters, for a seek that needed no work at all.
-            const int64_t frame = static_cast<int64_t>(target);
-            if (frame < slot->ring.readFrame() || frame >= slot->ring.writeFrame()) {
-              slot->eof.store(false, std::memory_order_relaxed);
-              requestStreamSeek(*voice, frame);
-            }
-          }
-        }
+        // A seek is a join like a wrap (AD-29). The ring is addressed in absolute source
+        // frames, so a target its window already covers is decoded and waiting and is played
+        // from there; anywhere else, the command thread decoded the target into a pad before
+        // the seek was sent, and the voice lands on that while the ring moves. Only a target
+        // nothing holds sends the ring there with the voice waiting on it — counted.
+        // A voice not yet sounding has nothing to crossfade from.
+        beginJoin(*voice, voice->started ? continuation : -1.0);
+        if (voice->streamSlot >= 0) publishRegion(*voice);
         ackState = static_cast<int>(voice->state);
         ackPositionMs = voice->sampleRate > 0 ? target * 1000.0 / static_cast<double>(voice->sampleRate) : 0.0;
         applied = true;
+      }
+      if (cmd.seekPad >= 0) {
+        // The pad the seek was prepared on is the voice's now, or nobody's: either way it is
+        // no longer held back for the seek.
+        StreamSlot* slot = streams_.at(cmd.seekSlot);
+        if (slot != nullptr && cmd.seekPad < kPadsPerStream) slot->pads[cmd.seekPad].pinned.store(false, std::memory_order_release);
       }
       break;
     }
@@ -930,18 +930,191 @@ void Mixer::retryReclaims() {
   pendingStreamCount_ = remaining;
 }
 
-// A streaming decoder is filled forward from wherever it was opened, so any jump in the
-// voice's position — a start at an offset, a seek, a loop back to the segment start —
-// leaves the ring window parked on frames the voice will never ask for again. The voice
-// then waits forever on a window that can never advance: silence and an underrun for
-// every frame played. The window has to be moved with the voice, and the frames spent
-// waiting for it are the reposition, not starvation.
+// A streaming decoder is filled forward from wherever it was moved to, so a jump in the
+// voice's position that nothing has read ahead for leaves the ring parked on frames the voice
+// will never ask for again. The ring is sent where the voice is; until it gets there the voice
+// has nothing to play, and every frame of that is an underrun, counted as one (AD-29) — the
+// read-ahead exists so that this is a fault, not the way a loop works.
 void Mixer::requestStreamSeek(Voice& voice, int64_t frame) {
   if (voice.streamSlot < 0) return;
   StreamSlot* slot = streams_.at(voice.streamSlot);
   if (slot == nullptr) return;
   slot->ring.requestSeek(frame);
-  voice.awaitingSeek = true;
+  voice.readSrc = -1;
+  voice.ringTarget = -1;
+}
+
+void Mixer::publishRegion(const Voice& voice) {
+  StreamSlot* slot = streams_.at(voice.streamSlot);
+  if (slot == nullptr) return;
+  slot->voiceSegmentStart.store(static_cast<int64_t>(std::floor(voice.segmentStartFrame)), std::memory_order_relaxed);
+  slot->voiceSegmentEnd.store(static_cast<int64_t>(std::ceil(std::min(voice.segmentEndFrame, 9.0e18))), std::memory_order_relaxed);
+  slot->voiceRegion.store(voice.sliceCount > 0 ? voice.sliceIndex : 0, std::memory_order_release);
+}
+
+/**
+ * The join a jump makes (AD-29). `continuation` is where the file would have gone on had the
+ * voice not jumped — the material it is leaving — or negative when nothing was sounding.
+ *
+ * Where the voice lands is read from whatever holds it: the cache; for a stream, the ring when
+ * its window has it, or the pad the read-ahead (or a seek) decoded there. A pad is played while
+ * the ring moves to where the pad ends — once the join's crossfade no longer needs the ring —
+ * unless the ring is heading there anyway, as it is when a loop's pad ends where the ring is
+ * parked. Nothing holding the target is the read-ahead's failure: the ring is sent there, and
+ * the wait is counted as underruns.
+ *
+ * Where the sample landed on is within `kCleanJoinStep` of the one the file was going to play
+ * next, the join is made sample for sample. Otherwise the two are crossfaded at equal power
+ * over `kJoinCrossfadeMs`: the landing starts on its own frame, so a pass or a slice still
+ * begins exactly where it did.
+ */
+void Mixer::beginJoin(Voice& voice, double continuation) {
+  voice.xfadeLeft = 0;  // a join inside a join's crossfade starts from where it has got to
+  // The material being left is read on from where the voice was reading it.
+  const int leftSrc = voice.streamSlot >= 0 ? voice.readSrc : -2;
+  const int64_t landing = static_cast<int64_t>(std::floor(voice.position));
+  int inSrc = -1;
+  const float* in = frameAt(voice, landing, inSrc);
+  if (voice.streamSlot >= 0) {
+    if (in == nullptr) {
+      requestStreamSeek(voice, landing);
+      return;
+    }
+    voice.readSrc = inSrc;
+    voice.ringTarget = -1;
+    if (inSrc >= 0) {
+      const StreamSlot* slot = streams_.at(voice.streamSlot);
+      voice.ringTarget = std::max<int64_t>(landing, slot->pads[inSrc].end() - slot->tailFrames);
+    }
+  }
+  if (continuation >= 0.0 && in != nullptr) {
+    const int64_t next = static_cast<int64_t>(std::floor(continuation));
+    int outSrc = leftSrc;
+    const float* out = frameAt(voice, next, outSrc);
+    // Past the end of the file there is nothing to go on to: the waveform's next sample is
+    // predicted from its last two, so a file made to loop meets itself cleanly, and where it
+    // does not, the last sample played is held under the crossfade instead of silence — a
+    // fade from silence would be a step of its own.
+    float* held = xfadeHold_[voiceIndex(voice)];
+    float predicted[kMaxOutputChannels] = {};
+    if (out == nullptr) {
+      int lastSrc = outSrc;
+      const float* last = frameAt(voice, next - 1, lastSrc);
+      int beforeSrc = lastSrc;
+      const float* before = frameAt(voice, next - 2, beforeSrc);
+      for (int channel = 0; channel < voice.channels; channel++) {
+        const float a = last != nullptr ? last[channel] : 0.0f;
+        const float b = before != nullptr ? before[channel] : a;
+        predicted[channel] = 2.0f * a - b;
+        held[channel] = a;
+      }
+    }
+    float step = 0.0f;
+    for (int channel = 0; channel < voice.channels; channel++) {
+      step = std::max(step, std::fabs((out != nullptr ? out[channel] : predicted[channel]) - in[channel]));
+    }
+    if (step > kCleanJoinStep) {
+      // A loop shorter than two crossfades gets one as long as half of it.
+      const double length = (voice.segmentEndFrame - voice.segmentStartFrame) /
+                            (static_cast<double>(voice.sampleRate) / static_cast<double>(sampleRate_));
+      int frames = joinFrames_;
+      if (length > 0.0 && length < 2.0 * frames) frames = std::max(1, static_cast<int>(length / 2.0));
+      voice.xfadeLeft = frames;
+      voice.xfadeTotal = frames;
+      voice.xfadePos = continuation;
+      voice.xfadeSrc = out != nullptr ? outSrc : kHeldSource;
+    }
+  }
+  if (voice.xfadeLeft == 0) postRingTarget(voice);
+}
+
+void Mixer::postRingTarget(Voice& voice) {
+  if (voice.ringTarget < 0 || voice.streamSlot < 0) return;
+  const int64_t target = voice.ringTarget;
+  voice.ringTarget = -1;
+  StreamSlot* slot = streams_.at(voice.streamSlot);
+  if (slot == nullptr) return;
+  // Heading there already: the ring is linear from where it stands, and fills that far.
+  const int64_t from = slot->ring.seekPending() ? slot->ring.pendingSeekTarget() : slot->ring.readFrame();
+  if (target >= from && target < from + slot->ring.capacityFrames()) return;
+  slot->ring.requestSeek(target);
+}
+
+void Mixer::blendOutgoing(Voice& voice, float* sample, double ratio) {
+  float out[kMaxOutputChannels] = {};
+  int src = voice.xfadeSrc;
+  // The material being left is only ever under the landing: a frame of it that is not there
+  // is silence in the fade, not a wait. Past the end of the file it is the last sample, held.
+  if (src == kHeldSource) {
+    const float* held = xfadeHold_[voiceIndex(voice)];
+    for (int channel = 0; channel < voice.channels; channel++) out[channel] = held[channel];
+  } else if (!readSample(voice, voice.xfadePos, src, out)) {
+    for (int channel = 0; channel < voice.channels; channel++) out[channel] = 0.0f;
+  } else {
+    voice.xfadeSrc = src;
+  }
+  const double t = (static_cast<double>(voice.xfadeTotal - voice.xfadeLeft) + 0.5) / static_cast<double>(voice.xfadeTotal);
+  const double in = std::sin(t * kHalfPi);
+  const double away = std::cos(t * kHalfPi);
+  for (int channel = 0; channel < voice.channels; channel++) {
+    sample[channel] = static_cast<float>(static_cast<double>(sample[channel]) * in + static_cast<double>(out[channel]) * away);
+  }
+  voice.xfadePos += ratio;
+  if (--voice.xfadeLeft == 0) postRingTarget(voice);
+}
+
+/**
+ * After a streamed voice reads a frame: the read's source is remembered; a voice reading a
+ * pad hands over to the ring once the ring holds the pad's last stretch (crossfading the two
+ * when they differ — a decoder that does not seek to the sample — and switching outright when
+ * they do not); and the ring frames the voice has finished with are released.
+ */
+void Mixer::afterStreamRead(Voice& voice, int src, int64_t base, double ratio) {
+  StreamSlot* slot = streams_.at(voice.streamSlot);
+  if (slot == nullptr) return;
+  voice.readSrc = src;
+  if (src >= 0) {
+    const StreamPad& pad = slot->pads[src];
+    const int64_t padEnd = pad.end();
+    if (base >= padEnd - slot->tailFrames && slot->ring.holds(base) && slot->ring.holds(base + 1)) {
+      const float* fromPad = pad.pcm.data() + (base - pad.target.load(std::memory_order_relaxed)) * slot->channels;
+      const float* fromRing = slot->ring.readPtr(base);
+      float step = 0.0f;
+      for (int channel = 0; channel < voice.channels; channel++) step = std::max(step, std::fabs(fromPad[channel] - fromRing[channel]));
+      if (step > kCleanJoinStep && voice.xfadeLeft == 0) {
+        const int room = static_cast<int>(static_cast<double>(padEnd - base - 2) / std::max(ratio, 1e-9));
+        const int frames = std::min(joinFrames_, room);
+        if (frames > 0) {
+          // From this frame: the pad at the voice's own place under the ring at the same place.
+          voice.xfadeLeft = frames;
+          voice.xfadeTotal = frames;
+          voice.xfadePos = voice.position;
+          voice.xfadeSrc = src;
+        }
+      }
+      voice.readSrc = -1;
+    }
+    return;
+  }
+  // Released through the frame just played, not the next one: below rate 1 the same source
+  // frame is played across several output frames, and releasing past it left the voice asking
+  // for a frame the window had already dropped. A crossfade still reading the ring holds it
+  // back to its own place.
+  int64_t through = base;
+  if (voice.xfadeLeft > 0 && voice.xfadeSrc == -1) through = std::min(through, static_cast<int64_t>(std::floor(voice.xfadePos)));
+  if (through > slot->ring.readFrame()) slot->ring.release(through);
+}
+
+void Mixer::sweepPads(Voice& voice) {
+  StreamSlot* slot = streams_.at(voice.streamSlot);
+  if (slot == nullptr) return;
+  for (int k = 0; k < kPadsPerStream; k++) {
+    if (k == voice.readSrc || (voice.xfadeLeft > 0 && k == voice.xfadeSrc)) continue;
+    StreamPad& pad = slot->pads[k];
+    if (pad.state.load(std::memory_order_acquire) != static_cast<int>(PadState::Ready)) continue;
+    if (!pad.unwanted.load(std::memory_order_acquire) || pad.pinned.load(std::memory_order_acquire)) continue;
+    pad.state.store(static_cast<int>(PadState::Retired), std::memory_order_release);
+  }
 }
 
 /**
@@ -984,66 +1157,19 @@ void Mixer::mixVoiceFrame(Voice& voice, int64_t frame, int64_t blockStart, float
   } else {
     const double rate = paramValue(voice, static_cast<int>(Param::Rate), frame);
     ratio = static_cast<double>(voice.sampleRate) / static_cast<double>(sampleRate_) * (rate > 0.0 ? rate : 1.0);
-    const int64_t base = static_cast<int64_t>(std::floor(voice.position));
-    const double frac = voice.position - static_cast<double>(base);
-
-    // Once the ring covers the frame the voice is asking for, the reposition is done
-    // and later starvation is starvation again.
-    if (voice.awaitingSeek) {
-      const StreamSlot* slot = streams_.at(voice.streamSlot);
-      if (slot != nullptr && base >= slot->ring.readFrame() && base < slot->ring.writeFrame()) {
-        voice.awaitingSeek = false;
-      }
-    }
-
-    bool have = true;
-    for (int channel = 0; channel < voice.channels; channel++) {
-      float first = 0.0f;
-      if (!sampleOf(voice, base, channel, first)) {
-        have = false;
-        break;
-      }
-      float second = first;
-      if (frac > 0.0) {
-        if (!sampleOf(voice, base + 1, channel, second)) {
-          bool atEnd = false;
-          if (voice.cachedData != nullptr) {
-            atEnd = base + 1 >= voice.cachedFrames;
-          } else if (voice.streamSlot >= 0) {
-            const StreamSlot* slot = streams_.at(voice.streamSlot);
-            atEnd = slot != nullptr && slot->eof.load(std::memory_order_acquire) &&
-                    base + 1 >= slot->ring.writeFrame();
-          }
-          if (atEnd) {
-            second = first;
-          } else {
-            have = false;
-            break;
-          }
-        }
-      }
-      sample[channel] = static_cast<float>(static_cast<double>(first) +
-                                           (static_cast<double>(second) - static_cast<double>(first)) * frac);
-    }
-
-    if (!have) {
-      if (voice.streamSlot >= 0 && !voice.awaitingSeek) {
+    int src = voice.readSrc;
+    if (!readSample(voice, voice.position, src, sample)) {
+      // A streamed frame that is not there is starvation, whatever the reason — a disk that
+      // could not keep up, or a jump the read-ahead did not reach in time — and is counted.
+      if (voice.streamSlot >= 0) {
         StreamSlot* slot = streams_.at(voice.streamSlot);
         if (slot != nullptr) slot->underruns.fetch_add(1, std::memory_order_relaxed);
         underruns_.fetch_add(1, std::memory_order_relaxed);
       }
       return;
     }
-
-    if (voice.streamSlot >= 0) {
-      StreamSlot* slot = streams_.at(voice.streamSlot);
-      // Release the frame just played, not the next one: below rate 1 the same source
-      // frame is played across several output frames, and releasing past it left the
-      // voice asking for a frame the window had already dropped — silence and an
-      // underrun per output frame, for good, on any cue playing a long file slower
-      // than real time (a rate below 1, or a rate fade on the way down).
-      if (slot != nullptr) slot->ring.release(base);
-    }
+    if (voice.streamSlot >= 0) afterStreamRead(voice, src, static_cast<int64_t>(std::floor(voice.position)), ratio);
+    if (voice.xfadeLeft > 0) blendOutgoing(voice, sample, ratio);
   }
 
   const double gain = paramValue(voice, static_cast<int>(Param::Volume), frame) *
@@ -1102,6 +1228,7 @@ void Mixer::mixVoiceFrame(Voice& voice, int64_t frame, int64_t blockStart, float
   }
   const double length = voice.segmentEndFrame - voice.segmentStartFrame;
   if (length > 0.0 && voice.position >= voice.segmentEndFrame) {
+    const double continuation = voice.position;
     const double overshoot = voice.position - voice.segmentStartFrame;
     const int64_t wraps = static_cast<int64_t>(std::floor(overshoot / length));
     if (voice.loopCount < 0) {
@@ -1116,9 +1243,9 @@ void Mixer::mixVoiceFrame(Voice& voice, int64_t frame, int64_t blockStart, float
         finishVoice(voice, frame + 1, EndReason::Complete);
       }
     }
-    // A streamed voice wraps back to frames the ring has long since passed, so the
-    // window has to follow it back or the rest of the run plays nothing.
-    if (voice.active) requestStreamSeek(voice, static_cast<int64_t>(voice.position));
+    // The wrap is a join: a streamed voice lands in the pad its loop is held in, with the
+    // ring parked where the loop ends (AD-29).
+    if (voice.active) beginJoin(voice, continuation);
   }
 }
 
@@ -1147,6 +1274,11 @@ void Mixer::render(float* out, int frames, int channels) {
   // Whether any voice has a patch, a live input or slices: read once a block, so a show using
   // none of them never reads those fields in the per-frame loop.
   const bool anySpecial = specialVoices_ > 0;
+
+  // The pads the read-ahead has finished with, given back once a block (AD-29).
+  for (Voice& voice : voices_) {
+    if (voice.active && voice.streamSlot >= 0) sweepPads(voice);
+  }
 
   for (int64_t frame = blockStart; frame < blockEnd; frame++) {
     float* outFrame = out + static_cast<size_t>(frame - blockStart) * static_cast<size_t>(channels);
@@ -1177,9 +1309,12 @@ void Mixer::render(float* out, int frames, int channels) {
         continue;
       }
       if (voice.streamSlot >= 0) {
+        // The end of a streamed file: the ring has read the last of it, the voice is past it,
+        // and no pad holds where the voice is (a pad can hold the frames a moving ring does not).
         const StreamSlot* slot = streams_.at(voice.streamSlot);
-        if (slot != nullptr && slot->eof.load(std::memory_order_acquire) &&
-            voice.position >= static_cast<double>(slot->ring.writeFrame())) {
+        if (slot != nullptr && slot->eof.load(std::memory_order_acquire) && !slot->ring.seekPending() &&
+            voice.position >= static_cast<double>(slot->ring.writeFrame()) &&
+            (voice.readSrc < 0 || !slot->pads[voice.readSrc].holds(static_cast<int64_t>(std::floor(voice.position))))) {
           finishVoice(voice, frame, EndReason::Complete);
           continue;
         }
@@ -1205,6 +1340,10 @@ void Mixer::render(float* out, int frames, int channels) {
  * skipped slices lie between — or ends, at the last slice or when the release said so.
  */
 void Mixer::advanceSlices(Voice& voice, int64_t frame) {
+  // Where the file would have gone on: what a jump below leaves, and crossfades from.
+  const double continuation = voice.position;
+  const int regionBefore = voice.sliceIndex;
+  bool jumped = false;
   // A slice shorter than one step could otherwise be passed over many times in one frame;
   // a voice moves at most a slice's worth of passes per frame, which is all a frame can hold.
   for (int guard = 0; guard < kMaxSlices * 4 && voice.active && voice.position >= voice.segmentEndFrame; guard++) {
@@ -1215,7 +1354,7 @@ void Mixer::advanceSlices(Voice& voice, int64_t frame) {
     if (again) {
       voice.loopsCompleted++;
       voice.position = slice.startFrame + over;
-      requestStreamSeek(voice, static_cast<int64_t>(voice.position));
+      jumped = true;
       continue;
     }
     const bool stop = voice.sliceRelease && voice.stopAtPassEnd;
@@ -1231,8 +1370,13 @@ void Mixer::advanceSlices(Voice& voice, int64_t frame) {
     voice.segmentStartFrame = next.startFrame;
     voice.segmentEndFrame = next.endFrame;
     voice.position = next.startFrame + over;
-    if (!contiguous) requestStreamSeek(voice, static_cast<int64_t>(voice.position));
+    if (!contiguous) jumped = true;
   }
+  if (!voice.active) return;
+  if (voice.streamSlot >= 0 && voice.sliceIndex != regionBefore) publishRegion(voice);
+  // A wrap or a skip lands in what the read-ahead held for it (AD-29); running on into a slice
+  // that starts where this one ended is no jump at all.
+  if (jumped) beginJoin(voice, continuation);
 }
 
 /**
@@ -1380,6 +1524,15 @@ void Mixer::snapshotVoice(const Voice& voice, VoiceSnapshot& out) const {
   out.startedAtMs = static_cast<double>(voice.startFrame) * 1000.0 / static_cast<double>(sampleRate_);
   out.loopsCompleted = voice.loopsCompleted;
   out.streamBytes = voice.streamBytes;
+  // The slice the voice is in, numbered as the cue numbers them (skipped ones counted), and
+  // the pass of it this is.
+  if (voice.sliceCount > 0) {
+    out.sliceIndex = slicesOf(voice)[voice.sliceIndex].sliceIndex;
+    out.slicePass = voice.slicePlays + 1;
+  } else {
+    out.sliceIndex = -1;
+    out.slicePass = 0;
+  }
   const double positionMs = voice.sampleRate > 0
                                 ? voice.position * 1000.0 / static_cast<double>(voice.sampleRate)
                                 : 0.0;

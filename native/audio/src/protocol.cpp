@@ -453,6 +453,33 @@ const WireEvent kWireEvents[] = {
 
 constexpr size_t kWireEventCount = sizeof(kWireEvents) / sizeof(kWireEvents[0]);
 
+/**
+ * The replies whose fields are declared, as native data: what `voiceToJson()` writes for a
+ * `progress` reply (and each of `info().activeCues`). The native copy of `AUDIO_WIRE.replies`
+ * in src/shared/audio.ts, printed for `--protocol` and held to it by audioWire.test.ts.
+ */
+const WireEventField kProgressReplyFields[] = {
+    {"cueId", WireFieldType::String, false},
+    {"runId", WireFieldType::String, false},
+    {"state", WireFieldType::String, false},
+    {"playing", WireFieldType::Boolean, false},
+    {"elapsedMs", WireFieldType::Number, false},
+    {"durationMs", WireFieldType::Number, false},
+    {"fraction", WireFieldType::Number, false},
+    {"runFraction", WireFieldType::Number, false},
+    {"startedAtMs", WireFieldType::Number, false},
+    {"loopsCompleted", WireFieldType::Number, false},
+    {"streamBytes", WireFieldType::Number, false},
+    // `{ index, pass }` for a sliced voice: the piece of the cue's `slices` it is in (skipped
+    // pieces counted) and its pass from 1. Null, a meaning of its own, without slices.
+    {"slice", WireFieldType::Object, true}};
+
+const WireEvent kWireReplies[] = {
+    wireEvent("progress", kProgressReplyFields),
+};
+
+constexpr size_t kWireReplyCount = sizeof(kWireReplies) / sizeof(kWireReplies[0]);
+
 const char* wireTypeName(WireFieldType type) {
   switch (type) {
     case WireFieldType::String:
@@ -883,6 +910,16 @@ cJSON* voiceToJson(const VoiceSnapshot& voice) {
   // The achieved streaming ring, so a caller sees what the per-voice bound bought
   // rather than assuming the configured pre-roll; 0 for a cache-backed voice.
   cJSON_AddNumberToObject(object, "streamBytes", static_cast<double>(voice.streamBytes));
+  // The slice the voice is in, numbered as the cue's `slices` are (skipped ones counted), and
+  // the pass of it, from 1; null for a voice without slices.
+  if (voice.sliceIndex < 0) {
+    cJSON_AddNullToObject(object, "slice");
+  } else {
+    cJSON* slice = cJSON_CreateObject();
+    cJSON_AddNumberToObject(slice, "index", voice.sliceIndex);
+    cJSON_AddNumberToObject(slice, "pass", voice.slicePass);
+    cJSON_AddItemToObject(object, "slice", slice);
+  }
   return object;
 }
 
@@ -1002,26 +1039,32 @@ std::string wireDeclarationJson() {
     }
     out += '}';
   }
-  out += "},\"events\":{";
-  for (size_t i = 0; i < kWireEventCount; i++) {
-    const WireEvent& event = kWireEvents[i];
-    if (i > 0) out += ',';
-    out += '"';
-    out += event.name;
-    out += "\":{";
-    for (size_t j = 0; j < event.count; j++) {
-      const WireEventField& field = event.fields[j];
-      if (j > 0) out += ',';
+  // Events and declared replies are written alike: each name, and its top-level fields.
+  auto shapes = [&out](const WireEvent* list, size_t count) {
+    for (size_t i = 0; i < count; i++) {
+      const WireEvent& event = list[i];
+      if (i > 0) out += ',';
       out += '"';
-      out += field.name;
-      out += "\":{\"type\":\"";
-      out += wireTypeName(field.type);
-      out += '"';
-      if (field.nullable) out += ",\"nullable\":true";
+      out += event.name;
+      out += "\":{";
+      for (size_t j = 0; j < event.count; j++) {
+        const WireEventField& field = event.fields[j];
+        if (j > 0) out += ',';
+        out += '"';
+        out += field.name;
+        out += "\":{\"type\":\"";
+        out += wireTypeName(field.type);
+        out += '"';
+        if (field.nullable) out += ",\"nullable\":true";
+        out += '}';
+      }
       out += '}';
     }
-    out += '}';
-  }
+  };
+  out += "},\"events\":{";
+  shapes(kWireEvents, kWireEventCount);
+  out += "},\"replies\":{";
+  shapes(kWireReplies, kWireReplyCount);
   out += "},\"limits\":";
   out += limitsJson();
   out += '}';

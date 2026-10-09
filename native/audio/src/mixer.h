@@ -6,6 +6,7 @@
 
 #include "cache.h"
 #include "live_input.h"
+#include "plan.h"
 #include "ring.h"
 #include "snapshot_cell.h"
 #include "stream.h"
@@ -34,13 +35,6 @@ struct FadeRamp {
   /** The drawn shape when `curve` is `Table`: kept beside the voices rather than in them
    *  (`Mixer::rampTables_`), so the voices the render loop walks every frame stay small. */
   const CurveTable* table = nullptr;
-};
-
-/** One slice of a voice's file, in source frames: a region and how often it plays. */
-struct VoiceSlice {
-  double startFrame = 0.0;
-  double endFrame = 0.0;
-  int playCount = 1;  // -1: until released (a skipped slice, 0, is never held)
 };
 
 /**
@@ -93,10 +87,20 @@ struct Voice {
   int loopCount = 0;
   int loopsCompleted = 0;
   bool lengthUnknown = false;      // streaming file whose length is not stated
-  // The stream ring is parked somewhere else while it repositions (a start at an
-  // offset, a seek, a loop wrap): samples it cannot serve yet are not starvation, so
-  // they must not be counted as underruns.
-  bool awaitingSeek = false;
+
+  // A join's crossfade (AD-29): the frames of it still to play and its length, and the
+  // material the voice is leaving — where it is in the file and where it is read from. The
+  // voice's own read carries on where it landed, faded in over the same frames.
+  int xfadeLeft = 0;
+  int xfadeTotal = 0;
+  double xfadePos = 0.0;
+  int xfadeSrc = -1;
+  // A streamed voice's read: one of its stream's pads (0..), or the ring (-1). Sticky — a
+  // frame is looked for first where the last one was found.
+  int readSrc = -1;
+  // Where the ring is to move once a join's crossfade is done — the end of the pad the voice
+  // landed in — or -1.
+  int64_t ringTarget = -1;
 
   int64_t startFrame = 0;  // device frame the voice becomes audible
   int64_t stopFrame = -1;  // device frame the voice goes silent (-1 = not stopping)
@@ -245,8 +249,25 @@ class Mixer {
   void reclaim(Voice& voice);
   void reclaimResourcesForCommand(const Command& cmd);
   void retryReclaims();
-  /** Points a streaming voice's ring at a frame, marking the reposition as expected. */
+  /** Sends a streaming voice's ring to a frame: what it plays until the ring is there is an underrun. */
   void requestStreamSeek(Voice& voice, int64_t frame);
+  /** One frame of the voice's file, from its cache, a pad or its ring; null when nothing holds it. */
+  const float* frameAt(const Voice& voice, int64_t frame, int& src) const;
+  /** The voice's sound at a file position, read between frames; false when a frame is missing. */
+  bool readSample(const Voice& voice, double position, int& src, float* out) const;
+  /** A jump in the voice's path has just been made (AD-29): where it lands is read from what
+   *  holds it, and where it does not meet the material it left, the two are crossfaded. */
+  void beginJoin(Voice& voice, double continuation);
+  /** The material a join left, under the material it landed on, for one frame. */
+  void blendOutgoing(Voice& voice, float* sample, double ratio);
+  /** A streamed voice's read after a frame: its source, its hand-over from a pad, its ring. */
+  void afterStreamRead(Voice& voice, int src, int64_t base, double ratio);
+  /** Moves the ring to where the pad the voice landed in ends, unless it is heading there. */
+  void postRingTarget(Voice& voice);
+  /** Gives back the pads the read-ahead no longer wants and the voice is not reading. */
+  void sweepPads(Voice& voice);
+  /** Tells the read-ahead which region of its plan the voice is in. */
+  void publishRegion(const Voice& voice);
 
   double paramValue(const Voice& voice, int param, int64_t frame) const;
   static double rampValue(const FadeRamp& ramp, int64_t frame);
@@ -265,7 +286,7 @@ class Mixer {
   float* busData(int slot) { return busScratch_.data() + static_cast<size_t>(slot) * kBusStride; }
   int voiceIndex(const Voice& voice) const { return static_cast<int>(&voice - voices_); }
   VoiceSlice* slicesOf(const Voice& voice) { return voiceSlices_[voiceIndex(voice)]; }
-  bool sampleOf(const Voice& voice, int64_t frame, int channel, float& out) const;
+  const VoiceSlice* slicesOf(const Voice& voice) const { return voiceSlices_[voiceIndex(voice)]; }
 
   void emit(const Event& event);
   void emitState(const Voice* voice, bool playing);
@@ -280,6 +301,8 @@ class Mixer {
   int deviceChannels_ = 2;
   int sampleRate_ = 48000;
   int64_t clockFrames_ = 0;
+  /** A join's crossfade, in frames at the device's rate (plan.h, `kJoinCrossfadeMs`). */
+  int joinFrames_ = joinCrossfadeFrames(48000);
   uint64_t nextRunId_ = 1;
   std::atomic<uint64_t> underruns_{0};
   std::atomic<uint64_t> voicesEnded_{0};
@@ -322,6 +345,10 @@ class Mixer {
   // touches as little memory as it did before slices and shapes existed.
   VoiceSlice voiceSlices_[kMaxVoices][kMaxSlices] = {};
   int inputMaps_[kMaxVoices][kMaxOutputChannels] = {};
+  /** A join's crossfade past the end of the file has nothing to fade from but the last sample
+   *  played, held: kept here, by voice, and read only during such a crossfade. */
+  static constexpr int kHeldSource = -3;
+  float xfadeHold_[kMaxVoices][kMaxOutputChannels] = {};
   CurveTable rampTables_[kMaxVoices][kMaxRampParams + 1] = {};
 };
 

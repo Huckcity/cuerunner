@@ -17,10 +17,33 @@ writeFloatWav(rampPath, 2, RATE, RATE * 4, (_, frame) => frame / 480000)
 
 /** The source frame each output frame played, read back from the ramp. */
 const sourceAt = (wav, frame) => Math.round(wav.samples[frame * wav.channels] * 480000)
-/** Whether every output frame in [from, to) played `source(t)`. */
+/** The ramp's sample for a source frame, as the file holds it. */
+const rampAt = (frame) => Math.fround(frame / 480000)
+/** A join's crossfade (spine AD-29, `kJoinCrossfadeMs` in plan.h): 3 ms. */
+const XFADE = Math.round((3 * RATE) / 1000)
+/**
+ * Whether every output frame in [from, to) played `source(t)`. Where the file jumps — a wrap, a
+ * skip, a seek — the landing still starts on its own frame, and the ramp's step there is made
+ * over an equal-power crossfade: for its first `XFADE` frames the output is the landing under
+ * the frames the file would have gone on with, from the one after the frame played before it.
+ * Those frames are checked against exactly that.
+ */
 function plays(wav, from, to, source) {
+  let fade = null
   for (let t = from; t < to; t++) {
-    if (sourceAt(wav, t) !== source(t)) return `frame ${t} played ${sourceAt(wav, t)}, not ${source(t)}`
+    const want = source(t)
+    if (fade === null && t > 0 && want !== sourceAt(wav, t - 1) + 1) fade = { at: t, from: sourceAt(wav, t - 1) + 1 }
+    if (fade !== null && t - fade.at >= XFADE) fade = null
+    if (fade === null) {
+      if (sourceAt(wav, t) !== want) return `frame ${t} played ${sourceAt(wav, t)}, not ${want}`
+      continue
+    }
+    const k = t - fade.at
+    const theta = ((k + 0.5) / XFADE) * (Math.PI / 2)
+    const blended = rampAt(want) * Math.sin(theta) + rampAt(fade.from + k) * Math.cos(theta)
+    if (Math.abs(wav.samples[t * wav.channels] - blended) > 1e-6) {
+      return `frame ${t}, ${k} into the crossfade onto ${want}, played ${wav.samples[t * wav.channels]}, not ${blended}`
+    }
   }
   return ''
 }
@@ -105,9 +128,10 @@ const HALF = RATE / 2 // one slice: 500 ms
       { atMs: 200, verb: 'seek', cueId: 'a', positionMs: 1200 }
     ]
   })
-  // A seek lands at the top of the block it arrives in: find where the file jumped to 1.2 s.
+  // A seek lands at the top of the block it arrives in: find where the file stopped running on
+  // from the top of slice 1 (it lands on 1.2 s there, under its crossfade).
   let seekFrame = -1
-  for (let t = 0; t < 0.3 * RATE; t++) if (sourceAt(wav, t) === 1.2 * RATE) { seekFrame = t; break }
+  for (let t = 0; t < 0.3 * RATE; t++) if (sourceAt(wav, t) !== t) { seekFrame = t; break }
   check('the seek lands within a block of when it was sent', seekFrame > 0.2 * RATE - 512 && seekFrame <= 0.2 * RATE,
     `at frame ${seekFrame}`)
   const detail = plays(wav, seekFrame, seekFrame + 0.3 * RATE, t => 1.2 * RATE + (t - seekFrame))

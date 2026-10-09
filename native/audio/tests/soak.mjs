@@ -722,9 +722,13 @@ try {
       const info = await client.request('info')
       metrics.finalResidentBytes = info.media.residentBytes
       metrics.finalStreamBufferBytes = info.media.streamBufferBytes
-      if (!info.active) break
+      // Settled is nothing playing and nothing held. A voice that ends hands its stream back
+      // to the service thread, which frees it — and sends the voice's `ended` — on its next
+      // pass, so the mix can read idle a pass before its streams are freed. A stream still
+      // held at the deadline is a leak, and is reported below.
+      if (!info.active && info.media.streamBufferBytes === 0) break
       if (Date.now() > deadline) {
-        fail('the engine was still playing after stop-All', `${info.activeVoices} voices`)
+        if (info.active) fail('the engine was still playing after stop-All', `${info.activeVoices} voices`)
         break
       }
     }

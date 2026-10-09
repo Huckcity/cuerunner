@@ -32,6 +32,13 @@ const MINUTES = minutesIndex >= 0 ? Number(process.argv[minutesIndex + 1]) : 5
 const RATE = 48000
 const RAMP_PERIOD = 65536
 /**
+ * The ramp's wrap is a step, and a looping cue makes a step over a 3 ms crossfade (spine
+ * AD-29): for that long after each wrap the output is the two ends of the ramp blended, which
+ * says nothing about where on the timeline a device is. Those frames are left out of the
+ * timeline readings, with a few frames' margin for the interpolator either side.
+ */
+const WRAP_FRAMES = Math.round((3 * RATE) / 1000) + 4
+/**
  * The stated tolerance: once the lock has settled, the offset between the two devices stays
  * within a tenth of a millisecond either side of where the lock holds it. A tenth of a
  * millisecond is 3.4 cm of sound — closer than two loudspeakers can stand — and a 300 ppm
@@ -227,7 +234,7 @@ function readOffsets(samples, { start, startedAtMs, trueRate, settleSeconds }) {
     } else {
       const predicted = previous + (n - previousFrame) * step
       const residue = ((predicted % RAMP_PERIOD) + RAMP_PERIOD) % RAMP_PERIOD
-      if (residue < 4 || residue > RAMP_PERIOD - 4) continue
+      if (residue < WRAP_FRAMES || residue > RAMP_PERIOD - 4) continue
       position = predicted + ((((code - predicted) % RAMP_PERIOD) + RAMP_PERIOD * 1.5) % RAMP_PERIOD) - RAMP_PERIOD / 2
       if (Math.abs(position - predicted) > 0.5) jumps++
     }
@@ -259,6 +266,7 @@ function readOffsets(samples, { start, startedAtMs, trueRate, settleSeconds }) {
 function mainIsExact(wav, start) {
   let wrong = 0
   for (let m = start; m < wav.frames; m += 997) {
+    if ((m - start) % RAMP_PERIOD < WRAP_FRAMES && m - start >= RAMP_PERIOD) continue
     const expected = Math.fround(((m - start) % RAMP_PERIOD) / RAMP_PERIOD - 0.5)
     if (wav.samples[m] !== expected) wrong++
   }
