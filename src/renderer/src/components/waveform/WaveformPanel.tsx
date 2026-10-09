@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useStore, useSelectedCue } from '../../store'
 import { audioEngine } from '../../engine/audioEngineClient'
 import { cueEngine } from '../../engine/CueEngine'
@@ -9,7 +9,23 @@ import {
 } from '../../utils/waveform'
 import { regionEndMs } from '../../utils/cueSplit'
 import { playRegion } from '../../utils/silenceTrim'
-import type { AudioCue } from '../../../../shared/cue'
+import type { AudioCue, DevampCue } from '../../../../shared/cue'
+import { AUDIO_MAX_SLICES } from '../../../../shared/audio'
+import { addMarker, slicesInUse, type CueSlices } from '../../../../shared/slices'
+import {
+  canAddMarkerAt,
+  isJump,
+  mergeOnDelete,
+  pieceFromEngine,
+  placeFromPosition,
+  placeMarker,
+  removalSentence,
+  roundMarkerMs,
+  zeroCrossingNear,
+  ZERO_CROSSING_REACH_MS,
+  type SlicePlace
+} from '../../utils/sliceMarkers'
+import { SliceLayer, SLICE_LANE_PX, slicesOf, type SliceJump, type SliceLive } from './SliceLayer'
 import './WaveformPanel.css'
 
 /**
@@ -69,6 +85,13 @@ const ONSET_CAP = 2000
 /** One question per resting place: a pan drags the window across the file frame by frame. */
 const WINDOW_DEBOUNCE_MS = 120
 
+/** How long a jump of the playhead stays drawn, and a slice edit's sentence stays in the header, ms. */
+const JUMP_SHOWN_MS = 900
+const STATUS_SHOWN_MS = 5000
+
+/** The last reveal of the waveform a panel has acted on, so a panel mounted by one acts on it once. */
+let revealHandled = 0
+
 export function WaveformPanel() {
   const selectedCue = useSelectedCue()
   const updateCue = useStore(s => s.updateCue)
@@ -78,6 +101,12 @@ export function WaveformPanel() {
   const running = useStore(s => s.running)
   const cursor = useStore(s => s.waveformCursor)
   const setWaveformCursor = useStore(s => s.setWaveformCursor)
+  const setCueSlices = useStore(s => s.setCueSlices)
+  const endSliceDrag = useStore(s => s.endSliceDrag)
+  const selectSliceMarker = useStore(s => s.selectSliceMarker)
+  const selectedSliceMarker = useStore(s => s.selectedSliceMarker)
+  const waveformReveal = useStore(s => s.waveformReveal)
+  const cues = useStore(s => s.cues)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -107,8 +136,32 @@ export function WaveformPanel() {
   const [playFraction, setPlayFraction] = useState(0)
   const [hoverFraction, setHoverFraction] = useState<number | null>(null)
   const [dragging, setDragging] = useState<DragMode | null>(null)
+  // The waveform's width in CSS px, which is what the slice markers are placed against.
+  const [stageWidth, setStageWidth] = useState(0)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const stageRef = useRef<HTMLDivElement>(null)
+  /** The file's sample rate, from the envelope: what a zero crossing is read at. */
+  const sampleRateRef = useRef(0)
+  // Where the music is in the slices while the cue plays, and the jumps it has just made.
+  const [live, setLive] = useState<SliceLive | null>(null)
+  const liveRef = useRef<{ place: SlicePlace; positionMs: number; at: number } | null>(null)
+  const [jumps, setJumps] = useState<SliceJump[]>([])
+  const [jumpCount, setJumpCount] = useState(0)
+  const jumpIdRef = useRef(0)
+  // What the last slice edit did, said in the header for a moment and to a screen reader.
+  const [status, setStatus] = useState('')
+  const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** The slices a removal's sentence is about; undefined when the sentence is about nothing in particular. */
+  const statusSlicesRef = useRef<CueSlices | null | undefined>(undefined)
+  // The waveform's context menu, at a client point and the file time under it.
+  const [menu, setMenu] = useState<{ x: number; y: number; ms: number } | null>(null)
+  /** A marker grip a reveal asked to have focused, waiting for the grip to be drawn. */
+  const pendingGripRef = useRef<number | null>(null)
 
   const audioCue = selectedCue?.type === 'audio' ? selectedCue as AudioCue : null
+  /** The cue as it stands, for the loops and handlers that outlive the render that made them. */
+  const cueRef = useRef(audioCue)
+  cueRef.current = audioCue
   /**
    * Whether the trim applies to this cue here: the cue asks for it and this machine is
    * licensed to apply it. The same two questions `CueEngine` asks before a firing, so
@@ -171,6 +224,7 @@ export function WaveformPanel() {
   useEffect(() => {
     setZoom(ZOOM_LEVELS[0])
     setViewStartMs(0)
+    setMenu(null)
   }, [audioCue?.id])
 
   /** The file fraction under a client x, read through the window on screen. */
@@ -325,6 +379,7 @@ export function WaveformPanel() {
           }
           peaksRef.current = envelope
           durationRef.current = fileMs / 1000
+          sampleRateRef.current = data.sampleRate
           setPeaks(envelope)
           if (fileMs > 0) syncCueDuration(audioCue.id, Math.round(fileMs))
         })
@@ -345,6 +400,43 @@ export function WaveformPanel() {
     }
   }, [audioCue?.filePath, audioCue?.id, zoom, viewStartMs, syncCueDuration])
 
+  /**
+   * Where the music is in the slices, from a progress reading: the engine's own report of the
+   * slice and its pass when it gives one, and otherwise the piece the position is in, with a
+   * pass counted at each move back inside it. A move back, or forward further than the time
+   * since the last reading could carry it, is a jump, and is drawn.
+   */
+  const followSlices = (positionMs: number, reported: { index: number; pass: number } | null | undefined): void => {
+    const cue = cueRef.current
+    if (!cue || !slicesInUse(cue.slices)) {
+      if (liveRef.current !== null) { liveRef.current = null; setLive(null) }
+      return
+    }
+    const previous = liveRef.current
+    if (previous !== null && previous.positionMs === positionMs) return
+    const slices = cue.slices
+    // The engine's pieces are cut from the region it was sent — the trim folded in — so its
+    // index is read against the same one.
+    const sent = playRegion(cue, cue.trimSilence === true)
+    const fromEngine = reported
+      ? pieceFromEngine(slices, sent.startMs, sent.endMs ?? (totalMs() || cue.duration), reported.index)
+      : null
+    const place: SlicePlace = reported && fromEngine !== null
+      ? { piece: fromEngine, pass: Math.max(1, reported.pass) }
+      : placeFromPosition(slices, positionMs, previous)
+    const now = performance.now()
+    if (previous !== null && isJump(previous.positionMs, positionMs, now - previous.at, cue.playbackRate)) {
+      const id = ++jumpIdRef.current
+      setJumps(current => [...current.slice(-3), { id, fromMs: previous.positionMs, toMs: positionMs }])
+      setJumpCount(count => count + 1)
+      setTimeout(() => setJumps(current => current.filter(jump => jump.id !== id)), JUMP_SHOWN_MS)
+    }
+    liveRef.current = { place, positionMs, at: now }
+    setLive(current => current !== null && current.place.piece === place.piece && current.place.pass === place.pass
+      ? current
+      : { place, positionMs })
+  }
+
   // rAF loop for playhead while playing: the client keeps the engine's last reported
   // position, so a frame costs nothing across IPC.
   useEffect(() => {
@@ -353,12 +445,16 @@ export function WaveformPanel() {
         const length = totalMs()
         setPlayFraction(audioCue && length > 0 ? audioCue.startTime / length : 0)
       }
+      liveRef.current = null
+      setLive(null)
+      setJumps([])
       return
     }
     const tick = () => {
       const prog = audioEngine.getProgress(audioCue.id)
       if (prog) {
         setPlayFraction(prog.fraction)
+        followSlices(prog.elapsedMs, prog.slice)
         // A zoomed window the music has walked out of is a window on nothing: the panel
         // follows the playhead back into view, because the sound is what the operator is
         // listening to.
@@ -407,6 +503,7 @@ export function WaveformPanel() {
       canvas.height = Math.floor(height * DPR)
       canvas.style.width = `${width}px`
       canvas.style.height = `${height}px`
+      setStageWidth(width)
       draw()
     })
     ro.observe(el)
@@ -525,6 +622,200 @@ export function WaveformPanel() {
     setDragging(null)
   }
 
+  // ── Slices ───────────────────────────────────────────────────────────────
+
+  /** Says what a slice edit did, in the header and to a screen reader, for a moment. */
+  const announce = (text: string): void => {
+    setStatus(text)
+    if (statusTimer.current !== null) clearTimeout(statusTimer.current)
+    statusTimer.current = setTimeout(() => setStatus(''), STATUS_SHOWN_MS)
+  }
+  useEffect(() => () => { if (statusTimer.current !== null) clearTimeout(statusTimer.current) }, [])
+  // A sentence about a removal stands only while the slices are the ones the removal left.
+  useEffect(() => {
+    if (statusSlicesRef.current !== undefined && audioCue?.slices !== statusSlicesRef.current) {
+      statusSlicesRef.current = undefined
+      setStatus('')
+    }
+  }, [audioCue?.slices, audioCue?.id])
+
+  /** The cue as the store holds it now. */
+  const currentCue = (): AudioCue | null => {
+    const id = cueRef.current?.id
+    const found = useStore.getState().cues.find(c => c.id === id)
+    return found?.type === 'audio' ? found as AudioCue : null
+  }
+
+  /**
+   * The zero crossing nearest a marker, read from the file a few milliseconds either side of
+   * it at one bucket a sample — or the marker where it is, when the file cannot say. A cut
+   * between two samples of opposite sign is a click; a move of a few milliseconds is not one
+   * anybody hears.
+   */
+  const refine = async (ms: number): Promise<number> => {
+    const cue = cueRef.current
+    const rate = sampleRateRef.current
+    const fileMs = totalMs()
+    if (!cue?.filePath || rate <= 0) return ms
+    // Frame-aligned, so a bucket is exactly one sample: a bucket with none in it reads as zero.
+    const first = Math.max(0, Math.round(((ms - ZERO_CROSSING_REACH_MS) * rate) / 1000))
+    const last = Math.round((Math.min(fileMs, ms + ZERO_CROSSING_REACH_MS) * rate) / 1000)
+    const buckets = last - first
+    if (buckets < 2 || buckets > 4096) return ms
+    try {
+      const data = await audioEngine.waveform(cue.filePath, buckets, {
+        startMs: ((first + 0.25) * 1000) / rate,
+        endMs: ((last + 0.25) * 1000) / rate
+      })
+      if (data.sampled || data.buckets !== buckets) return ms
+      const at = zeroCrossingNear(data.values, data.buckets, data.startMs, data.endMs, ms)
+      return at === null || Math.abs(at - ms) > ZERO_CROSSING_REACH_MS ? ms : roundMarkerMs(at)
+    } catch {
+      return ms
+    }
+  }
+
+  const focusGrip = (index: number): void => {
+    requestAnimationFrame(() => {
+      panelRef.current?.querySelector<HTMLElement>(`.slice-marker-grip[data-marker="${index}"]`)?.focus({ preventScroll: true })
+    })
+  }
+
+  /**
+   * Adds a marker at a file time, as one edit, and moves it onto the zero crossing beside it
+   * as part of the same edit. The piece it lands in is cut in two and both halves keep its count.
+   */
+  const addSliceMarker = (ms: number): void => {
+    const cue = currentCue()
+    if (!cue) return
+    const fileMs = totalMs()
+    const at = roundMarkerMs(ms)
+    if (!canAddMarkerAt(cue.slices, at, fileMs, AUDIO_MAX_SLICES - 1)) {
+      announce((cue.slices?.markers.length ?? 0) >= AUDIO_MAX_SLICES - 1
+        ? `A cue holds at most ${AUDIO_MAX_SLICES - 1} markers`
+        : 'No marker there: too close to another, or to the end of the file')
+      return
+    }
+    const next = addMarker(cue.slices, at)
+    const gesture = `add:${at}`
+    setCueSlices(cue.id, next, gesture)
+    const index = next.markers.indexOf(at)
+    selectSliceMarker({ cueId: cue.id, index })
+    focusGrip(index)
+    void refine(at).then(moved => {
+      const now = currentCue()
+      if (!now?.slices || moved === at || now.slices.markers[index] !== at) return
+      setCueSlices(now.id, placeMarker(now.slices, index, moved, fileMs), gesture)
+    }).finally(() => endSliceDrag())
+  }
+
+  /** Takes marker `index` out: the pieces either side join, and the header says which count they kept. */
+  const removeSliceMarker = (index: number): void => {
+    const cue = currentCue()
+    if (!cue) return
+    const removal = mergeOnDelete(slicesOf(cue), index)
+    if (removal === null) return
+    setCueSlices(cue.id, removal.slices)
+    announce(removalSentence(removal))
+    // The sentence is about these slices: an undo, or the next edit, makes it yesterday's news.
+    statusSlicesRef.current = currentCue()?.slices ?? null
+    const left = removal.slices.markers.length
+    const nextFocus = Math.max(0, Math.min(index, left) - 1)
+    selectSliceMarker(left === 0 ? null : { cueId: cue.id, index: nextFocus })
+    if (left > 0) focusGrip(nextFocus)
+    else stageRef.current?.focus({ preventScroll: true })
+  }
+
+  /** Where M puts a marker: on the music while it plays, on the cursor while it does not. */
+  const markerPlace = (): number | null => {
+    const cue = cueRef.current
+    if (!cue) return null
+    if (isPlaying) {
+      const prog = audioEngine.getProgress(cue.id)
+      if (prog) return prog.elapsedMs
+    }
+    return cursorMs
+  }
+
+  const handlePanelKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    const el = e.target as HTMLElement
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return
+    if (e.ctrlKey || e.metaKey || e.altKey) return
+    if (e.key === 'm' || e.key === 'M') {
+      // The panel's own key: kept from the window, where a cue's hotkey could be M.
+      e.preventDefault()
+      e.stopPropagation()
+      const at = markerPlace()
+      if (at === null) announce('Click the waveform to place the cursor, then M adds a marker there')
+      else addSliceMarker(at)
+      return
+    }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && el === stageRef.current) {
+      const marker = useStore.getState().selectedSliceMarker
+      if (marker !== null && marker.cueId === cueRef.current?.id) {
+        e.preventDefault()
+        e.stopPropagation()
+        removeSliceMarker(marker.index)
+      }
+    }
+  }
+
+  const handleDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>): void => {
+    if (!audioCue || totalMs() <= 0) return
+    // The first press of the pair put the cursor on the note; the marker goes where it is.
+    const at = cursorMs ?? snap(e.clientX) * totalMs()
+    addSliceMarker(at)
+  }
+
+  const handleContextMenu = (e: React.MouseEvent<HTMLElement>): void => {
+    if (!audioCue || totalMs() <= 0) return
+    e.preventDefault()
+    const ms = snap(e.clientX) * totalMs()
+    setMenu({ x: e.clientX, y: e.clientY, ms })
+  }
+
+  // The slices are redrawn when they or the window change, not on every frame of the playhead:
+  // a cue cut at a hundred markers is a few hundred elements. So what the layer is handed is
+  // stable — the window by its numbers, and the handlers through refs that always hold the
+  // latest of them.
+  const sliceView = useMemo(() => ({ startMs: viewFromMs, spanMs, width: stageWidth }), [viewFromMs, spanMs, stageWidth])
+  const handlersRef = useRef({ refine, add: addSliceMarker, remove: removeSliceMarker })
+  handlersRef.current = { refine, add: addSliceMarker, remove: removeSliceMarker }
+  const stableRefine = useCallback((ms: number) => handlersRef.current.refine(ms), [])
+  const stableAdd = useCallback((ms: number) => handlersRef.current.add(ms), [])
+  const stableRemove = useCallback((index: number) => handlersRef.current.remove(index), [])
+  const closeMenu = useCallback(() => setMenu(null), [])
+
+  // A reveal from elsewhere — the inspector's "Show on waveform", or a marker picked in its
+  // list — brings the panel's keyboard to the slices, and the picked marker into view.
+  useEffect(() => {
+    if (waveformReveal <= revealHandled || !audioCue) return
+    revealHandled = waveformReveal
+    const marker = useStore.getState().selectedSliceMarker
+    const markers = audioCue.slices?.markers ?? []
+    if (marker !== null && marker.cueId === audioCue.id && marker.index < markers.length) {
+      const at = markers[marker.index]
+      if (at < viewFromMs || at > viewFromMs + spanMs) {
+        setViewStartMs(Math.max(0, Math.min(at - spanMs / 2, total - spanMs)))
+      }
+      pendingGripRef.current = marker.index
+    } else {
+      pendingGripRef.current = null
+      requestAnimationFrame(() => stageRef.current?.focus({ preventScroll: true }))
+    }
+  }, [waveformReveal, audioCue?.id])
+
+  // The grip a reveal asked for, focused once it is drawn: a panel the reveal has just opened
+  // has no width to place a marker at until its first measure.
+  useEffect(() => {
+    const index = pendingGripRef.current
+    if (index === null) return
+    const grip = panelRef.current?.querySelector<HTMLElement>(`.slice-marker-grip[data-marker="${index}"]`)
+    if (!grip) return
+    pendingGripRef.current = null
+    grip.focus({ preventScroll: true })
+  })
+
   if (!audioCue) return null
 
   const totalDuration = durationRef.current || audioCue.duration / 1000
@@ -542,8 +833,17 @@ export function WaveformPanel() {
   const cursorOverRegion = cursorTime !== null &&
     cursorTime > audioCue.startTime && cursorTime < regionEndMs(audioCue)
 
+  const sliced = slicesInUse(audioCue.slices)
+  const slices: CueSlices = slicesOf(audioCue)
+  // A vamp the music is holding in, and the devamp that will let it go: the first in the list
+  // of those aimed at this cue.
+  const holding = live !== null && (slices.playCounts[live.place.piece] ?? 1) < 0
+  const devamp = cues.find((c): c is DevampCue => c.type === 'devamp' && (c as DevampCue).targetCueId === audioCue.id)
+  const devampName = devamp ? [devamp.number, devamp.name].filter(part => part !== '').join(' ') : null
+  const markerSelected = selectedSliceMarker !== null && selectedSliceMarker.cueId === audioCue.id
+
   return (
-    <div className="waveform-panel">
+    <div className="waveform-panel" ref={panelRef} onKeyDown={handlePanelKeyDown}>
       <div className="waveform-header">
         <span className="waveform-filename">
           {audioCue.filePath ? audioCue.filePath.split(/[\\/]/).pop() : 'No file selected'}
@@ -580,6 +880,20 @@ export function WaveformPanel() {
             split {formatTime(cursorTime)}
           </span>
         )}
+        {holding && live !== null && (
+          <span
+            className="waveform-vamp-tag"
+            data-pass={live.place.pass}
+            title={devampName === null
+              ? 'This vamp holds until a devamp aimed at this cue fires; none is in the list'
+              : `Firing ${devampName} lets this pass finish and moves the music on`}
+          >
+            vamp · pass {live.place.pass} · {devampName === null ? 'no devamp aimed here' : `${devampName} releases it`}
+          </span>
+        )}
+        <span className="waveform-slice-status" role="status" aria-live="polite" data-empty={status === ''}>
+          {status}
+        </span>
         <div className="waveform-zoom">
           <button
             className="waveform-zoom-btn"
@@ -599,6 +913,18 @@ export function WaveformPanel() {
         </div>
       </div>
       <div className="waveform-canvas-frame">
+        <div
+          ref={stageRef}
+          className="waveform-stage"
+          tabIndex={0}
+          data-lane={sliced}
+          data-markers={slices.markers.length}
+          data-jumps={jumpCount}
+          style={{ ['--slice-lane' as string]: `${SLICE_LANE_PX}px` }}
+          aria-label={`Waveform of ${audioCue.name || 'this cue'}: M adds a slice marker at the cursor${markerSelected ? ', Delete removes the selected one' : ''}`}
+          aria-keyshortcuts="M"
+          onContextMenu={handleContextMenu}
+        >
         <div ref={containerRef} className="waveform-canvas-container">
           {/* The overlay is for a panel with nothing to draw. A window being re-measured
               has the previous envelope on screen, and a finger over the waveform while
@@ -621,8 +947,26 @@ export function WaveformPanel() {
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
             onMouseLeave={() => { if (!dragRef.current) setHoverFraction(null) }}
-            title="Click to place the cursor — drag a handle to move the boundary"
+            onDoubleClick={handleDoubleClick}
+            title="Click to place the cursor — drag a handle to move the boundary — double-click or M adds a slice marker"
           />
+        </div>
+        {total > 0 && stageWidth > 0 && (
+          <SliceLayer
+            cue={audioCue}
+            fileMs={total}
+            view={sliceView}
+            lane={sliced}
+            onsets={onsets}
+            live={live}
+            jumps={jumps}
+            refine={stableRefine}
+            menu={menu}
+            closeMenu={closeMenu}
+            add={stableAdd}
+            remove={stableRemove}
+          />
+        )}
         </div>
       </div>
     </div>

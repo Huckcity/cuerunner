@@ -39,7 +39,7 @@ export function DevampInspector({ cue }: Props) {
       </div>
       <p className="inspector-hint">
         Lets a looping cue go: it finishes the lap it is on, then plays on — into its next
-        slice, or to the end of the file. Make a vamp on the cue's Time &amp; Loops or Slices tab.
+        slice, or to the end of the file. Make a vamp on the cue's Time &amp; Loops tab, or on its waveform.
       </p>
       <LastRun cueId={cue.id} />
     </div>

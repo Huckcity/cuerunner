@@ -186,6 +186,17 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
     }
   }, [tab])
 
+  // The waveform asked for by name — the inspector's "Show on waveform" — is the Cue tab,
+  // unfolded, whichever panel the dock was showing.
+  const waveformReveal = useStore(s => s.waveformReveal)
+  const lastWaveformReveal = useRef(waveformReveal)
+  useEffect(() => {
+    if (waveformReveal === lastWaveformReveal.current) return
+    lastWaveformReveal.current = waveformReveal
+    setChosenFold(false)
+    onTab('cue')
+  }, [waveformReveal, onTab])
+
 
 
   const startResize = (e: ReactPointerEvent<HTMLDivElement>): void => {

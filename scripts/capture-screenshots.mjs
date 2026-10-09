@@ -261,6 +261,36 @@ await page.locator('.trigger-section[data-kind="osc"] .trigger-add').click()
 await page.locator('.trigger-row[data-kind="osc"]').waitFor()
 await shot('14-triggers.png', '.inspector')
 
+// Slices on the waveform: the demo's Scene Change cut where an operator cuts it — on its
+// waveform, a marker at a time — with a slice played twice, a vamp and a skipped bar, and a
+// devamp aimed at it. Then it is fired, and the figure is taken while the vamp holds, so it
+// shows the lit slice counting its passes and the header naming the devamp that lets it go.
+await selectCue('Scene Change')
+await page.evaluate(() => (document.querySelector('.dock').style.height = '220px'))
+await page.locator('.waveform-canvas[style*="opacity: 1"]').waitFor()
+const stage = page.locator('.waveform-stage')
+for (const fraction of [0.15, 0.35, 0.55, 0.75]) {
+  const box = await stage.boundingBox()
+  await page.mouse.click(box.x + box.width * fraction, box.y + box.height * 0.65)
+  await page.keyboard.press('m')
+}
+await page.locator('.slice-marker-grip[data-marker="3"]').waitFor()
+for (const [piece, count] of [[1, 2], [2, -1], [3, 0]]) {
+  await page.locator('.slice-region').nth(piece).click()
+  await page.locator(`.slice-count-chooser [data-count="${count}"]`).click()
+}
+await page.locator('.toolbar-more-btn').click()
+await page.locator('.toolbar-more-menu-item', { hasText: /^\s*Devamp\s*$/ }).click()
+await openTab('Devamp')
+const release = page.locator('.field-row', { hasText: 'Release' }).locator('select')
+await release.selectOption(await release.locator('option', { hasText: 'Scene Change' }).first().getAttribute('value'))
+await selectCue('Scene Change')
+await go()
+await selectCue('Scene Change')
+await page.locator('.waveform-vamp-tag[data-pass="2"]').waitFor({ timeout: 10_000 })
+await shot('20-slices.png', '.waveform-panel')
+await page.getByRole('button', { name: /STOP/ }).click()
+
 // The script panel, with a cue pinned to the line it fires on. The picker is the OS's,
 // so it is answered directly and everything after it — reading the file, rendering the
 // lines, pinning the cue — happens for real.

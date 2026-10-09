@@ -76,60 +76,62 @@
   font-size: var(--text-sm);
 }
 
-/* Slices: the region drawn as a bar cut at its markers, each piece with its count. */
-.slice-bar {
-  display: flex;
-  height: 26px;
-  margin: var(--space-2) 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--bg-well);
-}
-
-.slice-piece {
+/* Slices, as the inspector reads them: a line, the way to the waveform, and the markers. They
+   are edited on the waveform; a marker picked here is the one put under the hand there. */
+.slices-summary-head {
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  border-right: 1px solid var(--border-input);
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.slices-summary {
+  flex: 1;
+  min-width: 0;
   color: var(--fg-body);
   font-size: var(--text-sm);
 }
 
-.slice-piece:last-child {
-  border-right: none;
-}
+.slices-summary[data-used='false'] { color: var(--fg-muted); }
 
-.slice-piece[data-vamp='true'] {
-  background: var(--accent-amber-bg);
-  color: var(--accent-amber);
-}
+.slices-show { flex-shrink: 0; }
 
-/* A slice that plays no times: still on the bar where its music is, struck through. */
-.slice-piece[data-skip='true'] {
-  background: repeating-linear-gradient(135deg, transparent 0 4px, var(--border) 4px 5px);
-  color: var(--fg-muted);
-  text-decoration: line-through;
-}
-
-.slice-list {
+.slice-marker-list {
+  list-style: none;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 1px;
+  margin-bottom: var(--space-2);
+  max-height: 260px;
+  overflow-y: auto;
 }
 
-.slice-row {
-  display: flex;
+.slice-marker-row {
+  display: grid;
+  grid-template-columns: 28px 72px 1fr;
   align-items: center;
-  gap: var(--space-2);
+  width: 100%;
+  height: 24px;
+  padding: 0 var(--space-2);
+  background: var(--bg-card);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--fg-body);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  cursor: pointer;
+  transition: var(--transition-fast);
 }
 
-.slice-row .slice-range {
-  flex: 1;
-  color: var(--fg-muted);
-  font-size: var(--text-sm);
-}
+.slice-marker-row:hover { background: var(--bg-input); color: var(--fg-primary); }
+.slice-marker-row:focus-visible { outline: none; border-color: var(--border-focus); }
+.slice-marker-row[data-selected='true'] { border-color: var(--accent-blue); }
+.slice-marker-row-num { color: var(--fg-muted); }
+.slice-marker-row-count[data-count='-1'] { color: var(--accent-amber); }
+.slice-marker-row-count[data-count='0'] { color: var(--fg-muted); text-decoration: line-through; }
+.slice-marker-row[data-outside='true'] .slice-marker-row-count { color: var(--fg-muted); text-decoration: none; }
 
 /* The mixer: a strip per patch, per output and the master, side by side. */
 .mixer-overlay {

@@ -706,3 +706,56 @@ export async function listenOsc(
     close: () => new Promise<void>(resolve => socket.close(() => resolve()))
   }
 }
+
+/**
+ * Every piece of text in the window drawn below 4.5:1 on the surface actually behind it — the
+ * first opaque background above it — as "class "text" at n:1". Empty is a window that reads.
+ * `scripts/theme.test.ts` holds the tokens to the bar; this holds the elements that use them.
+ */
+export async function unreadableText(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const luminance = (rgb: number[]): number => {
+      const [r, g, b] = rgb.map(v => {
+        const channel = v / 255
+        return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+      })
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
+    const parse = (colour: string): number[] | null => {
+      const parts = colour.match(/[\d.]+/g)
+      if (parts === null) return null
+      // Anything see-through is not this element's ground: keep looking upwards.
+      if (parts.length > 3 && Number(parts[3]) < 1) return null
+      return parts.slice(0, 3).map(Number)
+    }
+    /** The colour actually behind an element, which is the first opaque one above it. */
+    const ground = (node: Element): number[] => {
+      for (let at: Element | null = node; at !== null; at = at.parentElement) {
+        const found = parse(getComputedStyle(at).backgroundColor)
+        if (found !== null) return found
+      }
+      return [0, 0, 0]
+    }
+
+    const bad: string[] = []
+    for (const node of document.querySelectorAll<HTMLElement>('body *')) {
+      const text = [...node.childNodes]
+        .filter(child => child.nodeType === Node.TEXT_NODE)
+        .map(child => child.textContent ?? '')
+        .join('')
+        .trim()
+      if (text === '') continue
+      const style = getComputedStyle(node)
+      if (style.visibility === 'hidden' || style.display === 'none') continue
+      if (node.matches(':disabled, :disabled *')) continue
+      const colour = parse(style.color)
+      if (colour === null) continue
+      const [a, b] = [luminance(colour), luminance(ground(node))]
+      const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
+      if (ratio < 4.5) {
+        bad.push(`${node.className || node.tagName} "${text.slice(0, 24)}" at ${ratio.toFixed(2)}:1`)
+      }
+    }
+    return bad
+  })
+}
