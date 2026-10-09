@@ -504,6 +504,7 @@ async function liveEngine(extraArgs) {
   let buffer = ''
   let nextId = 1
   const pending = new Map()
+  const events = []
   socket.on('data', (chunk) => {
     buffer += chunk.toString('utf8')
     for (let newline = buffer.indexOf('\n'); newline >= 0; newline = buffer.indexOf('\n')) {
@@ -512,6 +513,7 @@ async function liveEngine(extraArgs) {
       let message
       try { message = JSON.parse(line) } catch { continue }
       const waiter = message.id !== undefined ? pending.get(message.id) : undefined
+      if (message.event !== undefined) events.push(message.event)
       if (waiter === undefined) continue
       pending.delete(message.id)
       if (message.ok === false) waiter.reject(new Error(JSON.stringify(message.error)))
@@ -535,7 +537,15 @@ async function liveEngine(extraArgs) {
     }
     return readFloatWav(capturePath)
   }
-  return { request, close, stderr: () => stderr }
+  /** The `ended` event for `cueId`, once it has come (or null after `timeoutMs`). */
+  const ended = async (cueId, timeoutMs = 10000) => {
+    for (const deadline = Date.now() + timeoutMs; Date.now() < deadline; await sleep(20)) {
+      const event = events.find((entry) => entry.type === 'ended' && entry.cueId === cueId)
+      if (event !== undefined) return event
+    }
+    return null
+  }
+  return { request, close, ended, stderr: () => stderr }
 }
 
 const sleep = (time) => new Promise((done) => setTimeout(done, time))
@@ -556,6 +566,7 @@ const LOADED = ['wav', 'flac', 'ogg', 'mp3']
 async function underLoad(label, extraArgs, seconds, { requireClean }) {
   const engine = await liveEngine(['--cache-max-file-bytes', '1', ...extraArgs])
   let underruns = 0
+  let played = null
   let wav = null
   try {
     const straight = (voice) => voice > 0 && voice % 2 === 1
@@ -571,15 +582,22 @@ async function underLoad(label, extraArgs, seconds, { requireClean }) {
     const info = await engine.request('info')
     underruns = info.media.decodeUnderruns
     check(`${label}: all ${VOICES} voices are streaming`, info.media.streamingVoices === VOICES, `${info.media.streamingVoices} streaming`)
+    // Where on the engine's clock the heard voice began, and where the stop ended it: the
+    // frames it played between, which is the span held to its path — however long the engine
+    // then takes to wind down, the silence after the stop is not the voice's.
+    const progress = await engine.request('progress', { cueId: 'v0' })
     await engine.request('stopAll', { fadeMs: 0 })
+    const end = await engine.ended('v0')
+    played = progress !== null && end !== null ? Math.round(((end.at - progress.startedAtMs) * RATE) / 1000) : null
+    check(`${label}: the heard voice's start and stop are known`, played !== null, JSON.stringify({ progress, end }))
   } finally {
     wav = await engine.close()
   }
   const ref = reference('mp3')
   let start = 0
   while (start < wav.frames && wav.samples[start * 2] === 0 && wav.samples[start * 2 + 1] === 0) start++
-  // The heard voice's own path, for as long as the capture holds it before the stop.
-  const heard = Math.max(0, wav.frames - start - RATE / 2)
+  // The heard voice's own path, from its first frame to the frame the stop ended it on.
+  const heard = Math.max(0, Math.min(played ?? 0, wav.frames - start))
   const passesHeard = Math.ceil(heard / (E - S)) + 1
   const want = expected(ref, [{ from: 0, to: S }, ...passes(S, E, passesHeard)])
   const length = Math.min(heard, want.frames)
