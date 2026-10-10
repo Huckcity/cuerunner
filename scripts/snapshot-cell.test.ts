@@ -46,6 +46,10 @@ function run(body: string): { status: number | null; stdout: string; stderr: str
   }
 }
 
+// Whether this host can start a run with address randomisation off and say that it is: the
+// stand-in below needs both, which util-linux's setarch has on Linux.
+const showsPersonality = spawnSync('setarch', ['--show'], { encoding: 'utf8' }).status === 0
+
 // A shell-script binary and POSIX signals: the stand-in is a Unix one. The Windows lane runs
 // the script with MSVC, which has no sanitizer build at all.
 describe.skipIf(process.platform === 'win32')('snapshot-cell.mjs, when a run does not pass', () => {
@@ -63,6 +67,16 @@ describe.skipIf(process.platform === 'win32')('snapshot-cell.mjs, when a run doe
     expect(result.stderr).toContain('WARNING: ThreadSanitizer: data race')
     expect(result.stderr).toContain('snapshot-cell: the thread build exited with status 66')
     expect(result.stderr).not.toContain('printed nothing')
+  })
+
+  // The 2026-10-10 soak night: an older ThreadSanitizer runtime, under a layout the kernel's
+  // randomisation drew, killed by SIGSEGV before the test printed a line. The stand-in dies that
+  // way whenever randomisation is on, so it passes only if the script started it with it off.
+  it.skipIf(!showsPersonality)('starts the sanitizer build with address randomisation off', () => {
+    const result = run('setarch --show | grep -q ADDR_NO_RANDOMIZE || kill -SEGV $$; echo "snapshot-cell: ok"')
+    expect(result.stderr).not.toContain('killed by SIGSEGV')
+    expect(result.stdout).toContain('[thread] snapshot-cell: ok')
+    expect(result.status).toBe(0)
   })
 
   it('says nothing extra when the run passes', () => {
