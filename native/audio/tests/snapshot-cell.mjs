@@ -72,16 +72,10 @@ function run(name, extra, optional = false) {
     return 1
   }
   const env = { ...process.env, TSAN_OPTIONS: 'halt_on_error=1' }
-  let result = spawnSync(binary, [], { encoding: 'utf8', env })
+  const result = spawnSync(...launch(name, binary), { encoding: 'utf8', env })
   if (name === 'thread' && refusedToStart(result)) {
-    // An older sanitizer runtime cannot map its shadow memory under the kernel's address
-    // randomisation; the same binary runs with it off, which needs no privilege.
-    const arch = spawnSync('uname', ['-m'], { encoding: 'utf8' }).stdout?.trim()
-    if (arch) result = spawnSync('setarch', [arch, '-R', binary], { encoding: 'utf8', env })
-    if (refusedToStart(result)) {
-      console.log('snapshot-cell: ThreadSanitizer cannot start on this host (memory mapping); skipped')
-      return 0
-    }
+    console.log('snapshot-cell: ThreadSanitizer cannot start on this host (memory mapping); skipped')
+    return 0
   }
   const said = result.stdout ?? ''
   process.stdout.write(`[${name}] ${said}${said.endsWith('\n') ? '' : '\n'}`)
@@ -93,6 +87,21 @@ function run(name, extra, optional = false) {
     console.error(`snapshot-cell: the ${name} build ${howItEnded(result)}`)
   }
   return result.status ?? 1
+}
+
+/**
+ * How a flavour is started. The sanitizer build starts with address randomisation off where
+ * `setarch` can do it, as tsan.mjs starts the engine, which needs no privilege: an older
+ * ThreadSanitizer runtime cannot place its shadow memory in every layout the kernel's
+ * randomisation draws. Some it refuses with "unexpected memory mapping"; on others it dies
+ * before a line of the test runs, killed by SIGSEGV with nothing printed — the 2026-10-10 soak
+ * night's faults job, its eight soak shards clean. A retry after a refusal caught only the first.
+ */
+function launch(name, binary) {
+  if (name !== 'thread') return [binary, []]
+  const arch = spawnSync('uname', ['-m'], { encoding: 'utf8' }).stdout?.trim()
+  if (!arch || spawnSync('setarch', [arch, '-R', 'true']).status !== 0) return [binary, []]
+  return ['setarch', [arch, '-R', binary]]
 }
 
 /** How a run that did not pass ended: never started, killed, or a status of its own. */
