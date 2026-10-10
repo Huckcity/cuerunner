@@ -1034,9 +1034,25 @@ void Mixer::postRingTarget(Voice& voice) {
   voice.ringTarget = -1;
   StreamSlot* slot = streams_.at(voice.streamSlot);
   if (slot == nullptr) return;
-  // Heading there already: the ring is linear from where it stands, and fills that far.
-  const int64_t from = slot->ring.seekPending() ? slot->ring.pendingSeekTarget() : slot->ring.readFrame();
-  if (target >= from && target < from + slot->ring.capacityFrames()) return;
+  // Heading there already: the ring is linear from where it stands, and fills that far. But
+  // nothing reads it while the voice plays the pad, so a ring left where it stands stays
+  // parked there, full, and holds only what lies between the target and its far end when the
+  // voice hands over — less than a block, and the voice runs off it before the next decode
+  // pass. The frames before the target are never read (the pad has them): they are let go,
+  // so the ring fills on past the target while the pad plays. A ring still moving is sent
+  // straight to the target instead; it has not moved yet, so that costs nothing.
+  const bool moving = slot->ring.seekPending();
+  const int64_t from = moving ? slot->ring.pendingSeekTarget() : slot->ring.readFrame();
+  if (target >= from && target < from + slot->ring.capacityFrames()) {
+    if (moving) {
+      if (target != from) slot->ring.requestSeek(target);
+      return;
+    }
+    // Never past what has been written: the window's far end is its read end plus its capacity.
+    const int64_t through = std::min(target, slot->ring.writeFrame());
+    if (through > from) slot->ring.release(through);
+    return;
+  }
   slot->ring.requestSeek(target);
 }
 
