@@ -125,7 +125,11 @@ function reference(name) {
   const prepared = reply(summary, 0)
   if (prepared.ok !== true) throw new Error(`${name} does not open: ${JSON.stringify(prepared)}`)
   const frames = prepared.result.frames
-  const ref = { frames, samples: wav.samples, at: (channel, frame) => (frame >= 0 && frame < frames ? wav.samples[frame * 2 + channel] : 0) }
+  // Where the plain pass ended: the file's own end as its decoder reads it, which for AAC is
+  // not the length the container declares.
+  const ended = summary.events.find((event) => event.type === 'ended' && event.cueId === 'ref')
+  const played = ended ? Math.round((ended.at * RATE) / 1000) : frames
+  const ref = { frames, played, samples: wav.samples, at: (channel, frame) => (frame >= 0 && frame < frames ? wav.samples[frame * 2 + channel] : 0) }
   references.set(name, ref)
   return ref
 }
@@ -477,6 +481,20 @@ for (const name of ['wav', 'mp3', 'flac', 'm4a']) {
       }
     })
   }
+  // A seek back behind the ring lands on a pad of 1 s while the ring, full and 300 ms long, is
+  // already linear towards the pad's end. Nothing reads the ring while the voice plays the pad,
+  // so unless the frames before the hand-over are let go it stays parked where the seek found
+  // it: here its last frame is 388 frames past the hand-over, which falls 92 frames into a
+  // 512-frame block, and the voice ran off the ring before the next decode pass — the nightly
+  // soak's underrun (a seek to a streamed cue's start, a quarter of a second after it began).
+  const at = seekFrame(1000)
+  holds('seek back behind a full ring, its last frame inside the hand-over\'s block', name, {
+    args: STREAM_PADS,
+    bound,
+    commands: [{ atMs: 1000, verb: 'seek', cueId: 'a', positionMs: 290 }],
+    // No slices: the voice plays to the file's own end, which for AAC is past 4 s.
+    path: (ref) => [{ from: 0, to: at }, { from: 13920, to: ref.played }]
+  })
 }
 }
 
