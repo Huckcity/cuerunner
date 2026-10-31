@@ -2,7 +2,9 @@ import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
   testDir: 'e2e',
-  timeout: 20_000,
+  // A hosted Mac can stall for most of 20 seconds launching the app, and the worker's teardown
+  // shares this limit, so a stall there fails the run even after the retry passes.
+  timeout: process.env.CI ? 40_000 : 20_000,
   // One retry, on CI only. Shared runners starve an Electron app hard enough that a
   // single spec can miss a transient state — the ubuntu lane has failed four different
   // specs across runs (main-safety:358, network-script-inspectors:107, scenes-view:109,

@@ -270,9 +270,9 @@ jobs:
     # self-hosted lane is the whole label list.
     name: e2e (${{ matrix.label }})
     runs-on: ${{ matrix.runner }}
-    # 30 rather than 20 for the one run after the FFmpeg helper's flags change, which builds
-    # it from source before the suite; every other run takes it from the cache.
-    timeout-minutes: 30
+    # A hosted Mac took 17 minutes on one run and passed 30 on the next, and the first run after
+    # the FFmpeg helper's flags change builds it from source.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
