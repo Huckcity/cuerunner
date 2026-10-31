@@ -107,7 +107,13 @@ test('the Active tab holds one cue while the other plays on', async ({}, testInf
   // The transport is not holding the show: one cue is held, not everything.
   await expect(page.locator('.btn-pause')).toHaveText('PAUSE')
 
-  const time = await bedRow.locator('.active-time').textContent()
+  // The row draws once more after the state changes, so read it once two reads agree.
+  let time: string | null = null
+  await expect.poll(async () => {
+    const before = time
+    time = await bedRow.locator('.active-time').textContent()
+    return time !== null && time === before
+  }).toBe(true)
   await page.waitForTimeout(700)
   await expect(bedRow.locator('.active-time')).toHaveText(time ?? '')
 

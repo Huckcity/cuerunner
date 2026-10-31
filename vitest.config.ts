@@ -7,6 +7,8 @@ export default defineConfig({
   // React.createElement and fail on any file that does not import React.
   esbuild: { jsx: 'automatic' },
   test: {
+    // A hosted Windows runner has taken more than the default 10 seconds over one file's setup.
+    hookTimeout: process.env.CI ? 30_000 : 10_000,
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],

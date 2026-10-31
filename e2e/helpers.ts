@@ -104,8 +104,16 @@ export async function launchApp(
     })
   }
 
-  const page = await app.firstWindow()
-  await page.waitForLoadState('domcontentloaded')
+  let page: Page
+  try {
+    page = await app.firstWindow()
+    await page.waitForLoadState('domcontentloaded')
+  } catch (error) {
+    // The caller never gets this app, so nothing else can close it, and a process left hanging
+    // here holds the worker past its teardown limit and fails a run whose retry passed.
+    app.process().kill('SIGKILL')
+    throw error
+  }
   return { app, page, userDataDir }
 }
 

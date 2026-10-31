@@ -57,6 +57,8 @@ jobs:
 
   test-e2e:
     runs-on: [macos-15]
+    # Advisory, as in ci.yml: the Linux tests gate a release until the hosted Mac is stable.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
 
@@ -112,6 +114,8 @@ jobs:
           echo LIBPATH=%LIBPATH%>>"%GITHUB_ENV%"
           echo VCToolsInstallDir=%VCToolsInstallDir%>>"%GITHUB_ENV%"
           for %%p in ("%PATH:;=" "%") do echo %%~p>>"%GITHUB_PATH%"
+          rem Last, so it comes first: Git for Windows also has a `link`, and it is not the linker.
+          echo %VCToolsInstallDir%bin\Hostx64\x64>>"%GITHUB_PATH%"
 
       # The SDK is fetched from Steinberg for this build and never committed or uploaded: its licence
       # forbids redistributing it. Pinned by hash, so a changed download stops here. A failure is

@@ -271,6 +271,23 @@ function engine(connect?: (host: string, port: number) => Socket): { engine: SqN
   return { engine: created, statuses }
 }
 
+// The fake desk has to listen on the desk's own ports, and Windows can reserve a block of ports
+// that happens to hold them (a hosted runner did): nothing on that machine can bind them, which
+// says nothing about this code, so these cases skip there rather than fail.
+const portReserved = async (port: number): Promise<boolean> => {
+  if (process.platform !== 'win32') return false
+  const probe = createServer()
+  const answer = Promise.withResolvers<boolean>()
+  probe.once('error', (error: NodeJS.ErrnoException) => answer.resolve(error.code === 'EACCES'))
+  probe.listen(port, '127.0.0.1', () => probe.close(() => answer.resolve(false)))
+  return answer.promise
+}
+const portsReserved = (await Promise.all([NATIVE_TCP_PORT, NATIVE_LEAVE_PORT].map(portReserved))).includes(true)
+
+beforeEach(({ skip }) => {
+  if (portsReserved) skip()
+})
+
 beforeEach(() => {
   // Whatever a previous case reported through the app's own log is not this case's business.
   drainMainErrors()

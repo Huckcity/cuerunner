@@ -88,6 +88,8 @@ jobs:
           echo LIBPATH=%LIBPATH%>>"%GITHUB_ENV%"
           echo VCToolsInstallDir=%VCToolsInstallDir%>>"%GITHUB_ENV%"
           for %%p in ("%PATH:;=" "%") do echo %%~p>>"%GITHUB_PATH%"
+          rem Last, so it comes first: Git for Windows also has a `link`, and it is not the linker.
+          echo %VCToolsInstallDir%bin\Hostx64\x64>>"%GITHUB_PATH%"
 
       # The native engine this lane builds has an optional ASIO backend, and the SDK
       # behind it cannot be shipped with the repository (Steinberg's licence forbids
@@ -190,6 +192,8 @@ jobs:
           echo LIBPATH=%LIBPATH%>>"%GITHUB_ENV%"
           echo VCToolsInstallDir=%VCToolsInstallDir%>>"%GITHUB_ENV%"
           for %%p in ("%PATH:;=" "%") do echo %%~p>>"%GITHUB_PATH%"
+          rem Last, so it comes first: Git for Windows also has a `link`, and it is not the linker.
+          echo %VCToolsInstallDir%bin\Hostx64\x64>>"%GITHUB_PATH%"
 
       - name: Locate the ASIO SDK
         shell: cmd
