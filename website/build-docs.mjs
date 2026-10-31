@@ -90,7 +90,7 @@ ${crumb}${page.body.trimEnd()}
   <footer class="site-footer">
     <p>Cuerunner — show control for Windows, macOS and Linux. <a href="${up}guide.html">Guides</a> · <a href="${up}reference/index.html">Reference</a> · <a href="https://github.com/Huckcity/cuerunner">Source on GitHub</a> (MIT)</p>
     <p class="seller">${esc(SELLER_BLOCK)}</p>
-    <p class="seller">ASIO is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries.</p>
+    <p class="seller asio-mark"><img src="${up}assets/asio-compatible.svg" alt="ASIO Compatible" /> ASIO is a registered trademark of Steinberg Media Technologies GmbH.</p>
   </footer>
 </body>
 </html>

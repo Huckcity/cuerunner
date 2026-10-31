@@ -966,3 +966,17 @@ kbd {
 }
 
 .site-footer a:hover { color: var(--fg-primary); }
+
+/* Steinberg's logo, as supplied: its size is the only thing changed here. */
+.asio-mark {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.asio-mark img {
+  height: 48px;
+  width: auto;
+}
+
+.site-footer .asio-mark { justify-content: center; }

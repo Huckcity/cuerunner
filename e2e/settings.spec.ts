@@ -330,3 +330,12 @@ test('settings are grouped by what is being set up, and close one way', async ()
   await expect(dialog.getByRole('button', { name: /Close/ })).toHaveCount(1)
   await closeSettings(page)
 })
+
+test("the ASIO choice has Steinberg's logo beside it, and the image loads", async () => {
+  test.skip(process.platform !== 'win32', 'ASIO is only offered on Windows')
+  await openSettingsOn(page, 'Audio')
+  const logo = page.locator('.settings-asio-mark img')
+  await expect(logo).toBeVisible()
+  await expect.poll(() => logo.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0)
+  await closeSettings(page)
+})

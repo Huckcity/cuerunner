@@ -785,7 +785,7 @@ export const GUIDES = [
       <p>
         On Windows, <strong>Audio system</strong> above the device picks how the sound
         leaves the machine: <strong>Windows audio</strong>, the platform's own mixer, or
-        <strong>ASIO</strong>, which drives an interface through its own driver instead.
+        <strong>ASIO®</strong>, which drives an interface through its own driver instead.
         Everywhere else the row is the platform's own stack and nothing more. ASIO is the
         one for a rig whose interface has its own driver — a professional one, or a
         virtual one like Dante Virtual Soundcard — and for setting the buffer on the
@@ -797,6 +797,7 @@ export const GUIDES = [
         when you choose it, and a driver that asks for a reset reopens the device — the
         show stops for that instant and the Audio tab says why.
       </p>
+      <p class="asio-mark"><img src="../assets/asio-compatible.svg" alt="ASIO Compatible" /> ASIO is a registered trademark of Steinberg Media Technologies GmbH.</p>
     </section>
 
     <section class="panel reveal delay-3">

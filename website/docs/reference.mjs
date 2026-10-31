@@ -421,7 +421,7 @@ export const REFERENCE = [
         <table>
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
           <tbody>
-            <tr><td>Audio system</td><td>the platform's own</td><td>Which audio system drives the show: the platform's own, or ASIO on Windows, which drives an interface through its own driver rather than the system mixer.</td></tr>
+            <tr><td>Audio system</td><td>the platform's own</td><td>Which audio system drives the show: the platform's own, or ASIO® on Windows, which drives an interface through its own driver rather than the system mixer.</td></tr>
             <tr><td>Output device</td><td>system default</td><td>Where the show plays.</td></tr>
             <tr><td>Sample rate</td><td>device default</td><td>What the engine runs at. Files at other rates are resampled.</td></tr>
             <tr><td>Buffer</td><td>engine default</td><td>Frames per block: lower is tighter, higher is safer.</td></tr>
@@ -436,6 +436,7 @@ export const REFERENCE = [
           </tbody>
         </table>
       </div>
+      <p class="asio-mark"><img src="../assets/asio-compatible.svg" alt="ASIO Compatible" /> ASIO is a registered trademark of Steinberg Media Technologies GmbH.</p>
       <p>
         Under them, what the engine is actually doing: backend, rate, device, latency,
         voices playing, media memory, and any dropouts. That block is a reading, not a
@@ -1395,7 +1396,7 @@ await rig.blackout()</code></div>
         <li>Video plays what Chromium decodes (H.264, VP8, VP9, AV1 and the rest); ProRes and other professional codecs need converting first. On Windows a WebM's or MKV's sound needs the system's own decoder for it, and plays silent where there is none.</li>
         <li>One crossfade at a time per output: a second that starts while one is running lands the first at once. Blend modes other than normal are not offered.</li>
         <li>No cue-level audio effects beyond level, pan, rate and fades.</li>
-        <li>ASIO runs a single driver at a time and at most 32 channels: a rig that needs two interfaces on two ASIO drivers at once is not covered.</li>
+        <li>ASIO® runs a single driver at a time and at most 32 channels: a rig that needs two interfaces on two ASIO drivers at once is not covered.</li>
         <li>OSC input is UDP only.</li>
         <li>The channel ceiling a desk model states is the number the console publishes rather than a measurement: a show with more channels than the selected model takes is named under the desk connection, with the number, and every channel is sent as it always was. Only the count control stops at it, and a show already larger than the ceiling keeps its own whole range on the dial rather than being trimmed back to it.</li>
         <li>An SQ's membership is written over the desk's own control service — TCP 51326 outbound, with a keepalive datagram to the desk's UDP 51324 — a protocol Allen &amp; Heath publish nothing about, spoken here from frames measured off an SQ-6 on firmware 1.6.1. The desk's own answer to a membership has never been read, so nothing here says a desk has accepted one: what a recall leaves out is worked out against what Cuerunner last sent, not against the desk. The channel mutes ride the MIDI service beside it, on 51325. The session leaves by the desk's own door when the show stops, and one the desk loses without that goodbye leaves it mute until it is reset — said in the log, on the device row and in an alarm, which is why a lost session is not dialled again in a loop.</li>
@@ -1405,6 +1406,7 @@ await rig.blackout()</code></div>
         <li>Cuerunner is distributed outside the app stores, and the release notes say whether a build is signed: Windows warns when an unsigned installer is run, and macOS warns about an unidentified developer at first launch — Gatekeeper refuses such an app on a machine that has not seen it. Each release publishes its digests twice: a <code>SHA256SUMS</code> beside the assets on its release page, naming the files that page carries, and <code>latest/SHA256SUMS</code> on the download host, naming the files the cards link.</li>
         <li>The Linux AppImage is experimental: MIDI needs ALSA development headers present when dependencies are installed.</li>
       </ul>
+      <p class="asio-mark"><img src="../assets/asio-compatible.svg" alt="ASIO Compatible" /> ASIO is a registered trademark of Steinberg Media Technologies GmbH.</p>
     </section>
 `
   }

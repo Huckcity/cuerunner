@@ -9,6 +9,7 @@ import { useStore } from '../../store'
 import { defaultShowSettings } from '../../../../shared/show'
 import { AUDIO_CHANNELS } from '../../../../shared/audio'
 import type { AudioEngineInfo } from '../../engine/audioEngineClient'
+import { ASIO_NOTICE } from '../../../../shared/trademarks'
 
 let container: HTMLDivElement
 let root: Root
@@ -195,6 +196,36 @@ describe('SettingsDialog', () => {
     // One change, both fields: the device was listed by the system the show just left,
     // and the new one would refuse the id rather than substitute a device of its own.
     expect(useStore.getState().audioSettings).toEqual({ outputDeviceId: 'default', backend: 'asio' })
+  })
+
+  it("shows Steinberg's logo and notice beside the ASIO choice, and only where ASIO is offered", async () => {
+    const bridge = window.cuerunner as unknown as { platform: string }
+    const platform = bridge.platform
+    try {
+      bridge.platform = 'win32'
+      render()
+      await settle()
+      openSection('Audio')
+      const mark = container.querySelector('.settings-asio-mark')
+      expect(mark?.querySelector('img')?.getAttribute('alt')).toBe('ASIO Compatible')
+      expect(mark?.textContent).toContain(ASIO_NOTICE)
+    } finally {
+      bridge.platform = platform
+    }
+  })
+
+  it('shows no ASIO logo where ASIO is not offered', async () => {
+    const bridge = window.cuerunner as unknown as { platform: string }
+    const platform = bridge.platform
+    try {
+      bridge.platform = 'darwin'
+      render()
+      await settle()
+      openSection('Audio')
+      expect(container.querySelector('.settings-asio-mark')).toBeNull()
+    } finally {
+      bridge.platform = platform
+    }
   })
 
   it('leaves the exclusive choice to systems that can be asked, and not to ASIO', async () => {

@@ -340,3 +340,13 @@
 
 /* A refusal, first on the tab, with room under it before the fields start. */
 .settings-body .settings-refusal { margin: 0 0 var(--space-3); }
+
+/* Steinberg's logo, as supplied: its size is the only thing changed here. */
+.settings-asio-mark {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+}
+
+.settings-asio-mark img { height: 48px; width: auto; }
