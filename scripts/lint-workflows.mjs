@@ -101,7 +101,12 @@ const workflows = readdirSync(workflowDir)
   .map(name => join('.github', 'workflows', name))
 try {
   // `-color=false`: a log is read in a terminal that would render the escapes as noise.
-  execFileSync(actionlint, ['-color=false', ...workflows], { cwd: root, stdio: 'inherit' })
+  // shellcheck's `info` and `style` notes are opinion, and actionlint fails on any of them.
+  execFileSync(actionlint, ['-color=false', ...workflows], {
+    cwd: root,
+    stdio: 'inherit',
+    env: { ...process.env, SHELLCHECK_OPTS: '--severity=warning' }
+  })
   console.log(`workflows lint clean (${VERSION}${actionlint === binary ? ', pinned' : ', from PATH'})`)
 } catch (error) {
   // actionlint's own diagnostics are already on stderr; the exit code is what CI reads.
