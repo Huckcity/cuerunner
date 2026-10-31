@@ -11,10 +11,10 @@ name: Integration (vendor)
 # harness's peer standing in for a desk. ETCnomad is the console itself, so that half is
 # configuration-by-artifact once it is done once; no A&H desktop application is a desk, so
 # the bridge route operators take is what the desk half measures (§2, §11).
+# This repository is public and has no self-hosted runner registered, so a dispatch of this
+# lane waits until a maintainer attaches one for the run, then removes it. A fork's pull request
+# can name any runner label, so a runner must not stay registered here.
 on:
-  schedule:
-    # Before the soak, which owns the small hours.
-    - cron: '0 4 * * *'
   workflow_dispatch:
     inputs:
       record:

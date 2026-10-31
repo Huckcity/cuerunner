@@ -19,6 +19,9 @@
 # it with a soak.
 name: Native
 
+permissions:
+  contents: read
+
 on:
   pull_request:
     branches: [main]
@@ -43,7 +46,7 @@ concurrency:
 
 jobs:
   native-engine:
-    runs-on: [self-hosted, linux, x64, ubox]
+    runs-on: [ubuntu-24.04]
     # The shared group, for the reason in the header: one lane at a time, and never beside a
     # soak night.
     concurrency:

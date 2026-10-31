@@ -1,9 +1,10 @@
-# Every lane runs on hardware in the homelab: Linux on `ubox`, macOS on the Mac mini beside
-# it, Windows on a NUC of its own (`nuc-win-1`). None of it is billed, and none of it stops when
-# the account's included minutes run out. The same lanes can be run from a terminal against the
-# same machines — `npm run local-ci`, whose header names the doors — which is what to reach for
-# when a lane is wanted before a push rather than after one.
+# Every lane runs on GitHub-hosted runners. This repository is public, and a fork's pull request
+# runs the workflow files in that pull request, which can name any runner label: a self-hosted
+# runner registered here would run a stranger's code. `scripts/public-runners.test.ts` holds this.
 name: CI
+
+permissions:
+  contents: read
 
 on:
   pull_request:
@@ -39,7 +40,7 @@ concurrency:
 
 jobs:
   typecheck:
-    runs-on: [self-hosted, linux, x64, ubox]
+    runs-on: [ubuntu-24.04]
     strategy:
       fail-fast: false
       matrix:
@@ -54,11 +55,9 @@ jobs:
           node-version: ${{ matrix.node-version }}
 
       - name: Install ALSA dev headers
-        # Already on the homelab runner, and that host has one dpkg lock shared by every slot it
-        # runs — the eight `ubox` runners between them.
         run: |
-          dpkg -s libasound2-dev >/dev/null 2>&1 ||
-            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
+          sudo apt-get update -qq
+          sudo apt-get install -y libasound2-dev
 
       - run: npm ci --legacy-peer-deps
 
@@ -77,7 +76,7 @@ jobs:
   # The suite runs on all three platforms the app ships to, not only where it is convenient:
   # most of it is the main process — the workspace and its atomic write, the audio wire, the
   # redundancy service — and those are exactly the places a platform shows up. It ran on
-  # `ubox` alone until the first Windows run of it found 24 failures, most of them tests that
+  # Linux alone until the first Windows run of it found 24 failures, most of them tests that
   # had only ever been written against POSIX (a mode that makes a write fail, a directory's
   # permissions, `bash` for the release tooling's own scripts); those state their platform now,
   # and the two that were real — an engine on a machine with no output endpoint, and a port
@@ -92,22 +91,22 @@ jobs:
           # 24 = LTS (release toolchain), 26 = current — catches cross-major breakage like
           # fd-slicer's zip extraction stalling on Node 26 (#49) — on each of the three.
           - label: linux
-            runner: [self-hosted, linux, x64, ubox]
+            runner: [ubuntu-24.04]
             node-version: 24
           - label: linux
-            runner: [self-hosted, linux, x64, ubox]
+            runner: [ubuntu-24.04]
             node-version: 26
           - label: windows
-            runner: [self-hosted, windows, x64, win-ci]
+            runner: [windows-2025]
             node-version: 24
           - label: windows
-            runner: [self-hosted, windows, x64, win-ci]
+            runner: [windows-2025]
             node-version: 26
           - label: macos
-            runner: [self-hosted, macos, arm64, mac-mini]
+            runner: [macos-15]
             node-version: 24
           - label: macos
-            runner: [self-hosted, macos, arm64, mac-mini]
+            runner: [macos-15]
             node-version: 26
     steps:
       - uses: actions/checkout@v7
@@ -143,11 +142,9 @@ jobs:
 
       - name: Install ALSA dev headers
         if: runner.os == 'Linux'
-        # Already on the homelab runner, and that host has one dpkg lock shared by every slot it
-        # runs — the eight `ubox` runners between them.
         run: |
-          dpkg -s libasound2-dev >/dev/null 2>&1 ||
-            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
+          sudo apt-get update -qq
+          sudo apt-get install -y libasound2-dev
 
       # `npm test` builds the native engine first: the compiler has to be on PATH, and on
       # Windows that means importing the developer environment, the same way the e2e job
@@ -231,7 +228,7 @@ jobs:
   # 200 MB download and zip extraction — the path that silently produced no binary on
   # Node 26 (#49). Assert the postinstall's contract, not just that npm exited 0.
   electron-install:
-    runs-on: [self-hosted, linux, x64, ubox]
+    runs-on: [ubuntu-24.04]
     strategy:
       fail-fast: false
       matrix:
@@ -244,11 +241,9 @@ jobs:
           node-version: ${{ matrix.node-version }}
 
       - name: Install ALSA dev headers
-        # Already on the homelab runner, and that host has one dpkg lock shared by every slot it
-        # runs — the eight `ubox` runners between them.
         run: |
-          dpkg -s libasound2-dev >/dev/null 2>&1 ||
-            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
+          sudo apt-get update -qq
+          sudo apt-get install -y libasound2-dev
 
       - run: npm ci --legacy-peer-deps
 
@@ -266,7 +261,7 @@ jobs:
 
   # The app ships for Windows, macOS and Linux, so the interface is exercised on all
   # three. The Windows lane matters most of all — it is the platform the product is for.
-  # Linux is the one that can run in the homelab; `label` is the lane's name (the job's,
+  # `label` is the lane's name (the job's,
   # and the failure artifact's), `runner` is where it runs.
   e2e:
     # Without this the job is named after every matrix value it carries, which for the
@@ -280,18 +275,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: [self-hosted, linux, x64, ubox]
+          - runner: [ubuntu-24.04]
             label: linux
           # Windows runs on the NUC (`nuc-win-1`, an Intel NUC10i7FNH): the same x64 Windows
-          # the installer ships for, at none of the 2x minutes. It used to be a guest on ubox
-          # and kept `ubox-win` as a label from there, which is why the two names coexist.
           # Provisioning: `C:\actions-runner` on that box, with its own Node and MSVC.
-          - runner: [self-hosted, windows, x64, win-ci]
+          - runner: [windows-2025]
             label: windows
-          # The macOS lane runs on the Mac mini in the homelab: the same arm64 macOS the
-          # .dmg ships for, at none of the 10x minutes. It is a launchd agent in the
-          # login session the suite needs (provisioning: ~/homelab/ci/).
-          - runner: [self-hosted, macos, arm64, mac-mini]
+          - runner: [macos-15]
             label: macos
     steps:
       - uses: actions/checkout@v7
@@ -302,11 +292,9 @@ jobs:
 
       - name: Install ALSA dev headers
         if: runner.os == 'Linux'
-        # Already on the homelab runner, and that host has one dpkg lock shared by every slot it
-        # runs — the eight `ubox` runners between them.
         run: |
-          dpkg -s libasound2-dev >/dev/null 2>&1 ||
-            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
+          sudo apt-get update -qq
+          sudo apt-get install -y libasound2-dev
 
       - run: npm ci --legacy-peer-deps
 
@@ -327,26 +315,12 @@ jobs:
 
       # Electron tests use the app's own Chromium, so nothing is downloaded; a Linux host
       # still needs the system libraries a Chromium process links against. GitHub's
-      # runners install them per job; the homelab runner is provisioned once and this is
-      # what says so, because `npx playwright install-deps` wants a root shell (`sudo sh
-      # -c`) and the runner's sudoers rule allows apt-get, not an arbitrary command.
       - name: Install runtime dependencies
-        if: runner.os == 'Linux' && runner.environment == 'github-hosted'
-        run: npx playwright install-deps
-
-      - name: Runtime dependencies are provisioned on the runner
-        if: runner.os == 'Linux' && runner.environment == 'self-hosted'
+        if: runner.os == 'Linux'
         run: |
-          missing=()
-          for pkg in libnss3 libgbm1 libasound2t64 libatk-bridge2.0-0t64 libcups2t64 \
-                     libxkbcommon0 libgtk-3-0t64 xvfb; do
-            dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
-          done
-          if [ "${#missing[@]}" -gt 0 ]; then
-            echo "::error::missing on this runner: ${missing[*]} — provision the host (~/homelab/ci/)"
-            exit 1
-          fi
-          echo 'runtime libraries present'
+          npx playwright install-deps
+          sudo apt-get install -y xvfb
+
 
       # The app runs the native engine; on Windows the compiler is installed but not on
       # PATH unless the developer environment is imported. This is done here rather than
@@ -435,7 +409,7 @@ jobs:
   # What really exercises a desk — an SQ, an Avantis, a console running ETCnomad — is the
   # vendor and hardware lanes, which are nightly and on demand rather than per pull request.
   integration:
-    runs-on: [self-hosted, linux, x64, ubox]
+    runs-on: [ubuntu-24.04]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -445,11 +419,9 @@ jobs:
           node-version: 24
 
       - name: Install ALSA dev headers
-        # Already on the homelab runner, and that host has one dpkg lock shared by every slot it
-        # runs — the eight `ubox` runners between them.
         run: |
-          dpkg -s libasound2-dev >/dev/null 2>&1 ||
-            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
+          sudo apt-get update -qq
+          sudo apt-get install -y libasound2-dev
 
       - run: npm ci --legacy-peer-deps
 
@@ -457,22 +429,10 @@ jobs:
       # needs the libraries a Chromium process links against and the Xvfb that
       # scripts/run-e2e.js puts them on.
       - name: Install runtime dependencies
-        if: runner.environment == 'github-hosted'
-        run: npx playwright install-deps
-
-      - name: Runtime dependencies are provisioned on the runner
-        if: runner.environment == 'self-hosted'
         run: |
-          missing=()
-          for pkg in libnss3 libgbm1 libasound2t64 libatk-bridge2.0-0t64 libcups2t64 \
-                     libxkbcommon0 libgtk-3-0t64 xvfb; do
-            dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
-          done
-          if [ "${#missing[@]}" -gt 0 ]; then
-            echo "::error::missing on this runner: ${missing[*]} — provision the host (~/homelab/ci/)"
-            exit 1
-          fi
-          echo 'runtime libraries present'
+          npx playwright install-deps
+          sudo apt-get install -y xvfb
+
 
       - name: Integration tests
         env:

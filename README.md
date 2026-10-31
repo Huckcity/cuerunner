@@ -2,12 +2,12 @@
 
 A cross-platform **QLab alternative** for Windows and macOS — professional show-control software for managing audio, MIDI, OSC, and network cues in live performance and broadcast environments.
 
-Built with Electron, React, TypeScript, and Zustand. Source-available under the [Functional Source License 1.1, MIT future license](./LICENSE) — see [License](#license).
+Built with Electron, React, TypeScript, and Zustand. Free and open source under the [MIT License](./LICENSE) — see [Licence](#licence).
 
 **Documentation lives on the site**, not here:
 
 - [Guides](https://cuerunner.app/guide.html) — first show, building a cue
-  list, working with sound, running the show, and the Pro features. Source in
+  list, working with sound, running the show, and the services around it. Source in
   [`website/docs/guides.mjs`](./website/docs/guides.mjs).
 - [Reference](https://cuerunner.app/reference/index.html) — every cue type
   and field, every setting, the keyboard table, the OSC and MIDI messages Cuerunner answers
@@ -24,14 +24,13 @@ An Electron app with three layers — main process, preload bridge, renderer —
 exclusively over IPC. The renderer has no Node access; the audio engine is a native
 process of its own, so a renderer crash does not stop the sound.
 
-The **cue stack is free**: nineteen cue types, groups and timelines, the waveform editor,
-the run log, workspaces, undo — and the ears it needs: OSC and MIDI input, cue triggers,
-and the monitor that shows what arrived. **Cuerunner Pro** is the show around it —
-wireless and the mic plot, scenes and the desk, the script panel with its tablet view,
-redundant playback, and the showfile as a versionable artifact: what each save changed, a
-comparison with another version, two people's copies merged, and the show and its media
-bundled into one `.cuerunnerx`. One key, checked offline on the machine; see
-[Cuerunner Pro](#cuerunner-pro) for how keys are issued.
+The **cue stack**: its cue types, groups and timelines, the waveform editor, the run log,
+workspaces, undo — and the ears it needs: OSC and MIDI input, cue triggers, and the monitor
+that shows what arrived. **The show around it**: wireless and the mic plot, scenes and the
+desk, the script panel with its tablet view, redundant playback, and the showfile as a
+versionable artifact: what each save changed, a comparison with another version, two people's
+copies merged, and the show and its media bundled into one `.cuerunnerx`. Every feature runs on
+every machine.
 
 ## Getting Started
 
@@ -401,8 +400,8 @@ processes and the engine speak.
   neither exists.
 
   **Before shipping a build with ASIO in it**, the Steinberg ASIO License Agreement has to be
-  signed — the SDK's proprietary licence is the one a closed-source application needs, and
-  it is what permits publishing a binary built against the SDK. The pipeline enforces that
+  signed — it is what permits publishing a binary built against the SDK under the SDK's
+  proprietary licence. The pipeline enforces that
   rather than trusting a checklist: `build-windows` records whether its probe found an SDK,
   and withholds the installer — no upload, no release page, no mirror — when the build linked
   the SDK and `native/audio/third_party/ASIO-AGREEMENT.md` is not committed. That file is the
@@ -689,6 +688,13 @@ npm run local-ci
 
 ## CI/CD
 
+Every lane runs on GitHub-hosted runners. **Do not register a self-hosted runner on this
+repository:** a fork's pull request runs the workflow files in that pull request, which can name
+any runner label. The two lanes that need real hardware (`integration-vendor.yml` and
+`integration-hardware.yml`) only start by hand, and wait for a maintainer to attach a machine for
+that run and remove it afterwards. `scripts/public-runners.test.ts` holds the workflow files to
+this.
+
 GitHub Actions workflows in `.github/workflows/`:
 
 - **`ci.yml`**: Runs on pull requests
@@ -752,9 +758,8 @@ GitHub Actions workflows in `.github/workflows/`:
 
 ### Running the lanes yourself
 
-`npm run local-ci` runs the same commands `ci.yml` runs, on the homelab's own machines, over
-ssh — for feedback before a push instead of after one, and for a lane at a time while the
-runner queue is busy:
+`npm run local-ci` runs the same commands `ci.yml` runs on machines of your own, over ssh, for
+feedback before a push:
 
 ```bash
 npm run local-ci                     # every host, its own default lanes
@@ -770,18 +775,15 @@ prints one `[host lane]` stream per step and a summary that says what each host 
 | Host | Where | Default lanes |
 | --- | --- | --- |
 | `linux` | this machine, taken as Linux — run the command from that box: the local host's platform is not read, so the Linux lanes are planned wherever it starts | typecheck, unit, native, integration, e2e |
-| `win` | `adam@nuc-win-1` — the NUC that runs the Windows lanes (`nuc-win-1`), with the runner's Node and MSVC already provisioned | typecheck, unit |
-| `mac` | `adam@mac.local` — the Mac mini (`mac-mini-1`), which needs Remote Login on before anything can reach it | typecheck, unit |
+| `win` | `adam@nuc-win-1`, a Windows machine with Node and MSVC installed | typecheck, unit |
+| `mac` | `adam@mac.local`, a Mac, which needs Remote Login on before anything can reach it | typecheck, unit |
 
 `LOCAL_CI_WIN`, `LOCAL_CI_MAC`, `LOCAL_CI_LINUX`, `LOCAL_CI_WIN_KEY` and `LOCAL_CI_MAC_KEY`
-override those doors and keys — the Mac has no key file unless one is named — which is what to do
-when DHCP moves one. A host that does not answer is a `skipped` row rather than a failure, so a
+override those doors and keys, and are how you point this at your own machines. A host that does not answer is a `skipped` row rather than a failure, so a
 run says what it did and what it could not (`scripts/lane-status.mjs`).
 
 The e2e lane runs here, on Linux, where `scripts/run-e2e.js` gives Electron a private Xvfb
-display. No host can run it over ssh: an Electron window needs a desktop session, which is why
-CI runs that lane from a launchd agent in the Mac's login session and from the Windows runner's
-own session — the script reports that reason rather than pretending to try.
+display. No host can run it over ssh: an Electron window needs a desktop session, so the script reports that reason rather than pretending to try.
 
 [`RELEASE_CHECKLIST.md`](./.github/RELEASE_CHECKLIST.md) is what a release engineer walks
 before that dispatch, including the check that keeps this file's limitations honest.
@@ -790,7 +792,7 @@ before that dispatch, including the check that keeps this file's limitations hon
 
 *Cuerunner ▾ → Report a Problem…* composes a report (`src/main/report/report.ts`) and shows
 all of it before anything leaves: versions, platform, the audio engine's state and last
-words, the licence *state* (never the key or its holder), the crash dumps Chromium left
+words, the crash dumps Chromium left
 beside the profile (named, not included), and the tail of the session log, with the home
 folder replaced by `~`. Copy and Save stay on the machine; Email puts the text on the
 clipboard and opens a `mailto:` to `orders@cuerunner.app` — a `mailto:` body cannot carry a
@@ -840,9 +842,9 @@ Behaviour worth knowing before a show:
 - A save gives no confirmation beyond the dirty dot clearing
 - Group rows derive their length from their children for timeline and sequence groups; playlist
   and random groups show `–`
-- OSC and MIDI input are free on any machine: the app listens, triggers fire, and the
-  monitor shows what arrived. What a key turns on is the rest of the services — the desk
-  link, the radios, the network devices and the second machine
+- OSC and MIDI input run on any machine: the app listens, triggers fire, and the monitor
+  shows what arrived. The rest of the services — the desk link, the radios, the network
+  devices and the second machine — start from what the show configures
 
 Desk and console integration:
 
@@ -928,9 +930,10 @@ Redundant playback:
   instead of both machines playing the same cue, and a machine that took the show can hand it
   back. `e2e/redundancy.spec.ts` is the other machine: it speaks the protocol over a real
   socket, goes silent, and holds the app to the position the cue comes back at
-- **The settings belong to the machine.** `redundancy.json` beside `license.key` — both
+- **The settings belong to the machine.** `redundancy.json` in the user-data directory — both
   machines of a pair run the same workspace file, so a role written into the show would be
-  read as the same answer by both of them
+  read as the same answer by both of them. The interface the lights leave by and the sACN
+  identity this machine sends as are kept there too (`dmx.json`)
 
 The [reference](https://cuerunner.app/reference/troubleshooting.html#limitations)
 carries the operator-facing half of this list, in the words an operator would look it up in.
@@ -943,153 +946,22 @@ carries the operator-facing half of this list, in the words an operator would lo
 4. Commit with conventional commits: `feat:`, `fix:`, `chore:`, etc.
 5. Push and create a pull request
 
-## Cuerunner Pro
-
-The Pro features listed above ship in the same app. A license key turns them on, and
-keys are verified on the machine they are entered on:
-
-- **Nothing is sent anywhere.** The key is signed by the issuer and checked against the
-  public keys compiled into the app, so a venue machine with no internet unlocks exactly
-  like any other, and using a key tells nobody that it was used.
-- **Enter it once**: *Cuerunner ▾ → Settings… → License*. The license is kept beside the
-  app's other settings in the user-data directory (`license.key`); it belongs to the
-  computer it was entered on, not to a workspace or a show file. A machine's half of a
-  redundant pair is kept the same way (`redundancy.json`), and for the same reason: both
-  machines of a pair run the same workspace file, so which one is the main is a fact about
-  the machine rather than about the show. The interface the lights leave by and the sACN
-  identity this machine sends as are kept there too (`dmx.json`).
-- **A key ends when it ends.** The key is checked when the app starts, when one is
-  entered, and whenever anything asks what the license is; the app's own clock crosses a
-  key's last day while it is open, with no operator action and no restart. The moment it
-  crosses, the Pro services stop there and then — the desk link among them — and scene cues
-  are refused from that instant, while a cue already playing keeps playing and the show
-  file is untouched.
-- **A renewed key puts the Pro half back** without a restart, and starts the services the
-  show had configured.
-- **A key is not bound to a machine.** Verification is offline by design and nothing
-  counts activations, so one key can be entered on more than one computer. Keeping to one
-  machine per operator is a matter of trust between the issuer and the buyer — an
-  activation server, or a machine id collected before the sale, is what changing that
-  would take.
-- **Show files are never affected.** A workspace written with Pro opens anywhere, keeping
-  its scenes, its mic plot and its triggers, and saves back exactly as it arrived. On an
-  unlicensed machine the Pro surfaces show a lock, the Pro services do not start — the
-  OSC and MIDI listeners do — and a scene cue fired from the stack records that it needs
-  a license and lets the rest of the show run.
-- **A key can be deactivated**, which returns the machine to the free feature set.
-
-### Issuing keys
-
-Keys are minted offline. The private half of the product key is not in this repository
-and must never be committed; it lives on the issuer's machine at
-`~/.cuerunner/license-private.pem` (mode 600).
-
-```bash
-npm run license:keygen                                  # once: write a pair, print the public half
-npm run license:issue -- --name "Theatre X" \
-  --expires 2027-09-12 --id CRN-ABC123                  # mint a key for a customer
-npm run license:verify -- "CRN1-…"                    # check a key against the shipped public keys
-```
-
-**What the flags decide.** `--name` is the licensee as it will be shown to them; `--expires`
-is the last day the key is good (UTC, inclusive) and is left off for a key that does not
-lapse; `--id` is the sale's own identifier, carried inside the key and printed beside it,
-so a key found in an email can be matched back to a row in the ledger without opening the
-app.
-
-**The ledger is a spreadsheet.** One row per key: id, licensee, date, what it was for
-(trial, licence, venue, replacement) and the expiry. The `--id` is the join key. Nothing
-else in the product keeps a record of a sale, and nothing needs to: the key carries who it
-is for and until when, and the signature carries the rest.
-
-**A trial is a key that lapses.**
-
-```bash
-npm run license:issue -- --name "Theatre X — trial" \
-  --expires 2026-10-01 --id CRN-TRIAL-1414
-```
-
-Same surfaces and same services as a licence until the day passes, and then the machine
-falls back to the free half — with the show file untouched, so the operator keeps the
-scenes, the mic plot and the triggers they built during the trial.
-
-**Refunds and deactivation.** Deactivating in Settings → Licence returns that machine to
-the free half at once, and the key is not blacklisted anywhere, because nothing phones
-home. A refund is the ledger row marked refunded plus a request to deactivate; the licence
-text says a key is not transferable, and the honest enforcement of that is the ledger
-rather than the app.
-
-`src/main/license/publicKey.ts` holds the public keys a build trusts, so rotating a key
-means adding the new one there and releasing: existing keys keep verifying as long as
-their public key stays in the list. A key's text is base32 in groups of eight, carrying
-who it is for, an id to match it to a sale, and an optional last day (UTC, good through
-the end of it).
-
-**Development and E2E** mint their own keys: `CUERUNNER_LICENSE_PUBLIC_KEY` replaces the
-trusted set with one key of its own, and it is honoured only when the app is running from
-a source tree (`!app.isPackaged`). A packaged build ignores it. `npm run dev:pro` does all
-of that for a working session — a throwaway pair, a key signed with it, and a user-data
-directory of its own under `~/.cuerunner-dev`, so the license your normal `npm run dev` is
-never read, written or shown. E2E specs that need the Pro surfaces launch with
-`launchApp({ license: mintLicense() })`; see `e2e/license.spec.ts` for the gate itself.
-
-### Fulfilling an order
-
-Every order is worked the same three steps, whether it came through the storefront's card
-link or as a purchase order to the address on the
-[pricing page](https://cuerunner.app/pricing.html). None of them needs the
-app, and nothing between them needs a server:
-
-1. **Mint the key** for the sale, using the order's own id so the key can be matched back to
-   it later:
-
-   ```bash
-   npm run license:issue -- --name "Theatre X" --id CRN-ABC123
-   ```
-
-   A key that ends — a rental or a trial — adds `--expires YYYY-MM-DD`, the last day it is
-   good.
-2. **Deliver it by email.** The buyer enters it in *Cuerunner ▾ → Settings… → License*; the
-   key is checked on the machine and nothing is sent anywhere, so the email arriving is the
-   whole of the delivery and the machine unlocks offline, exactly like any other.
-3. **Record the row** in the ledger described above. The expiry column is the sale's own
-   date: for a licence, the day the 12 months of updates end — the key keeps working past it
-   — and for a rental or a trial, the same last day that went into `--expires`.
-
-**A trial request is the same three steps**, and the only order that arrives without money
-behind it. It comes to `orders@cuerunner.app`, the address the
-[pricing page](https://cuerunner.app/pricing.html) publishes, and the request is
-answered like any other message. The key is minted with `--expires` set to the trial's last
-day — 14 days out, the length the adopted model in
-`_bmad-output/specs/spec-cuerunner/market-and-business.md` decides — delivered by email, and
-recorded as a trial row in the ledger, with that same day in the expiry column. Nothing about
-a request is automatic: a person reads it, mints, and replies.
-
-**Sending as the domain is provisioned; nothing sends through it yet.** The reply is a human
-one from an operator mailbox, and `orders@cuerunner.app` arrives by Cloudflare Email Routing.
-SES is ready for the first thing that does send: `cuerunner.app` is a verified identity in
-eu-west-1 with DKIM passing, custom MAIL FROM `mail.cuerunner.app`, and `_dmarc` at `p=none`
-reporting to `orders@cuerunner.app`. A send names configuration set `cuerunner`, which
-publishes bounces and complaints to the SNS topic `cuerunner-ses-events` — a topic with no
-subscriber, so a bounce is published and dropped until one is added. The credential is the
-least-privilege user `cuerunner-ses` (`ses:SendEmail`/`SendRawEmail` on the identity, the
-configuration set and the two simulator addresses, and nothing else), stored at
-`~/.config/cuerunner/aws-ses`.
+[CONTRIBUTING.md](./CONTRIBUTING.md) has the rest.
 
 ## Support
 
-- **The app, and the licence**: write to `orders@cuerunner.app` — the address the
-  [support page](https://cuerunner.app/support.html) publishes. Orders, trial requests and
-  support are all answered from that one inbox, and it is one person reading it.
-- **Issues**: [GitHub Issues](https://github.com/Huckcity/cuerunner/issues)
+- **Issues**: [GitHub Issues](https://github.com/Huckcity/cuerunner/issues) come first.
+- **Anything else**: write to `orders@cuerunner.app` — the address the
+  [support page](https://cuerunner.app/support.html) publishes. It is one person reading it, so
+  answers are best-effort.
 - **Feedback**: The fastest way to shape Cuerunner is to file an issue with your use case — "I run sound for X and need Y" directly drives the roadmap.
 
 ## Licence
 
-Cuerunner is source-available under the [Functional Source License 1.1, MIT future licence](./LICENSE) (FSL-1.1-MIT). In short:
+Cuerunner is free and open source under the [MIT License](./LICENSE).
 
-- **Use it for anything, including paid work.** Running a show, a tour, a venue, a broadcast — commercial use is permitted, and so are internal tools and professional services built around it.
-- **Don't sell it as a competing product.** You may not offer Cuerunner, or something substantially similar, as a commercial product or service of your own.
-- **Every release becomes MIT two years after it is published**, irrevocably. FSL exists to keep this product alive while it is being built, not to hold it back forever.
-
-The versions published before this licence (up to and including v0.13.0) were released under MIT and stay under MIT — that grant cannot be withdrawn.
+- **ASIO.** Official Windows builds are built with Steinberg's ASIO SDK, under Steinberg's own
+  agreement. The SDK is not in this repository and the MIT licence does not cover it (see
+  `native/audio/third_party/DEPENDENCIES.json`), so a build from source has no ASIO unless you
+  supply the SDK yourself — see *Packaging prerequisites*.
+- **The name and logo.** The code licence does not grant the Cuerunner name or logo.

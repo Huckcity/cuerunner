@@ -422,7 +422,7 @@ contextBridge.exposeInMainWorld('cuerunner', {
       subscribe(SHOW_CHANNELS.events, callback)
   },
   redundancy: {
-    /** This machine's half of a pair. Reading is free; changing it is a Pro feature. */
+    /** This machine's half of a pair. */
     settings: (): Promise<RedundancySettings> =>
       invoke(REDUNDANCY_CHANNELS.settings),
     configure: (patch: Partial<RedundancySettings>): Promise<RedundancyConfigureResult> =>

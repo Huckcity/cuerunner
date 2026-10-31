@@ -136,7 +136,7 @@ let backup = null
 
 async function capture() {
   // Both machines are stood up the way the e2e suite stands one up, from e2e/helpers.ts:
-  // the same arguments, the same ozone pin, the same silent backend, the same licence
+  // the same arguments, the same ozone pin, the same silent backend
   // handling. A capture that launched its own app would be a second implementation of the
   // thing the suite already owns, and the two would drift.
   ;({ app: liveApp, page: live } = await launchApp({ userDataDir: liveDir }))

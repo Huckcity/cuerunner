@@ -1,7 +1,7 @@
 // SMPTE timecode: where this machine hears the clock (its own settings), how the open show
 // follows it (the show's section, sent on whenever it changes), the clocks the timecode cues
 // run, and the status of all of it. Reading and setting are free — they only say where to
-// listen and how — while starting a clock is the Pro half, and the refusal says so.
+// listen and how — and starting a clock is refused when it cannot run, and the refusal says so.
 
 import type { Refusal } from './refusal'
 import type {

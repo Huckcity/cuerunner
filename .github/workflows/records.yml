@@ -9,10 +9,13 @@
 # They *can* break a guard, and that is the whole job here: twelve suites under `scripts/` read
 # the records as text (`lane-claims` reads the claims record, `wave3-adoption` the candidate
 # register, `showfile-prose` the README and the served pages, `published-*` the numbers), and
-# `src/main/license/` parses the capability catalogue at runtime. One linux machine, one job,
+# One linux machine, one job,
 # seconds rather than minutes — no engine build, no Electron download, no ASIO SDK, because
 # none of them reads a document.
 name: Records
+
+permissions:
+  contents: read
 
 on:
   pull_request:
@@ -23,7 +26,6 @@ on:
       - 'AGENTS.md'
       - 'ENGINE-REVIEW-2-AND-ROADMAP.md'
       - '.github/RELEASE_CHECKLIST.md'
-      - '.agents/**'
 
 # A push supersedes the run before it: what a pull request needs is the answer for its
 # newest commit, and without this every push queues a whole extra run beside the one already
@@ -36,7 +38,7 @@ concurrency:
 
 jobs:
   records:
-    runs-on: [self-hosted, linux, x64, ubox]
+    runs-on: [ubuntu-24.04]
     steps:
       - uses: actions/checkout@v7
 
@@ -50,4 +52,4 @@ jobs:
       # that build produces. These are the suites that open the records, and the module that
       # reads the capability catalogue as its own input.
       - name: The records, read by the suites that hold them
-        run: npx vitest run scripts/ src/main/license/
+        run: npx vitest run scripts/

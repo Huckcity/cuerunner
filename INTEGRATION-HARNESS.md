@@ -340,8 +340,7 @@ Scripts (the existing `scripts/run-e2e.js` already forwards stray arguments to
 
 Specs import the helpers that already exist, from `../e2e/helpers`:
 
-- `launchApp` / `closeApp` — the app, on a private display, with a license where a Pro
-  surface is needed (`launchApp({ license: mintLicense() })`, as every existing spec does).
+- `launchApp` / `closeApp` — the app, on a private display.
 - `openFromRecent` — a fixture `.cuerunner` written into a temp directory and opened through
   the app's own recent list, no dialogs.
 - `freePort` / `oscPortOfItsOwn` — a port for the peer, and a port of the app's own.

@@ -102,7 +102,7 @@ describe('EwDxCredentials', () => {
   })
 
   it('says why a password was refused, under the box, and keeps what was typed', async () => {
-    const refused: EwDxCredentialResult = { ok: false, error: 'Cuerunner Pro is required for the show services' }
+    const refused: EwDxCredentialResult = { ok: false, error: 'That password was refused' }
     vi.mocked(show().ewDxSetPassword).mockResolvedValue(refused)
     await render()
 
@@ -110,7 +110,7 @@ describe('EwDxCredentials', () => {
     await click(button('Save'))
 
     const alert = container.querySelector('[role="alert"]')!
-    expect(alert.textContent).toBe('Cuerunner Pro is required for the show services')
+    expect(alert.textContent).toBe('That password was refused')
     expect(input().value).toBe('Correct-horse')
     expect(input().getAttribute('aria-invalid')).toBe('true')
 

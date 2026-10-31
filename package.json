@@ -1,13 +1,17 @@
 {
   "name": "cuerunner",
   "version": "0.17.0",
-  "license": "FSL-1.1-MIT",
+  "license": "MIT",
   "description": "QLab-style show control for Windows",
   "homepage": "https://cuerunner.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Huckcity/cuerunner.git"
+  },
+  "bugs": "https://github.com/Huckcity/cuerunner/issues",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
-    "dev:pro": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/dev-pro.ts",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
@@ -30,9 +34,6 @@
     "site": "node scripts/serve-website.mjs",
     "demo:write": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/regenerate-demo.ts",
     "demo:check": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/regenerate-demo.ts --check",
-    "license:keygen": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/license-keygen.ts keygen",
-    "license:issue": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/license-keygen.ts issue",
-    "license:verify": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/license-keygen.ts verify",
     "postinstall": "node scripts/postinstall.js",
     "build:native": "node scripts/build-native-audio.mjs",
     "build:ffmpeg": "node scripts/build-ffmpeg-linux.mjs",
@@ -63,7 +64,7 @@
   "build": {
     "appId": "app.cuerunner",
     "productName": "Cuerunner",
-    "copyright": "Copyright © 2026",
+    "copyright": "Copyright © 2026 Adam Gibbons",
     "directories": {
       "buildResources": "resources",
       "output": "dist"

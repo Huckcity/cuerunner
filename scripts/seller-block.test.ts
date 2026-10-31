@@ -1,6 +1,6 @@
 // The seller block, held to every page the site serves.
 //
-// The company's own record is what a buyer checks the site against, and it is what a
+// The company's own record is what a user checks the site against, and it is what a
 // code-signing authority checks it against too: a website that names the entity it sells for is
 // evidence a certificate can be issued on, and one that names nobody is not. So the block is
 // declared once (`website/docs/contact.mjs`) and printed in the shared footer of every page —

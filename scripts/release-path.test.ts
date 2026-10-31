@@ -1325,7 +1325,7 @@ function mirrorNames(reading: Reading): string[] {
 }
 
 /**
- * The two surfaces that hand a buyer a file, held to what the mirror writes. Every `latest/` href
+ * The two surfaces that hand a user a file, held to what the mirror writes. Every `latest/` href
  * one of them carries has to be a name the mirror's own map produces — or the sums file the
  * mirror composes and uploads — and between them they have to account for every name the mirror
  * writes, so a rename on either side fails here rather than at a download. Each has to name the
@@ -1343,7 +1343,7 @@ function cardProblems(reading: Reading): string[] {
     const found = [...text.matchAll(/https:\/\/pub\.cuerunner\.app\/latest\/([\w.-]+)/g)].map((link) => link[1])
     if (found.length === 0) {
       problems.push(
-        `${file} links no \`${DOWNLOADS}…\` file, so a buyer is handed nothing to download and the mirror's names are held to nothing`
+        `${file} links no \`${DOWNLOADS}…\` file, so a user is handed nothing to download and the mirror's names are held to nothing`
       )
     }
     for (const name of found) {
@@ -1372,7 +1372,7 @@ function cardProblems(reading: Reading): string[] {
   for (const name of published) {
     if (!linked.has(name)) {
       problems.push(
-        `no card links \`${DOWNLOADS}${name}\`, and the mirror writes it: a published file no buyer can reach — the digest file is only reachable because a card links it`
+        `no card links \`${DOWNLOADS}${name}\`, and the mirror writes it: a published file no user can reach — the digest file is only reachable because a card links it`
       )
     }
   }
@@ -1419,7 +1419,7 @@ function releaseStatements(reading: Reading): Statement[] {
     },
     {
       file: CHECKLIST,
-      says: 'the mirror is checked at the buyer-facing host the site\'s cards point at',
+      says: 'the mirror is checked at the user-facing host the site\'s cards point at',
       patterns: [/pub\.cuerunner\.app/, /curl -sI/]
     },
     {
@@ -2133,7 +2133,7 @@ describe.skipIf(process.platform === 'win32')('the mirror the composed list fill
     const composed = compose(composerScript(LIVE), UNSIGNED)
     const { status, sums, errors } = mirror(script, composed.mirror, '', composed.feed)
     expect(status, `the mirror exited ${status}: ${errors}`).toBe(0)
-    // The buyer's file: the bytes a card hands out, digested under the name the card links —
+    // The user's file: the bytes a card hands out, digested under the name the card links —
     // `Cuerunner-Setup.exe` rather than the build's `Cuerunner Setup 0.14.0.exe` — in coreutils'
     // own `<digest>  <name>` form, and with nothing of an earlier run's sums left in it.
     expect(sums).toEqual([
@@ -2246,8 +2246,8 @@ describe('the release path the checks exist to refuse', () => {
   it('names a publishing gate that would skip the run this repository starts', () => {
     const eventGated = doctored(
       LIVE,
-      "    if: github.ref_type == 'tag' && success()\n    runs-on: [self-hosted, linux, x64, ubox]\n    # The lists the release page",
-      "    if: github.ref_type == 'tag' && github.event_name == 'release' && success()\n    runs-on: [self-hosted, linux, x64, ubox]\n    # The lists the release page"
+      "    if: github.ref_type == 'tag' && success()\n    runs-on: [ubuntu-24.04]\n    # The lists the release page",
+      "    if: github.ref_type == 'tag' && github.event_name == 'release' && success()\n    runs-on: [ubuntu-24.04]\n    # The lists the release page"
     )
     expect(publishGateProblems(eventGated)).toEqual([
       expect.stringContaining('gates on `github.event_name`')
@@ -2382,8 +2382,8 @@ describe('the release path the checks exist to refuse', () => {
   it('names publication that no longer waits on the tag ref', () => {
     const onBranch = doctored(
       LIVE,
-      "    if: github.ref_type == 'tag' && success()\n    runs-on: [self-hosted, linux, x64, ubox]\n    # The lists the release page",
-      "    if: github.ref_type == 'branch' && success()\n    runs-on: [self-hosted, linux, x64, ubox]\n    # The lists the release page"
+      "    if: github.ref_type == 'tag' && success()\n    runs-on: [ubuntu-24.04]\n    # The lists the release page",
+      "    if: github.ref_type == 'branch' && success()\n    runs-on: [ubuntu-24.04]\n    # The lists the release page"
     )
     expect(publishGateProblems(onBranch)).toEqual([
       expect.stringContaining("which does not test `github.ref_type == 'tag'`")
@@ -2393,8 +2393,8 @@ describe('the release path the checks exist to refuse', () => {
   it('names a gate that dropped the jobs it needs by testing the ref', () => {
     const forgotten = doctored(
       LIVE,
-      "    if: github.ref_type == 'tag' && success()\n    runs-on: [self-hosted, linux, x64, ubox]\n    # The lists the release page",
-      "    if: github.ref_type == 'tag'\n    runs-on: [self-hosted, linux, x64, ubox]\n    # The lists the release page"
+      "    if: github.ref_type == 'tag' && success()\n    runs-on: [ubuntu-24.04]\n    # The lists the release page",
+      "    if: github.ref_type == 'tag'\n    runs-on: [ubuntu-24.04]\n    # The lists the release page"
     )
     expect(publishGateProblems(forgotten)).toEqual([expect.stringContaining('drops `success()`')])
   })

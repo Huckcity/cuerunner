@@ -7,7 +7,7 @@ export const GUIDES = [
   {
     path: 'guide.html',
     title: 'Guides',
-    blurb: 'Walkthroughs for running a show with Cuerunner: your first show, building a cue list, running it, and the Pro features around it.',
+    blurb: 'Walkthroughs for running a show with Cuerunner: your first show, building a cue list, running it, and the features around it.',
     body: `
     <section class="panel reveal">
       <h1>Guides</h1>
@@ -185,7 +185,7 @@ export const GUIDES = [
         <li><strong>The bar under the toolbar</strong> answers the two questions asked mid-show: what is playing, and what GO will fire next. Each side shows the cue's number, its name and the first line of its notes.</li>
         <li><strong>The cue list</strong> is the running order. One row per cue.</li>
         <li><strong>The inspector</strong> on the right is the selected cue's settings. Its tabs change with the type of cue.</li>
-        <li><strong>The dock</strong> along the bottom shows one panel at a time: the selected cue, the run log, and the Pro panels.</li>
+        <li><strong>The dock</strong> along the bottom shows one panel at a time: the selected cue, the run log, and the other panels.</li>
         <li><strong>STOP and GO</strong> are the transport. Panic is <kbd>Shift</kbd> + <kbd>Esc</kbd>, and in the Playback menu.</li>
       </ol>
     </section>

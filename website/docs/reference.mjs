@@ -550,7 +550,7 @@ export const REFERENCE = [
 
     <section class="panel reveal delay-3" id="timecode">
       <h2>Timecode</h2>
-      <p>Two halves. <strong>Source</strong> and where it arrives — the MIDI input, the audio input and channel, the UDP port — are kept on the computer: which port the clock is on is a fact about this rack. Everything under <strong>This show</strong> — rate, freewheel, chase, what happens when it stops, offset and tolerance — is saved in the show file, so the show follows its clock the same way on any machine that opens it; a show that leaves them all at their defaults carries nothing for them, and an edit to them goes back with undo. The receiver is part of Cuerunner Pro. The <a href="../guides/console.html#timecode">guide</a> shows it in use.</p>
+      <p>Two halves. <strong>Source</strong> and where it arrives — the MIDI input, the audio input and channel, the UDP port — are kept on the computer: which port the clock is on is a fact about this rack. Everything under <strong>This show</strong> — rate, freewheel, chase, what happens when it stops, offset and tolerance — is saved in the show file, so the show follows its clock the same way on any machine that opens it; a show that leaves them all at their defaults carries nothing for them, and an edit to them goes back with undo. The <a href="../guides/console.html#timecode">guide</a> shows it in use.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
@@ -1056,7 +1056,7 @@ await rig.blackout()</code></div>
       </p>
       <p id="gdtf">
         <strong>A fixture type read from a GDTF file</strong> (DIN SPEC 15800; Lighting →
-        Patch → Import GDTF file…, part of Cuerunner Pro) is copied into the show like any
+        Patch → Import GDTF file…) is copied into the show like any
         other type, so the show does not need the file again. Only the archive's
         <code>description.xml</code> is read — the models and wheel images beside it are
         not — up to 16 MB of XML, and a description that declares a document type is

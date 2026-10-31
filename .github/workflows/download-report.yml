@@ -38,7 +38,7 @@ permissions:
 
 jobs:
   report:
-    runs-on: [self-hosted, linux, x64, ubox]
+    runs-on: [ubuntu-24.04]
     steps:
       - uses: actions/checkout@v7
 

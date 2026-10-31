@@ -13,7 +13,7 @@ import type { ShowEvent, ShowSnapshot } from '../../../shared/show'
  *
  * This runs on any machine: the inputs the free half owns — OSC and MIDI — publish
  * through the same bus, and a machine with no key should still see what it hears. The
- * Pro services simply report as stopped with the reason, and the panels say so.
+ * A service that cannot run reports as stopped with the reason, and the panels say so.
  */
 export function useShowBridge(): void {
   const settings = useStore(s => s.showSettings)

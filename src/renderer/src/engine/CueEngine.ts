@@ -285,8 +285,6 @@ interface RunnerDeps {
   getWorkspacePath: () => string | null
   // Output port a MIDI cue falls back to when it does not name one itself.
   getMidiDefaultPort: () => string
-  // Whether this machine may run the Pro cues. Read per firing rather than latched at
-  // init: a key can be entered or removed while the show is loaded.
   // How long each firing surface stays deaf after it fires. Read per press, because the
   // operator can change it while the show is loaded.
   getTriggerGuard: () => TriggerGuardSettings

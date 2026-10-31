@@ -7,8 +7,7 @@
 // main, so a cancel is an ordinary answer — `null` inside an `ok` envelope — rather than
 // a rejection. Every other ordinary state refuses the same way: a file this build cannot
 // read, a show with a cue type it does not know, an archive that arrived damaged. The
-// Pro surfaces refuse as a value too: the show is the operator's either way, and a save
-// writes its history whether or not this machine can read it. Only a fault rejects.
+// A refusal is a value: only a fault rejects.
 
 import type { Refusal } from './refusal'
 import type { ConflictPolicy, MergeNote, MergeTally } from '../showfileMerge'

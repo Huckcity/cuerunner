@@ -40,7 +40,7 @@ describe('the update feed the packaging declares', () => {
     }
   })
 
-  it('gives a Mac the zip it updates from, beside the dmg a buyer downloads', () => {
+  it('gives a Mac the zip it updates from, beside the dmg a user downloads', () => {
     const targets = pkg.build.mac.target.map(entry => `${entry.target}:${entry.arch.join(',')}`)
     expect(targets).toEqual(['dmg:universal', 'zip:universal'])
   })

@@ -1,7 +1,5 @@
 // The script panel and the script cues: read a file's includes, read a document the panel
-// can draw, pick one off disk, and run a shell command. The panel is the Pro surface; the
-// includes a script cue reads are not, so the refusal for a locked app lives with the two
-// channels that are the panel rather than on the namespace.
+// can draw, pick one off disk, and run a shell command.
 
 import type { ScriptDocument } from '../show'
 import type { Refusal } from './refusal'

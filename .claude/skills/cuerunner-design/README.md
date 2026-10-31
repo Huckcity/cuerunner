@@ -8,7 +8,7 @@ QLab is the industry-standard macOS show-control tool used in live theatre, conc
 
 ### Source
 
-- **Codebase:** GitHub — `Huckcity/cuerunner` (private, `main` branch)
+- **Codebase:** GitHub — `Huckcity/cuerunner` (public, `main` branch)
 - **Figma:** None provided
 - **Design system:** Derived entirely from the codebase CSS and component files
 

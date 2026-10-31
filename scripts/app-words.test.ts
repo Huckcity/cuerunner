@@ -13,7 +13,7 @@
 // caret (`Toolbar.tsx`), the File menu (`src/shared/fileMenu.ts`), the window's other menus
 // (`src/main/index.ts`, where the Edit menu's Undo and Redo and the Playback menu's Panic are
 // declared) and the two dialogs' tabs (`SettingsDialog.tsx`, `ShowSettings.tsx`). The label readers
-// are the shape `scripts/pricing-page.test.ts` uses — a pattern over the file's text with its own
+// are the shape `scripts/reference-page.test.ts` uses — a pattern over the file's text with its own
 // line wrapping taken out, so a label reads as the operator meets it in the app — and each list is
 // read with the count it declares, so an entry the reader cannot parse refuses rather than quietly
 // leaving a label nothing is held to.

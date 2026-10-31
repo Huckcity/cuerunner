@@ -59,7 +59,7 @@ its artifacts are.
 - [ ] **The Steinberg agreement is signed before any ASIO-linked installer is published.**
       The engine hosts ASIO drivers only when Steinberg's ASIO SDK was present at build time
       (`CUERUNNER_ASIO_SDK`; see *Packaging prerequisites* in `README.md`), and the SDK's
-      proprietary licence — the one a closed-source application uses — permits *building*
+      proprietary licence, which official builds use, permits *building*
       against it but permits *publishing* a build that links it only under the License
       Agreement signed by Steinberg. `build-windows` enforces that rather than trusting this
       list: when its probe found an SDK and `native/audio/third_party/ASIO-AGREEMENT.md` is
@@ -82,7 +82,7 @@ its artifacts are.
       in `latest/` are exactly the files that section accounts for, with the `SHA256SUMS` the
       section names sitting beside them on the page.
 - [ ] **Check that the mirror the site's cards point at serves them.** `pub.cuerunner.app` is
-      the buyer-facing host, and nothing in the pipeline can see it from the inside:
+      the public download host, and nothing in the pipeline can see it from the inside:
 
       ```bash
       curl -sI https://pub.cuerunner.app/latest/Cuerunner-Setup.exe
@@ -117,7 +117,7 @@ its artifacts are.
       Cloudflare's side — rather than at this pipeline, and is to be reported rather than worked
       around.
 - [ ] **Check the update feed the installed apps read.** The feeds are what every copy of the
-      app checks against once a day, so they are checked as a buyer's download is:
+      app checks against once a day, so they are checked as a download is:
 
       ```bash
       curl -s https://pub.cuerunner.app/latest/latest.yml

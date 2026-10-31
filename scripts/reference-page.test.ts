@@ -93,11 +93,10 @@ function settingsTabs(source: string): Tab[] {
   return tabs
 }
 
-/** A section's heading as the rendered page carries it, with the Pro chip's word taken off it. */
+/** A section's heading as the rendered page carries it. */
 function headingOf(rendered: string, anchor: string): string | undefined {
   const section = new RegExp(`<section[^>]*\\bid="${anchor}"[^>]*>\\s*<h2>([\\s\\S]*?)</h2>`).exec(rendered)
   return section?.[1]
-    .replace(/<span class="pro">[\s\S]*?<\/span>/g, '')
     .replace(/<[^>]*>/g, '')
     .replace(/\s+/g, ' ')
     .trim()

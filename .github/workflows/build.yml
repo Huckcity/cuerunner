@@ -15,13 +15,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # A release runs entirely on the homelab machines, like every other workflow here:
-  # Linux and the packaging on ubox, the macOS half on the Mac mini, the Windows installer
-  # on the NUC (provisioning: ~/homelab/ci/). Nothing publishes from GitHub's runners, and
-  # nothing here waits on them.
-
+  # A release runs on GitHub-hosted runners, like every workflow here. Its secrets are not given
+  # to a fork's pull request, and only someone with write access can start this workflow.
   test:
-    runs-on: [self-hosted, linux, x64, ubox]
+    runs-on: [ubuntu-24.04]
     steps:
       - uses: actions/checkout@v7
 
@@ -30,11 +27,9 @@ jobs:
           node-version: 24
 
       - name: Install ALSA dev headers
-        # Already on the homelab runner, and that host has one dpkg lock shared by every slot it
-        # runs — the eight `ubox` runners between them.
         run: |
-          dpkg -s libasound2-dev >/dev/null 2>&1 ||
-            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
+          sudo apt-get update -qq
+          sudo apt-get install -y libasound2-dev
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
@@ -61,7 +56,7 @@ jobs:
         run: npm test
 
   test-e2e:
-    runs-on: [self-hosted, macos, arm64, mac-mini]
+    runs-on: [macos-15]
     steps:
       - uses: actions/checkout@v7
 
@@ -81,7 +76,7 @@ jobs:
 
   build-windows:
     needs: [ test, test-e2e ]
-    runs-on: [self-hosted, windows, x64, win-ci]
+    runs-on: [windows-2025]
     # What this build is, for the release job's notes and for the file list the release page
     # and the mirror are composed from: the installer it published — empty when it published
     # none — whether a certificate signed it, and whether it linked the ASIO SDK. Every one
@@ -117,6 +112,20 @@ jobs:
           echo LIBPATH=%LIBPATH%>>"%GITHUB_ENV%"
           echo VCToolsInstallDir=%VCToolsInstallDir%>>"%GITHUB_ENV%"
           for %%p in ("%PATH:;=" "%") do echo %%~p>>"%GITHUB_PATH%"
+
+      # The SDK is fetched from Steinberg for this build and never committed or uploaded: its licence
+      # forbids redistributing it. Pinned by hash, so a changed download stops here. A failure is
+      # a warning: the release then has no ASIO, and its notes say so.
+      - name: Fetch the ASIO SDK from Steinberg
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'asio-sdk.zip'
+          Invoke-WebRequest -Uri 'https://download.steinberg.net/sdk_downloads/ASIO-SDK_2.3.4_2025-10-15.zip' -OutFile $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne 'd5ebf0c20dd2c5f43771fd0c1418f4b361bf52434ee670097cfa6b3a335e2eca') { throw "the ASIO SDK download hashes to $hash" }
+          New-Item -ItemType Directory -Force -Path 'C:\asio-sdk' | Out-Null
+          Expand-Archive -Path $zip -DestinationPath 'C:\asio-sdk' -Force
 
       # ASIO is optional and the SDK behind it cannot be shipped with the repository
       # (Steinberg's licence forbids redistributing it): a runner that has an SDK builds
@@ -306,7 +315,7 @@ jobs:
 
   build-mac:
     needs: [ test, test-e2e ]
-    runs-on: [self-hosted, macos, arm64, mac-mini]
+    runs-on: [macos-15]
     # The same recording as the Windows job's: the dmg this job published, and the two facts
     # the notes need — whether a certificate signed it, and whether the Apple credentials
     # notarised it. Both are read from the secrets that gate that work.
@@ -383,7 +392,7 @@ jobs:
           # electron-builder notarises the app inside the dmg, not the dmg itself. Apple only
           # issues a ticket for a container it has scanned, so the dmg must be submitted
           # before a ticket can be stapled to it — and the ticket has to travel with the file
-          # a buyer downloads, not just with the app inside it.
+          # a user downloads, not just with the app inside it.
           DMG=$(find dist -maxdepth 1 -name '*.dmg' | head -1)
           xcrun notarytool submit "$DMG" \
             --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" \
@@ -467,7 +476,7 @@ jobs:
 
   build-linux:
     needs: [ test, test-e2e ]
-    runs-on: [self-hosted, linux, x64, ubox]
+    runs-on: [ubuntu-24.04]
     # The artifacts with no signature to record: this pipeline has no Linux signing step — and
     # adds none — so the AppImage and the .deb are named as what they are in the release job's
     # notes.
@@ -483,11 +492,9 @@ jobs:
           node-version: 24
 
       - name: Install ALSA dev headers
-        # Already on the homelab runner, and that host has one dpkg lock shared by every slot it
-        # runs — the eight `ubox` runners between them.
         run: |
-          dpkg -s libasound2-dev >/dev/null 2>&1 ||
-            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
+          sudo apt-get update -qq
+          sudo apt-get install -y libasound2-dev
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
@@ -573,7 +580,7 @@ jobs:
     # packaging job that failed leaves its recording unset, and a release composed without one
     # would be a page its own notes cannot describe.
     if: github.ref_type == 'tag' && success()
-    runs-on: [self-hosted, linux, x64, ubox]
+    runs-on: [ubuntu-24.04]
     # The lists the release page and the R2 mirror each read, composed once, below.
     outputs:
       files: ${{ steps.notes.outputs.files }}
@@ -611,7 +618,7 @@ jobs:
         run: |
           set -eu
 
-          # This run's own files, created rather than appended to: a reused self-hosted workspace
+          # This run's own files, created rather than appended to: a reused workspace
           # can still hold the previous run's notes, list and digests, and what is published has
           # to be what this run recorded.
           : > release-notes.md
@@ -651,7 +658,7 @@ jobs:
 
           # One file the app's update check reads — a platform's `latest*.yml`, or the macOS zip
           # it names — carried on the release page with its digest like every other file, and
-          # listed for the mirror's feed rather than its download cards: no buyer is handed one.
+          # listed for the mirror's feed rather than its download cards: no user is handed one.
           # A feed is only ever recorded beside the installer it offers, so one with no
           # installer is a recording that contradicts itself.
           feed() {
@@ -790,7 +797,7 @@ jobs:
     # The same gate as the release job's, for the same reason: `latest/` is what the site's
     # download cards point at, and a branch dispatch must not overwrite it.
     if: github.ref_type == 'tag' && success()
-    runs-on: [self-hosted, linux, x64, ubox]
+    runs-on: [ubuntu-24.04]
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -825,7 +832,7 @@ jobs:
           UPDATES='zip=Cuerunner-mac.zip'
 
           # This run's own sums file, created rather than appended to: a reused workspace can
-          # still hold the previous run's digests, and what a buyer checks has to be what this
+          # still hold the previous run's digests, and what a user checks has to be what this
           # run copied.
           : > SHA256SUMS
 
@@ -851,7 +858,7 @@ jobs:
               --cache-control "public, max-age=31536000, immutable" --endpoint-url "$R2_ENDPOINT"
             aws s3 cp "$file" "s3://$R2_BUCKET/latest/$name" \
               --cache-control "public, max-age=300" --endpoint-url "$R2_ENDPOINT"
-            # The buyer's digests, composed from the bytes just copied and under the name this
+            # The user's digests, composed from the bytes just copied and under the name this
             # mirror wrote them by: the file a card hands out is the file these lines name, and a
             # file the copy did not reach fails here rather than leaving a short list.
             digest=$(sha256sum "$file")

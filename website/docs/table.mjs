@@ -1,6 +1,6 @@
 // The site's table markup, in one place.
 //
-// A guide's table, the free-versus-Pro tables and the price table are the same wrapper, the
+// A guide's table and the other pages' tables are the same wrapper, the
 // same classes and the same row shape, so the page modules share this rather than carrying a
 // copy each: the markup a page serves is then held by one source, and a change to it (a class,
 // a wrapper) reaches every table instead of the one it was edited in.

@@ -20,8 +20,8 @@ import { gdtfFallbackName, importGdtfFile, readGdtfRequest } from '../dmx/gdtf'
  * The show's lights over the network: sACN and Art-Net out of this machine, and the consoles
  * it listens to.
  *
- * Pro, because it is the show's own state held and sent on its behalf — a persistent stream
- * the show keeps up whoever is at the desk (AD-15). It reads no show settings: the window
+ * It is the show's own state held and sent on its behalf — a persistent stream the show keeps
+ * up whoever is at the desk. It reads no show settings: the window
  * resolves the rig and hands over where each universe goes as a command, so a patch edited
  * mid-show reconfigures the sockets and never restarts the stream — a restart would end every
  * universe's stream and put the rig dark for a frame.

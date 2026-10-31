@@ -57,8 +57,8 @@ export function tableRows(markdown: string, header: readonly string[]): string[]
 }
 
 /**
- * The record as text, or a failure. The free/Pro checks have no other input, and an empty
- * one would let every class through, so a record that cannot be opened is loud. `at` is the
+ * The record as text, or a failure. A check has no other input, and an empty
+ * one would let everything through, so a record that cannot be opened is loud. `at` is the
  * record's own path unless a caller asks for another — the guard proves the loudness against
  * a path that holds nothing.
  */

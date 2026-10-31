@@ -940,18 +940,6 @@ kbd {
   border-color: var(--border-input);
 }
 
-/* The Pro tag, wherever a heading or a row carries one. */
-.pro {
-  margin-left: 8px;
-  font-family: var(--font-cond);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--accent-amber);
-  vertical-align: middle;
-}
-
 .doc-layout code {
   font-family: var(--font-mono);
   font-size: 13px;

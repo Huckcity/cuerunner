@@ -14,6 +14,9 @@ name: Integration (hardware)
 # passed. The step below is the other half of that honesty: a run that names a desk nobody can
 # reach fails here, with the address and what to check, instead of in a spec twenty minutes
 # later (compare the console check `integration-vendor.yml` makes for the same reason).
+# This repository is public and has no self-hosted runner registered, so a dispatch of this
+# lane waits until a maintainer attaches one for the run, then removes it. A fork's pull request
+# can name any runner label, so a runner must not stay registered here.
 on:
   workflow_dispatch:
     inputs:

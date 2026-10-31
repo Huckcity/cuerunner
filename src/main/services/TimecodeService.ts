@@ -6,8 +6,7 @@ import type { ShowSettings } from '../../shared/show'
  * Follows the clock the show is driven by: MTC on a MIDI input, LTC on an audio input, or
  * ArtTimeCode on the network.
  *
- * Pro, like the other services that run the show for the operator rather than listen for
- * them. Its settings are the machine's — which port the clock arrives on and which input
+ * Its settings are the machine's — which port the clock arrives on and which input
  * the LTC cable is in belong to this rack — so it declares no section of the show's, and
  * the hub restarts it when they change.
  */

@@ -6,12 +6,8 @@ name: Soak
 # times out). The `faults` job is the other half — the kill tests that assert what the
 # app does when something dies underneath it.
 #
-# Scheduled runs are on the default branch only. Each shard is about an hour on the
-# self-hosted runner in the homelab (`ubox`, the labels the Linux jobs below carry),
-# which is what makes a nightly this long affordable at all: as GitHub-hosted minutes it
-# would be nine hours of a three-thousand-minute month, every night. `minutes` scales the
-# show the night paces; the shards are independent, so the runner's capacity is what
-# decides how long the night is rather than the size of the show.
+# Scheduled runs are on the default branch only. `minutes` scales the show the night paces, and
+# the shards are independent.
 on:
   schedule:
     - cron: '43 2 * * *'
@@ -38,7 +34,7 @@ concurrency:
 
 jobs:
   soak:
-    runs-on: [self-hosted, linux, x64, ubox]
+    runs-on: [ubuntu-24.04]
     timeout-minutes: 110
     strategy:
       fail-fast: false
@@ -52,11 +48,9 @@ jobs:
           node-version: 24
 
       - name: Install ALSA dev headers
-        # Already on the homelab runner, and that host has one dpkg lock shared by every slot it
-        # runs — the eight `ubox` runners between them.
         run: |
-          dpkg -s libasound2-dev >/dev/null 2>&1 ||
-            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
+          sudo apt-get update -qq
+          sudo apt-get install -y libasound2-dev
 
       - run: npm ci --legacy-peer-deps
 
@@ -88,7 +82,7 @@ jobs:
   # half of it (stalled streams, a lost device, malformed media) runs on every pull
   # request too. This job is what keeps them honest over time.
   faults:
-    runs-on: [self-hosted, linux, x64, ubox]
+    runs-on: [ubuntu-24.04]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -98,11 +92,9 @@ jobs:
           node-version: 24
 
       - name: Install ALSA dev headers
-        # Already on the homelab runner, and that host has one dpkg lock shared by every slot it
-        # runs — the eight `ubox` runners between them.
         run: |
-          dpkg -s libasound2-dev >/dev/null 2>&1 ||
-            sudo apt-get -o DPkg::Lock::Timeout=300 install -y libasound2-dev
+          sudo apt-get update -qq
+          sudo apt-get install -y libasound2-dev
 
       - run: npm ci --legacy-peer-deps
 
@@ -113,25 +105,13 @@ jobs:
           key: ffmpeg-helper-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg-linux.mjs') }}
 
       - name: Install runtime dependencies
-        if: runner.environment == 'github-hosted'
-        run: npx playwright install-deps
+        run: |
+          npx playwright install-deps
+          sudo apt-get install -y xvfb
 
       # Same reason as the E2E lane in ci.yml: the kernel and the media libraries are a
       # Chromium process's minimum, the host is provisioned with them once, and this says
       # it still is. `npx playwright install-deps` is how GitHub's runners get them.
-      - name: Runtime dependencies are provisioned on the runner
-        if: runner.environment == 'self-hosted'
-        run: |
-          missing=()
-          for pkg in libnss3 libgbm1 libasound2t64 libatk-bridge2.0-0t64 libcups2t64 \
-                     libxkbcommon0 libgtk-3-0t64 xvfb; do
-            dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
-          done
-          if [ "${#missing[@]}" -gt 0 ]; then
-            echo "::error::missing on this runner: ${missing[*]} — provision the host (~/homelab/ci/)"
-            exit 1
-          fi
-          echo 'runtime libraries present'
 
       - name: Native acceptance, including the fault injection
         run: npm run test:native
@@ -150,7 +130,7 @@ jobs:
   report:
     needs: [soak, faults]
     if: always()
-    runs-on: [self-hosted, linux, x64, ubox]
+    runs-on: [ubuntu-24.04]
     steps:
       - uses: actions/checkout@v7
 
@@ -196,7 +176,7 @@ jobs:
     # `success()` is what must not be asked for here. A cancelled run is still skipped:
     # its report says only that no shard reported, and that would overwrite a real night.
     if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
-    runs-on: [self-hosted, linux, x64, ubox]
+    runs-on: [ubuntu-24.04]
     permissions:
       contents: read
       pages: write

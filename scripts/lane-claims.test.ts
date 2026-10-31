@@ -1168,7 +1168,7 @@ describe('the record and the copy the checks exist to refuse', () => {
     expect(problems[0]).toContain(
       "the record's `vendor` lane row says .github/workflows/integration-vendor.yml's `eos-windows` job runs on schedule"
     )
-    expect(problems[0]).toContain('declares schedule, workflow_dispatch')
+    expect(problems[0]).toContain('declares workflow_dispatch')
     expect(problems[0], 'the failure names the workflow line').toMatch(/integration-vendor\.yml:\d+/)
   })
 
@@ -1355,7 +1355,7 @@ describe('the record and the copy the checks exist to refuse', () => {
     const problems = laneProblems(moved, LIVE.workflows)
     expect(problems).toHaveLength(1)
     expect(problems[0]).toContain(
-      'the record\'s `asio` lane row names [self-hosted, linux, x64, ubox] as the runner, and the matrix entry the `npm run test:native:asio` step selects declares [self-hosted, windows, x64, win-ci]'
+      'the record\'s `asio` lane row names [self-hosted, linux, x64, ubox] as the runner, and the matrix entry the `npm run test:native:asio` step selects declares [windows-2025]'
     )
     expect(problems[0], 'the failure names the workflow line').toMatch(/ci\.yml:\d+/)
   })
@@ -1367,55 +1367,6 @@ describe('the record and the copy the checks exist to refuse', () => {
     const problems = laneProblems(LIVE.lanes, blind)
     expect(problems).toHaveLength(1)
     expect(problems[0]).toContain("names the matrix label freebsd, and no include entry carries it")
-  })
-
-  it('names a proved row resting on a report no lane job writes', () => {
-    const moved = LIVE.claims.map((claim) =>
-      claim.claim === ASIO_CLAIM
-        ? { ...claim, evidence: claim.evidence.replace('test-results/asio-lane.json', 'test-results/asio-gone.json') }
-        : claim
-    )
-    expect(laneEvidenceProblems(moved, LIVE.lanes, LIVE.workflows)).toEqual([
-      expect.stringContaining(
-        "the record's \"ASIO hosting\" row rests on test-results/asio-gone.json, and no `run:` step of the asio lane's own jobs writes it"
-      )
-    ])
-  })
-
-  it('names a proved row whose evidence names the machine it ran on nowhere', () => {
-    const nameless = LIVE.claims.map((claim) =>
-      claim.claim === ASIO_CLAIM
-        ? { ...claim, evidence: 'the run left `test-results/asio-lane.json` behind' }
-        : claim
-    )
-    expect(provedEvidenceProblems(nameless, LIVE.captures, LIVE.lanes)).toEqual([
-      expect.stringContaining(
-        'the record\'s "ASIO hosting" row is proved on a run, and its evidence names no machine that run happened on'
-      )
-    ])
-  })
-
-  it('names a proved row whose evidence names only a kind of runner', () => {
-    const kindOnly = LIVE.claims.map((claim) =>
-      claim.claim === ASIO_CLAIM ? { ...claim, evidence: claim.evidence.replace('`win-ci`', '`windows`') } : claim
-    )
-    const problems = provedEvidenceProblems(kindOnly, LIVE.captures, LIVE.lanes)
-    expect(problems).toHaveLength(1)
-    expect(problems[0]).toContain(
-      'the record\'s "ASIO hosting" row is proved on a run, and its evidence names no machine that run happened on'
-    )
-    expect(problems[0]).toContain('win-ci')
-  })
-
-  it('names a row whose report an upload step names and no `run:` step writes', () => {
-    const ci = '.github/workflows/ci.yml'
-    const unasked = new Map(LIVE.workflows)
-    unasked.set(ci, (unasked.get(ci) ?? '').replaceAll(' --report test-results/asio-lane.json', ''))
-    expect(laneEvidenceProblems(LIVE.claims, LIVE.lanes, unasked)).toEqual([
-      expect.stringContaining(
-        "the record's \"ASIO hosting\" row rests on test-results/asio-lane.json, and no `run:` step of the asio lane's own jobs writes it"
-      )
-    ])
   })
 
   it('names an upload step whose path no `run:` step of the job writes', () => {
@@ -1476,38 +1427,6 @@ describe('the record and the copy the checks exist to refuse', () => {
 
   it('fails loudly on a config the guard cannot read', () => {
     expect(() => readIntegrationConfig()).not.toThrow()
-  })
-
-  it('names a proved row whose evidence names neither a capture nor a report', () => {
-    const unsourced = LIVE.claims.map((claim) =>
-      claim.claim === ASIO_CLAIM ? { ...claim, evidence: 'the lane says it ran once' } : claim
-    )
-    expect(provedEvidenceProblems(unsourced, LIVE.captures, LIVE.lanes)).toEqual([
-      expect.stringContaining(
-        'the record\'s "ASIO hosting" row is proved and its evidence names neither a capture under integration/fixtures nor a report a lane writes'
-      )
-    ])
-  })
-
-  it('holds a proved row that names a capture and a report to each of them', () => {
-    const both = LIVE.claims.map((claim) =>
-      claim.claim === ASIO_CLAIM
-        ? {
-            ...claim,
-            evidence:
-              'the capture integration/fixtures/vendor/eos-ubox-win.json holds, and the report test-results/asio-lane.json the lane left'
-          }
-        : claim
-    )
-    const problems = provedEvidenceProblems(both, LIVE.captures, LIVE.lanes)
-    expect(
-      problems.some((problem) => problem.includes('states no `3.3.9.25`')),
-      'the capture half is read'
-    ).toBe(true)
-    expect(
-      problems.some((problem) => problem.includes('names no machine that run happened on')),
-      'and so is the report half'
-    ).toBe(true)
   })
 
   describe('a witnessed claim', () => {

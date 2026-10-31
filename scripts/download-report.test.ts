@@ -522,7 +522,7 @@ function runnerProblems(yaml: string): string[] {
   const runner = /^ {4}runs-on: \[(.+)\]$/m.exec(job)
   if (runner === null) return [`${WORKFLOW}: the report job declares no single-line runs-on: label list`]
   const labels = runner[1].split(',').map((label) => label.trim()).filter((label) => label !== '')
-  const wanted = ['self-hosted', 'linux', 'x64', 'ubox']
+  const wanted = ['ubuntu-24.04']
   if (labels.join(' ') !== wanted.join(' ')) {
     return [`${WORKFLOW}: the report job runs on [${labels.join(', ')}], not [${wanted.join(', ')}]`]
   }
@@ -650,7 +650,7 @@ describe('the workflow that carries the report', () => {
     expect(permissionProblems(YAML)).toEqual([])
   })
 
-  it('runs on the homelab runner the other lanes use', () => {
+  it('runs on the GitHub-hosted runner the other lanes use', () => {
     expect(runnerProblems(YAML)).toEqual([])
   })
 
@@ -696,8 +696,8 @@ describe('the workflow the checks exist to refuse', () => {
     expect(problems).toEqual([expect.stringContaining('must grant issues: write')])
   })
 
-  it('sees a runner that is not the homelab one', () => {
-    const problems = workflowProblems(doctored('[self-hosted, linux, x64, ubox]', '[ubuntu-latest]'))
+  it('sees a runner that is not the hosted one', () => {
+    const problems = workflowProblems(doctored('[ubuntu-24.04]', '[ubuntu-latest]'))
     expect(problems).toEqual([expect.stringContaining('runs on [ubuntu-latest]')])
   })
 

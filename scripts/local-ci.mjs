@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// The lanes CI runs, run from here: the same commands on the homelab's own machines, over
-// ssh, without waiting for the runner queue.
+// The lanes CI runs, run from here: the same commands on machines of your own, over ssh,
+// without waiting for the runner queue. Point it at yours with the LOCAL_CI_* variables.
 //
 // The workflow is the authority on *what* a lane is (`npm run typecheck`, `npm test`,
 // `npm run test:native`, `npm run test:integration`, `npm run test:e2e`), and this script does
