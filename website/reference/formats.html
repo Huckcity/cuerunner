@@ -23,7 +23,6 @@
       <nav class="top-nav" aria-label="Primary">
         <a href="../guide.html">Guides</a>
         <a href="../reference/index.html" aria-current="page">Reference</a>
-        <a href="../pricing.html">Pricing</a>
         <a href="../support.html">Support</a>
         <a href="../interop.html">Other programs</a>
         <a href="../reliability.html">Reliability</a>
@@ -53,7 +52,7 @@
         outputs and the consoles heard — written only once a show has one, so a show with no
         lights saves the bytes it always did. Which network interface the lights leave by,
         and the sACN identity this machine sends as, are the machine's, in
-        <code>dmx.json</code> beside the licence.
+        <code>dmx.json</code> in the user-data folder.
       </p>
       <p id="gdtf">
         <strong>A fixture type read from a GDTF file</strong> (DIN SPEC 15800; Lighting →
@@ -98,7 +97,7 @@
         same way. The show's outputs are a <code>videoOutputs</code> list — name, size, timer,
         corner pin and soft edges, a mirror and a mask — written only when the show has one;
         where each output goes on a computer is kept on that computer, in
-        <code>video-outputs.json</code> beside the licence. A show whose pictures go on the next
+        <code>video-outputs.json</code> in the user-data folder. A show whose pictures go on the next
         GO carries a <code>pictures</code> section; a camera cue carries its camera's name, and
         each computer keeps the device it picked for that cue in <code>camera-devices.json</code>.
       </p>
@@ -148,7 +147,7 @@
     </section>
 
     <section class="panel reveal delay-1" id="bundle">
-      <h2>The bundle file<span class="pro">Pro</span></h2>
+      <h2>The bundle file</h2>
       <p>
         A <code>.cuerunnerx</code> is the show <em>and</em> its media as one file — the audio,
         video, image and MIDI files its cues play — a zip holding <code>show.cuerunner</code>
@@ -260,7 +259,7 @@
   </main>
 
   <footer class="site-footer">
-    <p>Cuerunner — show control for Windows, macOS and Linux. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+    <p>Cuerunner — show control for Windows, macOS and Linux. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a> · <a href="https://github.com/Huckcity/cuerunner">Source on GitHub</a> (MIT)</p>
     <p class="seller">Cuerunner is provided by ALGD LTD, company number NI744090, 121 Glencam Road, Omagh, Tyrone, BT79 7HB, United Kingdom.</p>
   </footer>
 </body>

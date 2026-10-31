@@ -23,7 +23,6 @@
       <nav class="top-nav" aria-label="Primary">
         <a href="../guide.html">Guides</a>
         <a href="../reference/index.html" aria-current="page">Reference</a>
-        <a href="../pricing.html">Pricing</a>
         <a href="../support.html">Support</a>
         <a href="../interop.html">Other programs</a>
         <a href="../reliability.html">Reliability</a>
@@ -198,7 +197,7 @@
     </section>
 
     <section class="panel reveal delay-2" id="light">
-      <h2>Light<span class="pro">Pro</span></h2>
+      <h2>Light</h2>
       <p>A look for the lighting rig, faded in over sACN or Art-Net. The rig itself is set up in the <a href="../guides/lighting.html">Lighting view</a>.</p>
       <div class="table-wrap">
         <table>
@@ -217,7 +216,7 @@
         releases it home; a panic does what the show's <strong>On panic</strong> says — hold,
         release or black out. The <strong>Tracking</strong> tab lists every parameter with a
         value at the cue: moved by it, set to what it already was, or tracking from an
-        earlier cue. Without a licence the cue stays in the show and is refused when fired.
+        earlier cue.
       </p>
     </section>
 
@@ -256,7 +255,7 @@
               <td>A note in the stack — "hold for the bow", "LX 40 is called by the SM". Its words are its <strong>Name</strong> and <strong>Notes</strong> on Basics, and the first line of the note is read on its row. GO completes it at once: an advance passes straight through it, so a memo between two cues never holds the show.</td>
             </tr>
             <tr>
-              <td><strong>Mic</strong><span class="pro">Pro</span></td>
+              <td><strong>Mic</strong></td>
               <td><strong>Mic</strong> — the Sennheiser EW-DX channel to act on, chosen from the packs the show knows (named by the plot and who is wearing the pack, or by what the receiver calls it), and <strong>Do</strong>: <strong>Mute</strong> or <strong>Unmute</strong>. There is no toggle, because a toggle run twice leaves the mic as the first run found it, and a cue list that can be jumped around in cannot know which that was. The receiver is asked afterwards: a mute that did not happen is an error on the cue, in the log and on its row, never a mic left open in silence. With no mic chosen the cue does nothing and says so.</td>
             </tr>
             <tr>
@@ -264,11 +263,11 @@
               <td>Plays a live input — a microphone, a line from the band — through the engine. <strong>Input</strong> (a capture device; the default input for a new cue), <strong>Channels</strong> (which of its inputs are the cue's channels), <strong>Volume</strong>, <strong>Pan</strong>, <strong>Fade in</strong> (50 ms, with a shape), <strong>Fade out</strong> (200 ms, used when the cue is stopped), <strong>Output patch</strong> and <strong>Routing</strong> as an audio cue's. It runs until stopped, or for its <strong>Duration</strong> when it has one. The input can be a different interface from the output: the engine resamples it to the output's clock and corrects the drift between the two, holding a small, steady buffer. <strong>Open input</strong> opens the device ahead of the cue so GO is instant and the meters read; the tab shows each channel's level, the time through the engine and the clock correction. Pause, show-wide pause, Fade cues, STOP and PANIC reach it. With no channel chosen it does nothing and says so. Not the <strong>Mic</strong> cue, which mutes a radio mic at its receiver.</td>
             </tr>
             <tr>
-              <td><strong>Timecode</strong><span class="pro">Pro</span></td>
+              <td><strong>Timecode</strong></td>
               <td>Runs a SMPTE clock. <strong>Rate</strong> — 24, 25, 29.97 drop-frame, 29.97 non-drop or 30 fps (25 for a new cue); <strong>Start from</strong> the <strong>Start</strong> time (01:00:00:00) or the incoming timecode (<strong>jam sync</strong>: the clock starts where the received one is, keeps to it, and carries on alone if it drops out); <strong>End</strong>, or empty to run until stopped — the cue's length is the difference. Outputs, in any mix, all one clock: <strong>MTC</strong> to a MIDI port (the show's output port if none is chosen) — a full-frame message on every start, locate and pause, then quarter frames; <strong>LTC</strong> written by the audio engine to an output channel (3 for a new cue) at a level in dBFS (−12) — give it a channel of its own; <strong>Art-Net</strong> ArtTimeCode once a frame to an address (255.255.255.255), or <code>host:port</code>. While it runs the tab shows where the clock is, with <strong>Pause</strong>/<strong>Resume</strong> and <strong>Locate</strong> to any frame. With no output ticked, or a start or end that is not a frame of the rate, the cue refuses and says why.</td>
             </tr>
             <tr>
-              <td><strong>Scene</strong><span class="pro">Pro</span></td>
+              <td><strong>Scene</strong></td>
               <td><strong>Scene</strong> — the one to recall. It answers for the whole show rather than for its placements: a channel the scene leaves off every fader is closed by the recall. Two facts go out, in this order — the <strong>membership</strong> (the channels the scene places on each fader, and the faders it takes them off) and then each mic's <strong>mute</strong> — and no message names a channel outside the show's own set. A mute carries the channel's own number, never a fader's. The membership goes over the route the desk takes it on — an SQ's own control service on TCP 51326, an Avantis's NRPN <code>40</code> on the desk link — and a desk with no such route reports the gap while the mutes go anyway. With no scene chosen the cue does nothing.</td>
             </tr>
           </tbody>
@@ -278,7 +277,7 @@
   </main>
 
   <footer class="site-footer">
-    <p>Cuerunner — show control for Windows, macOS and Linux. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+    <p>Cuerunner — show control for Windows, macOS and Linux. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a> · <a href="https://github.com/Huckcity/cuerunner">Source on GitHub</a> (MIT)</p>
     <p class="seller">Cuerunner is provided by ALGD LTD, company number NI744090, 121 Glencam Road, Omagh, Tyrone, BT79 7HB, United Kingdom.</p>
   </footer>
 </body>

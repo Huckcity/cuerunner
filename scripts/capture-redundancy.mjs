@@ -27,7 +27,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { closeApp, launchApp, mintLicense, openFromRecent } from '../e2e/helpers.ts'
+import { closeApp, launchApp, openFromRecent } from '../e2e/helpers.ts'
 import { underVirtualDisplay } from './virtual-display.mjs'
 
 // Before anything is launched: on Linux this re-runs the script under Xvfb, so the windows
@@ -103,11 +103,6 @@ fs.writeFileSync(showPath, JSON.stringify({
 
 /* ── The two machines ────────────────────────────────────────────────────── */
 
-// A licence of the run's own, minted by the same helper the e2e suite uses: a capture and
-// a spec license the app identically, and the app is told to trust the development-only
-// public key, which a packaged build ignores.
-const license = mintLicense({ licensee: 'Redundancy Walkthrough' })
-
 const liveDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-redundancy-live-'))
 const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-redundancy-backup-'))
 const livePort = 53110
@@ -144,8 +139,8 @@ async function capture() {
   // the same arguments, the same ozone pin, the same silent backend, the same licence
   // handling. A capture that launched its own app would be a second implementation of the
   // thing the suite already owns, and the two would drift.
-  ;({ app: liveApp, page: live } = await launchApp({ userDataDir: liveDir, license }))
-  ;({ app: backupApp, page: backup } = await launchApp({ userDataDir: backupDir, license }))
+  ;({ app: liveApp, page: live } = await launchApp({ userDataDir: liveDir }))
+  ;({ app: backupApp, page: backup } = await launchApp({ userDataDir: backupDir }))
 
   // And the show is opened the way a user opens it — through the recents list the file
   // menu shows — rather than by a script reaching into the store.

@@ -3,7 +3,6 @@
 //
 //   node scripts/audit-screens.mjs before      # then make the change
 //   node scripts/audit-screens.mjs after       # and compare the two directories
-//   AUDIT_UNLICENSED=1 node scripts/audit-screens.mjs after   # the free half as well
 //
 // capture-screenshots.mjs captures the figures the website publishes, and is held to
 // them. This is the other half: it opens every inspector tab of every cue type, every
@@ -14,12 +13,10 @@
 // Failures are printed and stepped over: a surface that has moved should not take the
 // other fifty with it.
 import { _electron as electron } from '@playwright/test'
-import { generateKeyPairSync } from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createLicense } from '../src/main/license/key.ts'
 import { underVirtualDisplay } from './virtual-display.mjs'
 
 await underVirtualDisplay()
@@ -29,25 +26,17 @@ const appEntry = path.join(root, 'out/main/index.js')
 const outDir = path.resolve(process.argv[2] ?? 'audit')
 fs.mkdirSync(outDir, { recursive: true })
 
-const licensed = process.env.AUDIT_UNLICENSED !== '1'
-const { privateKey, publicKey } = generateKeyPairSync('ed25519')
 const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-audit-'))
-if (licensed) {
-  fs.writeFileSync(path.join(userDataDir, 'license.key'), createLicense(
-    { v: 1, id: 'CRN-AUDIT1', licensee: 'Audit', issued: new Date().toISOString().slice(0, 10) },
-    privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
-  ))
-}
 
 const app = await electron.launch({
   args: [appEntry, `--user-data-dir=${userDataDir}`, '--ozone-platform=x11'],
-  env: { ...process.env, CUERUNNER_LICENSE_PUBLIC_KEY: publicKey.export({ type: 'spki', format: 'pem' }).toString() }
+  env: { ...process.env }
 })
 const page = await app.firstWindow()
 await page.waitForLoadState('domcontentloaded')
 await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1440, 900))
 
-const prefix = licensed ? '' : 'free-'
+const prefix = ''
 const shot = async (file, selector) => {
   try {
     const target = selector ? page.locator(selector).first() : page
@@ -111,7 +100,7 @@ for (const [cls, name] of [['btn-cue', 'cue'], ['btn-log', 'log'], ['btn-monitor
   await tryDo(name, async () => {
     await page.locator(`.${cls}`).click()
     await page.waitForTimeout(150)
-    if (name === 'wireless' && licensed) {
+    if (name === 'wireless') {
       await page.locator('.rf-demo-btn').click().catch(() => {})
       await page.waitForTimeout(300)
     }

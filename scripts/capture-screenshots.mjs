@@ -12,14 +12,12 @@
 // scripts/virtual-display.mjs), so the figures are the same whichever desk it was started
 // from — and no window appears on that desk while it runs.
 import { _electron as electron } from '@playwright/test'
-import { generateKeyPairSync } from 'node:crypto'
 import { Client } from 'node-osc'
 import fs from 'node:fs'
 import os from 'node:os'
 import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createLicense } from '../src/main/license/key.ts'
 import { underVirtualDisplay } from './virtual-display.mjs'
 
 // Before anything is launched: on Linux this re-runs the script under Xvfb, so the windows
@@ -61,28 +59,9 @@ await new Promise((resolve, reject) => {
   server.listen(8080, '127.0.0.1', resolve)
 })
 
-/* ── License ─────────────────────────────────────────────────────────────── */
-
-// Most of the figures in the guide are Pro surfaces — the monitor, the wireless panel, the
-// mic plot, the script, the scenes view — so the capture runs on a license of its own: a
-// throwaway pair minted here, a key signed with it, and the development-only public-key
-// override that a packaged build ignores. The app is given a private user-data directory
-// for the run, so the operator's own license is never read, written or shown.
-const { privateKey, publicKey } = generateKeyPairSync('ed25519')
+// The app gets a private user-data directory for the run, so the operator's own settings are
+// never read, written or shown.
 const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-shots-'))
-fs.writeFileSync(
-  path.join(userDataDir, 'license.key'),
-  createLicense(
-    {
-      v: 1,
-      id: 'CRN-SHOT01',
-      licensee: 'Guide Screenshots',
-      issued: new Date().toISOString().slice(0, 10)
-    },
-    privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
-  ),
-  'utf-8'
-)
 
 /* ── Capture ─────────────────────────────────────────────────────────────── */
 
@@ -91,10 +70,7 @@ const app = await electron.launch({
   // goes on the command line — the only lever that works — and the capture runs under
   // Xvfb: a virtual X server nobody is looking at. Same reason e2e/helpers.ts pins it.
   args: [appEntry, `--user-data-dir=${userDataDir}`, '--ozone-platform=x11'],
-  env: {
-    ...process.env,
-    CUERUNNER_LICENSE_PUBLIC_KEY: publicKey.export({ type: 'spki', format: 'pem' }).toString()
-  }
+  env: { ...process.env }
 })
 const page = await app.firstWindow()
 await page.waitForLoadState('domcontentloaded')

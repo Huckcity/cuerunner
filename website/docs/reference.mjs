@@ -6,10 +6,10 @@
 //
 // The settings page is the one page here that documents another window, so the two sides are
 // declared rather than left to drift: `SETTINGS_SECTIONS` names the settings tab each section
-// answers to, and `LICENSE_ROWS`/`LICENSE_KEY_ROWS`/`CHANNELS_ROWS` state the rows of the License
-// tab and the controls of the Show Settings → Channels tab. All of them are read back by
+// answers to, and `CHANNELS_ROWS` states the controls of the
+// Show Settings → Channels tab. All of them are read back by
 // `scripts/reference-page.test.ts` — the sections against the app's own `SETTINGS_TABS`, the rows
-// against the labels `LicenseSection.tsx` and `ChannelsTab.tsx` print — so a tab the app adds, a
+// against the labels `ChannelsTab.tsx` prints — so a tab the app adds, a
 // section that answers to no tab, and a row label that moves all fail the build.
 import { table } from './table.mjs'
 
@@ -29,61 +29,7 @@ export const SETTINGS_SECTIONS = [
   { tab: 'wireless', anchor: 'wireless' },
   { tab: 'redundancy', anchor: 'backup' },
   { tab: 'timecode', anchor: 'timecode' },
-  { tab: 'license', anchor: 'license' },
   { tab: 'updates', anchor: 'updates' }
-]
-
-/**
- * The tab's own blurb, as the app writes it beside the tab's name (`TAB_BLURB.license` in
- * `SettingsDialog.tsx`): the reader this page is written for reads exactly that line under the
- * sidebar, so the section opens with it and `scripts/reference-page.test.ts` holds the two to
- * each other.
- */
-export const LICENSE_BLURB = 'Cuerunner Pro on this machine.'
-
-/**
- * The License tab on a licensed machine: the rows `LicenseSection.tsx` prints, in the order it
- * prints them, with what each one is reading. The labels are the app's own words for those rows —
- * the guard reads each back out of the component — so the page a reader is sent to documents the
- * rows they will find, named as the tab names them.
- */
-export const LICENSE_ROWS = [
-  {
-    label: 'License',
-    prose: `Who the key is licensed to, as the issuer wrote it.`
-  },
-  {
-    label: 'Key id',
-    prose: `The key's own id, as the issuer minted it — what a question about this key is answered by.`
-  },
-  {
-    label: 'Issued',
-    prose: `The day the key was issued.`
-  },
-  {
-    label: 'Expires',
-    prose: `The last day it runs, or <code>never</code> for a key with no end date.`
-  },
-  {
-    label: 'Deactivate',
-    prose: `A button that takes the key off this machine: it goes back to the free half, and the shows are untouched.`
-  }
-]
-
-/**
- * The License tab before a key is entered: the field, and the button that checks what is in it. A
- * key that has run out leaves the Pro half off until a renewed one is entered, which is the state
- * the tab says out loud — the cue stack and the shows keep working either way.
- */
-export const LICENSE_KEY_ROWS = [
-  {
-    label: 'License key',
-    prose: `The field a key is pasted into. It is checked on this machine, so a show computer never needs the internet.`
-  },
-  {
-    label: 'Activate',
-    prose: `Checks what is in the field and turns the Pro half on the spot. A key that is refused says why, under the field.`
-  }
 ]
 
 /**
@@ -358,7 +304,7 @@ export const REFERENCE = [
     </section>
 
     <section class="panel reveal delay-2" id="light">
-      <h2>Light<span class="pro">Pro</span></h2>
+      <h2>Light</h2>
       <p>A look for the lighting rig, faded in over sACN or Art-Net. The rig itself is set up in the <a href="../guides/lighting.html">Lighting view</a>.</p>
       <div class="table-wrap">
         <table>
@@ -377,7 +323,7 @@ export const REFERENCE = [
         releases it home; a panic does what the show's <strong>On panic</strong> says — hold,
         release or black out. The <strong>Tracking</strong> tab lists every parameter with a
         value at the cue: moved by it, set to what it already was, or tracking from an
-        earlier cue. Without a licence the cue stays in the show and is refused when fired.
+        earlier cue.
       </p>
     </section>
 
@@ -416,7 +362,7 @@ export const REFERENCE = [
               <td>A note in the stack — "hold for the bow", "LX 40 is called by the SM". Its words are its <strong>Name</strong> and <strong>Notes</strong> on Basics, and the first line of the note is read on its row. GO completes it at once: an advance passes straight through it, so a memo between two cues never holds the show.</td>
             </tr>
             <tr>
-              <td><strong>Mic</strong><span class="pro">Pro</span></td>
+              <td><strong>Mic</strong></td>
               <td><strong>Mic</strong> — the Sennheiser EW-DX channel to act on, chosen from the packs the show knows (named by the plot and who is wearing the pack, or by what the receiver calls it), and <strong>Do</strong>: <strong>Mute</strong> or <strong>Unmute</strong>. There is no toggle, because a toggle run twice leaves the mic as the first run found it, and a cue list that can be jumped around in cannot know which that was. The receiver is asked afterwards: a mute that did not happen is an error on the cue, in the log and on its row, never a mic left open in silence. With no mic chosen the cue does nothing and says so.</td>
             </tr>
             <tr>
@@ -424,11 +370,11 @@ export const REFERENCE = [
               <td>Plays a live input — a microphone, a line from the band — through the engine. <strong>Input</strong> (a capture device; the default input for a new cue), <strong>Channels</strong> (which of its inputs are the cue's channels), <strong>Volume</strong>, <strong>Pan</strong>, <strong>Fade in</strong> (50 ms, with a shape), <strong>Fade out</strong> (200 ms, used when the cue is stopped), <strong>Output patch</strong> and <strong>Routing</strong> as an audio cue's. It runs until stopped, or for its <strong>Duration</strong> when it has one. The input can be a different interface from the output: the engine resamples it to the output's clock and corrects the drift between the two, holding a small, steady buffer. <strong>Open input</strong> opens the device ahead of the cue so GO is instant and the meters read; the tab shows each channel's level, the time through the engine and the clock correction. Pause, show-wide pause, Fade cues, STOP and PANIC reach it. With no channel chosen it does nothing and says so. Not the <strong>Mic</strong> cue, which mutes a radio mic at its receiver.</td>
             </tr>
             <tr>
-              <td><strong>Timecode</strong><span class="pro">Pro</span></td>
+              <td><strong>Timecode</strong></td>
               <td>Runs a SMPTE clock. <strong>Rate</strong> — 24, 25, 29.97 drop-frame, 29.97 non-drop or 30 fps (25 for a new cue); <strong>Start from</strong> the <strong>Start</strong> time (01:00:00:00) or the incoming timecode (<strong>jam sync</strong>: the clock starts where the received one is, keeps to it, and carries on alone if it drops out); <strong>End</strong>, or empty to run until stopped — the cue's length is the difference. Outputs, in any mix, all one clock: <strong>MTC</strong> to a MIDI port (the show's output port if none is chosen) — a full-frame message on every start, locate and pause, then quarter frames; <strong>LTC</strong> written by the audio engine to an output channel (3 for a new cue) at a level in dBFS (−12) — give it a channel of its own; <strong>Art-Net</strong> ArtTimeCode once a frame to an address (255.255.255.255), or <code>host:port</code>. While it runs the tab shows where the clock is, with <strong>Pause</strong>/<strong>Resume</strong> and <strong>Locate</strong> to any frame. With no output ticked, or a start or end that is not a frame of the rate, the cue refuses and says why.</td>
             </tr>
             <tr>
-              <td><strong>Scene</strong><span class="pro">Pro</span></td>
+              <td><strong>Scene</strong></td>
               <td><strong>Scene</strong> — the one to recall. It answers for the whole show rather than for its placements: a channel the scene leaves off every fader is closed by the recall. Two facts go out, in this order — the <strong>membership</strong> (the channels the scene places on each fader, and the faders it takes them off) and then each mic's <strong>mute</strong> — and no message names a channel outside the show's own set. A mute carries the channel's own number, never a fader's. The membership goes over the route the desk takes it on — an SQ's own control service on TCP 51326, an Avantis's NRPN <code>40</code> on the desk link — and a desk with no such route reports the gap while the mutes go anyway. With no scene chosen the cue does nothing.</td>
             </tr>
           </tbody>
@@ -529,17 +475,17 @@ export const REFERENCE = [
             <tr><td>↳ OSC patches</td><td>none</td><td>Named destinations — a name, a host, a port — that an OSC cue's messages choose by name, so a show moved to another venue changes one address. Removing one that cues send through asks first.</td></tr>
             <tr><td>↳ Remote</td><td>on</td><td>Answers the transport addresses — <code>/go</code>, <code>/stop</code>, <code>/cue/12/start</code> and the rest, in Cuerunner's namespace and QLab's. See <a href="control.html#remote">the remote</a>.</td></tr>
             <tr><td>↳ Allow from</td><td>anyone</td><td>Addresses or IPv4 ranges (<code>10.0.0.5, 192.168.1.0/24</code>). Anyone else's datagrams are dropped before a trigger, the remote or the Monitor sees them, and each refused sender is named once in the log.</td></tr>
-            <tr><td>Find devices<span class="pro">Pro</span></td><td>off</td><td>Lists gear that announces itself on the network — Dante endpoints among them — in the Monitor, and warns when one drops off.</td></tr>
+            <tr><td>Find devices</td><td>off</td><td>Lists gear that announces itself on the network — Dante endpoints among them — in the Monitor, and warns when one drops off.</td></tr>
             <tr><td>↳ Service types</td><td><code>_netaudio-arc._udp.local</code>, <code>_netaudio-cmc._udp.local</code></td><td>Under Advanced. What to browse for.</td></tr>
             <tr><td>↳ Gone after</td><td>30 s</td><td>Under Advanced. How long a device can go unseen before it counts as gone.</td></tr>
-            <tr><td>Tablet view<span class="pro">Pro</span></td><td>off, port 53100</td><td>Serves a read-only view of the show on the local network. An access code is required; anyone without it is refused.</td></tr>
+            <tr><td>Tablet view</td><td>off, port 53100</td><td>Serves a read-only view of the show on the local network. An access code is required; anyone without it is refused.</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
     <section class="panel reveal delay-2" id="wireless">
-      <h2>Wireless<span class="pro">Pro</span></h2>
+      <h2>Wireless</h2>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
@@ -620,22 +566,6 @@ export const REFERENCE = [
         </table>
       </div>
       <p>The panel under the source reads back the clock as it is heard: position, <strong>Locked</strong>, <strong>Freewheel</strong>, <strong>Stopped</strong>, <strong>Lost</strong> or <strong>Waiting</strong>, the rate and whether it was detected, and what the timecode cues are sending. The same readout is in the transport bar and the show monitor.</p>
-    </section>
-
-    <section class="panel reveal delay-3" id="license">
-      <h2>License</h2>
-      <p>
-        ${LICENSE_BLURB} The first table is what a machine is carrying once a key is on it, and
-        the second is how a key is entered. Nothing on the tab is needed to run the free half,
-        and nothing is asked of the network — the key is checked on the machine it is entered on,
-        so a venue with no internet unlocks exactly like any other.
-      </p>
-${table(['Row', 'What it shows'], LICENSE_ROWS.map(row => [row.label, row.prose]))}
-      <p>
-        A key that has run out leaves the Pro half off until a renewed one is entered, and the
-        tab says which day it ran out. The cue stack and the shows keep working either way.
-      </p>
-${table(['Row', 'What it does'], LICENSE_KEY_ROWS.map(row => [row.label, row.prose]))}
     </section>
 
     <section class="panel reveal delay-3" id="updates">
@@ -980,7 +910,7 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
             <tr><td>Show control</td><td>Every field the console sent: command, format, device ID, and the cue and list where they are carried.</td><td>—</td></tr>
             <tr><td>Key</td><td>A key on this machine and its modifiers — <code>F7</code>, <code>Shift+Q</code>, typed or taken with <strong>Record</strong> — while the window has the keyboard and no field or dialog does. A key the app already answers (Space, Esc, P, F5, F6, the arrows, the number row, the menus' shortcuts, full screen) is refused with what it does, named the way this keyboard labels it — <code>⌘S</code> on a Mac, <code>Ctrl+S</code> elsewhere — and so is a key a cart tile already answers; a key another cue answers is said, and fires both.</td><td>A key held down: it is one press.</td></tr>
             <tr><td>Time of day</td><td>A time on this machine's clock (<code>19:30</code> or <code>19:30:15</code>) on the days ticked — none is every day. A time that went by while the show was closed or the machine asleep is <strong>skipped and said</strong> in the log, or <strong>fired late</strong> if it is no more than its grace behind (1–60 minutes); either way only the latest is counted.</td><td>—</td></tr>
-            <tr><td>Timecode<span class="pro">Pro</span></td><td>The frame of the incoming clock, at the rate it is read at — typed as a label, as seconds from midnight (<code>3610s</code>), or taken from the running clock with <strong>Take</strong>: the cue fires as the clock runs through it, once per pass, and again after the clock goes back before it. A skip of up to the tolerance still fires; a locate past it does not, unless chase is on.</td><td>Which wire the clock came in on.</td></tr>
+            <tr><td>Timecode</td><td>The frame of the incoming clock, at the rate it is read at — typed as a label, as seconds from midnight (<code>3610s</code>), or taken from the running clock with <strong>Take</strong>: the cue fires as the clock runs through it, once per pass, and again after the clock goes back before it. A skip of up to the tolerance still fires; a locate past it does not, unless chase is on.</td><td>Which wire the clock came in on.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1001,10 +931,10 @@ ${table(['Control', 'What it sets'], CHANNELS_ROWS.map(row => [row.label, row.pr
             <tr><td>MIDI cue</td><td>Its list of messages, on the cue's port or the show's default output.</td></tr>
             <tr><td>MIDI File cue</td><td>The file's own messages — notes, controllers, programs, bends, pressure and SysEx; never its meta events — at the file's times, through the cue's channel map and transposition, on the cue's port or the show's default output. On a stop: a Note Off for every note it started and Sustain (CC 64) 0 on each channel it used; on PANIC, All Notes Off (CC 123) on those channels too.</td></tr>
             <tr><td>Show Control cue</td><td>An MSC message: command, equipment format, device ID (127 reaches everything), and cue and list where the command carries them.</td></tr>
-            <tr><td>Light cue<span class="pro">Pro</span></td><td>Nothing of its own: it hands the lighting engine its look, and the engine sends every universe that has an output — on a change, and again every 800 ms unchanged, at up to 44 frames a second. sACN (E1.31) data packets carry the machine's source name and component identifier, the output's priority and, when the show synchronises, the sync universe, followed by a universe synchronisation packet; Art-Net 4 sends ArtDmx, then ArtSync when synchronised. Stopping the output sends sACN's stream-terminated packets three times, so a receiver lets go at once.</td></tr>
-            <tr><td>Timecode cue<span class="pro">Pro</span></td><td>MTC: a full-frame message (device 7F) where the clock starts, pauses or is located, then four quarter frames a frame, each set of eight starting on an even frame. LTC: the 80-bit SMPTE word, biphase-mark, at the cue's level on its output channel, with the drop-frame flag set at 29.97 drop-frame. ArtTimeCode: one 19-byte datagram a frame. 29.97 non-drop has no code of its own in MTC or Art-Net and is sent as 30.</td></tr>
-            <tr><td>Mic cue<span class="pro">Pro</span></td><td>One request to the receiver: <code>{ "mute": true }</code> or <code>false</code>, for one channel, and nothing else — no name, no gain, no level. Then a read of that channel to confirm it took. Muting a channel that is already muted is not an error; it is the state asked for.</td></tr>
-            <tr><td>Scene cue<span class="pro">Pro</span></td><td>The scene's membership first — which channels it places on which faders, and the faders it takes them off — then each mic's mute, for the channels a recall moves and no others. Nothing outside the show's own channels is named: a mute carries the channel's own number, never a fader's, and a channel the scene leaves off every fader is closed. A mic that changes fader is never muted by the move: it keeps playing and takes the new fader's position. The membership goes over the desk's own route — an SQ's control service on TCP 51326, an Avantis's NRPN <code>40</code> on the desk link — and a desk with no membership route reports the gap while the mutes go anyway.</td></tr>
+            <tr><td>Light cue</td><td>Nothing of its own: it hands the lighting engine its look, and the engine sends every universe that has an output — on a change, and again every 800 ms unchanged, at up to 44 frames a second. sACN (E1.31) data packets carry the machine's source name and component identifier, the output's priority and, when the show synchronises, the sync universe, followed by a universe synchronisation packet; Art-Net 4 sends ArtDmx, then ArtSync when synchronised. Stopping the output sends sACN's stream-terminated packets three times, so a receiver lets go at once.</td></tr>
+            <tr><td>Timecode cue</td><td>MTC: a full-frame message (device 7F) where the clock starts, pauses or is located, then four quarter frames a frame, each set of eight starting on an even frame. LTC: the 80-bit SMPTE word, biphase-mark, at the cue's level on its output channel, with the drop-frame flag set at 29.97 drop-frame. ArtTimeCode: one 19-byte datagram a frame. 29.97 non-drop has no code of its own in MTC or Art-Net and is sent as 30.</td></tr>
+            <tr><td>Mic cue</td><td>One request to the receiver: <code>{ "mute": true }</code> or <code>false</code>, for one channel, and nothing else — no name, no gain, no level. Then a read of that channel to confirm it took. Muting a channel that is already muted is not an error; it is the state asked for.</td></tr>
+            <tr><td>Scene cue</td><td>The scene's membership first — which channels it places on which faders, and the faders it takes them off — then each mic's mute, for the channels a recall moves and no others. Nothing outside the show's own channels is named: a mute carries the channel's own number, never a fader's, and a channel the scene leaves off every fader is closed. A mic that changes fader is never muted by the move: it keeps playing and takes the new fader's position. The membership goes over the desk's own route — an SQ's control service on TCP 51326, an Avantis's NRPN <code>40</code> on the desk link — and a desk with no membership route reports the gap while the mutes go anyway.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1122,7 +1052,7 @@ await rig.blackout()</code></div>
         outputs and the consoles heard — written only once a show has one, so a show with no
         lights saves the bytes it always did. Which network interface the lights leave by,
         and the sACN identity this machine sends as, are the machine's, in
-        <code>dmx.json</code> beside the licence.
+        <code>dmx.json</code> in the user-data folder.
       </p>
       <p id="gdtf">
         <strong>A fixture type read from a GDTF file</strong> (DIN SPEC 15800; Lighting →
@@ -1167,7 +1097,7 @@ await rig.blackout()</code></div>
         same way. The show's outputs are a <code>videoOutputs</code> list — name, size, timer,
         corner pin and soft edges, a mirror and a mask — written only when the show has one;
         where each output goes on a computer is kept on that computer, in
-        <code>video-outputs.json</code> beside the licence. A show whose pictures go on the next
+        <code>video-outputs.json</code> in the user-data folder. A show whose pictures go on the next
         GO carries a <code>pictures</code> section; a camera cue carries its camera's name, and
         each computer keeps the device it picked for that cue in <code>camera-devices.json</code>.
       </p>
@@ -1217,7 +1147,7 @@ await rig.blackout()</code></div>
     </section>
 
     <section class="panel reveal delay-1" id="bundle">
-      <h2>The bundle file<span class="pro">Pro</span></h2>
+      <h2>The bundle file</h2>
       <p>
         A <code>.cuerunnerx</code> is the show <em>and</em> its media as one file — the audio,
         video, image and MIDI files its cues play — a zip holding <code>show.cuerunner</code>
@@ -1470,7 +1400,7 @@ await rig.blackout()</code></div>
         <li>The channel ceiling a desk model states is the number the console publishes rather than a measurement: a show with more channels than the selected model takes is named under the desk connection, with the number, and every channel is sent as it always was. Only the count control stops at it, and a show already larger than the ceiling keeps its own whole range on the dial rather than being trimmed back to it.</li>
         <li>An SQ's membership is written over the desk's own control service — TCP 51326 outbound, with a keepalive datagram to the desk's UDP 51324 — a protocol Allen &amp; Heath publish nothing about, spoken here from frames measured off an SQ-6 on firmware 1.6.1. The desk's own answer to a membership has never been read, so nothing here says a desk has accepted one: what a recall leaves out is worked out against what Cuerunner last sent, not against the desk. The channel mutes ride the MIDI service beside it, on 51325. The session leaves by the desk's own door when the show stops, and one the desk loses without that goodbye leaves it mute until it is reset — said in the log, on the device row and in an alarm, which is why a lost session is not dialled again in a loop.</li>
         <li>The lighting is DMX over the network, not a console: a patch, faders, groups and Light cues with tracking — no palettes, no command line, no pixel-matrix fixtures, and no fixture library beyond an Open Fixture Library file or a GDTF file read in — a GDTF fixture split over several DMX breaks is refused rather than patched as one. 64 universes and 2048 fixtures to a show. The packets are held byte for byte to the sACN and Art-Net documents and to a listener on this machine; no hardware node has been part of a run. The tracking sheet reads the Light cues in list order and does not account for what a Stop or Fade cue does at show time.</li>
-        <li>A redundant pair both send their lights when both are licensed and both have outputs: the standby's levels are not the live machine's, and receivers merging two sources at one priority take the higher of each slot. Give the standby no outputs, or a lower sACN priority.</li>
+        <li>A redundant pair both send their lights when both have outputs: the standby's levels are not the live machine's, and receivers merging two sources at one priority take the higher of each slot. Give the standby no outputs, or a lower sACN priority.</li>
         <li>The tablet view is read-only by design.</li>
         <li>Cuerunner is distributed outside the app stores, and the release notes say whether a build is signed: Windows warns when an unsigned installer is run, and macOS warns about an unidentified developer at first launch — Gatekeeper refuses such an app on a machine that has not seen it. Each release publishes its digests twice: a <code>SHA256SUMS</code> beside the assets on its release page, naming the files that page carries, and <code>latest/SHA256SUMS</code> on the download host, naming the files the cards link.</li>
         <li>The Linux AppImage is experimental: MIDI needs ALSA development headers present when dependencies are installed.</li>

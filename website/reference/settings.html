@@ -23,7 +23,6 @@
       <nav class="top-nav" aria-label="Primary">
         <a href="../guide.html">Guides</a>
         <a href="../reference/index.html" aria-current="page">Reference</a>
-        <a href="../pricing.html">Pricing</a>
         <a href="../support.html">Support</a>
         <a href="../interop.html">Other programs</a>
         <a href="../reliability.html">Reliability</a>
@@ -124,17 +123,17 @@
             <tr><td>↳ OSC patches</td><td>none</td><td>Named destinations — a name, a host, a port — that an OSC cue's messages choose by name, so a show moved to another venue changes one address. Removing one that cues send through asks first.</td></tr>
             <tr><td>↳ Remote</td><td>on</td><td>Answers the transport addresses — <code>/go</code>, <code>/stop</code>, <code>/cue/12/start</code> and the rest, in Cuerunner's namespace and QLab's. See <a href="control.html#remote">the remote</a>.</td></tr>
             <tr><td>↳ Allow from</td><td>anyone</td><td>Addresses or IPv4 ranges (<code>10.0.0.5, 192.168.1.0/24</code>). Anyone else's datagrams are dropped before a trigger, the remote or the Monitor sees them, and each refused sender is named once in the log.</td></tr>
-            <tr><td>Find devices<span class="pro">Pro</span></td><td>off</td><td>Lists gear that announces itself on the network — Dante endpoints among them — in the Monitor, and warns when one drops off.</td></tr>
+            <tr><td>Find devices</td><td>off</td><td>Lists gear that announces itself on the network — Dante endpoints among them — in the Monitor, and warns when one drops off.</td></tr>
             <tr><td>↳ Service types</td><td><code>_netaudio-arc._udp.local</code>, <code>_netaudio-cmc._udp.local</code></td><td>Under Advanced. What to browse for.</td></tr>
             <tr><td>↳ Gone after</td><td>30 s</td><td>Under Advanced. How long a device can go unseen before it counts as gone.</td></tr>
-            <tr><td>Tablet view<span class="pro">Pro</span></td><td>off, port 53100</td><td>Serves a read-only view of the show on the local network. An access code is required; anyone without it is refused.</td></tr>
+            <tr><td>Tablet view</td><td>off, port 53100</td><td>Serves a read-only view of the show on the local network. An access code is required; anyone without it is refused.</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
     <section class="panel reveal delay-2" id="wireless">
-      <h2>Wireless<span class="pro">Pro</span></h2>
+      <h2>Wireless</h2>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
@@ -215,41 +214,6 @@
         </table>
       </div>
       <p>The panel under the source reads back the clock as it is heard: position, <strong>Locked</strong>, <strong>Freewheel</strong>, <strong>Stopped</strong>, <strong>Lost</strong> or <strong>Waiting</strong>, the rate and whether it was detected, and what the timecode cues are sending. The same readout is in the transport bar and the show monitor.</p>
-    </section>
-
-    <section class="panel reveal delay-3" id="license">
-      <h2>License</h2>
-      <p>
-        Cuerunner Pro on this machine. The first table is what a machine is carrying once a key is on it, and
-        the second is how a key is entered. Nothing on the tab is needed to run the free half,
-        and nothing is asked of the network — the key is checked on the machine it is entered on,
-        so a venue with no internet unlocks exactly like any other.
-      </p>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Row</th><th>What it shows</th></tr></thead>
-          <tbody>
-            <tr><td>License</td><td>Who the key is licensed to, as the issuer wrote it.</td></tr>
-            <tr><td>Key id</td><td>The key's own id, as the issuer minted it — what a question about this key is answered by.</td></tr>
-            <tr><td>Issued</td><td>The day the key was issued.</td></tr>
-            <tr><td>Expires</td><td>The last day it runs, or <code>never</code> for a key with no end date.</td></tr>
-            <tr><td>Deactivate</td><td>A button that takes the key off this machine: it goes back to the free half, and the shows are untouched.</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p>
-        A key that has run out leaves the Pro half off until a renewed one is entered, and the
-        tab says which day it ran out. The cue stack and the shows keep working either way.
-      </p>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Row</th><th>What it does</th></tr></thead>
-          <tbody>
-            <tr><td>License key</td><td>The field a key is pasted into. It is checked on this machine, so a show computer never needs the internet.</td></tr>
-            <tr><td>Activate</td><td>Checks what is in the field and turns the Pro half on the spot. A key that is refused says why, under the field.</td></tr>
-          </tbody>
-        </table>
-      </div>
     </section>
 
     <section class="panel reveal delay-3" id="updates">
@@ -351,7 +315,7 @@
   </main>
 
   <footer class="site-footer">
-    <p>Cuerunner — show control for Windows, macOS and Linux. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a></p>
+    <p>Cuerunner — show control for Windows, macOS and Linux. <a href="../guide.html">Guides</a> · <a href="../reference/index.html">Reference</a> · <a href="https://github.com/Huckcity/cuerunner">Source on GitHub</a> (MIT)</p>
     <p class="seller">Cuerunner is provided by ALGD LTD, company number NI744090, 121 Glencam Road, Omagh, Tyrone, BT79 7HB, United Kingdom.</p>
   </footer>
 </body>

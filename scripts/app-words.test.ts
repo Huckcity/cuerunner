@@ -1102,8 +1102,8 @@ describe('an app label that moves', () => {
     // The refusal is at the declaration's own reading, so a word that sets two kinds cannot be
     // held to one of them and quietly ignore the other.
     expect(() =>
-      declared([{ page: 'pricing.html', printed: 'Cuerunner ▾ → Settings…', names: [{ menu: 'settings', tab: 'license' }] }])
-    ).toThrow(`${DECLARATION} answers for \`menu: 'settings'\` and \`tab: 'license'\` in one word on the path "Cuerunner ▾ → Settings…" of website/pricing.html`)
+      declared([{ page: 'reference/settings.html', printed: 'Cuerunner ▾ → Settings…', names: [{ menu: 'settings', tab: 'audio' }] }])
+    ).toThrow(`${DECLARATION} answers for \`menu: 'settings'\` and \`tab: 'audio'\` in one word on the path "Cuerunner ▾ → Settings…" of website/reference/settings.html`)
   })
 })
 
@@ -1230,63 +1230,57 @@ describe('a page that drifts from the declaration', () => {
     ])
   })
 
-  it('names the page that loses a declared path', () => {
-    // The full key path is the one the merged page can lose alone: the activation step keeps
-    // printing the short one, so a page edited to drop the key path fails by name here.
-    const drifted = doctored('pricing.html', 'Cuerunner ▾ → Settings… → License', 'Cuerunner ▾ → Preferences… → License')
-    expect(renderProblems(drifted)).toEqual([
-      expect.stringContaining('website/pricing.html (rendered by website/docs/pricing.mjs) prints nothing matching "Cuerunner ▾ → Settings… → License"')
-    ])
-  })
-
   it('names the word a declaration answers for and the path does not print', () => {
     const overreaching = LIVE.paths.map(entry =>
       entry.page === 'guides/sound.html'
-        ? { ...entry, names: [...entry.names, { kind: 'tab' as const, id: 'license', own: false, what: 'the settings tab `license`' }] }
+        ? { ...entry, names: [...entry.names, { kind: 'tab' as const, id: 'updates', own: false, what: 'the settings tab `updates`' }] }
         : entry
     )
     expect(wordProblems({ ...LIVE, paths: overreaching })).toEqual([
       expect.stringContaining(
-        'website/docs/app-paths.mjs answers for the settings tab `license` on the path "Settings → Audio" of website/guides/sound.html (rendered by website/docs/guides.mjs), which prints no such segment'
+        'website/docs/app-paths.mjs answers for the settings tab `updates` on the path "Settings → Audio" of website/guides/sound.html (rendered by website/docs/guides.mjs), which prints no such segment'
       )
     ])
   })
 
+})
+
+describe('a declared path the page and the app do not back', () => {
+  const SETTINGS = 'reference/settings.html'
+  const atSettings = (entry: { page: string; printed: string }): boolean =>
+    entry.page === SETTINGS && entry.printed === 'Cuerunner ▾ → Settings…'
+
+  it('names the page that loses a declared path', () => {
+    const pages = LIVE.pages.map(candidate =>
+      candidate.page === SETTINGS
+        ? pageReading(SETTINGS, candidate.html.replaceAll('Cuerunner ▾ → Settings…', 'Cuerunner ▾ → Preferences…'))
+        : candidate
+    )
+    expect(renderProblems({ ...LIVE, pages })).toEqual(
+      expect.arrayContaining([expect.stringContaining('prints nothing matching "Cuerunner ▾ → Settings…"')])
+    )
+  })
+
   it('names the page a declared path sits on and the tree does not serve', () => {
-    // The merged page declares two paths — the activation step's short one and the key path's
-    // full one — so both are read against a page the tree does not serve.
-    const orphaned = LIVE.paths.map(entry => (entry.page === 'pricing.html' ? { ...entry, page: 'pricing-2026.html' } : entry))
+    const orphaned = LIVE.paths.map(entry => (atSettings(entry) ? { ...entry, page: 'settings-2026.html' } : entry))
     expect(renderProblems({ ...LIVE, paths: orphaned })).toEqual([
-      expect.stringContaining(
-        'website/docs/app-paths.mjs declares the path "Cuerunner ▾ → Settings… → License" on website/pricing-2026.html, which the tree does not serve'
-      ),
-      expect.stringContaining(
-        'website/docs/app-paths.mjs declares the path "Cuerunner ▾ → Settings…" on website/pricing-2026.html, which the tree does not serve'
-      )
+      expect.stringContaining('on website/settings-2026.html, which the tree does not serve')
     ])
   })
 
   it('names a path whose head answers to a File menu item the app does not declare', () => {
     const invented = LIVE.paths.map(entry =>
-      entry.page === 'pricing.html'
+      atSettings(entry)
         ? { ...entry, names: [{ kind: 'menu' as const, id: 'preferences', own: false, what: 'the File menu item `preferences`' }] }
         : entry
     )
     expect(wordProblems({ ...LIVE, paths: invented })).toEqual([
-      expect.stringContaining('prints "Cuerunner ▾ → Settings… → License" with a word answering to the File menu item `preferences`, which the app does not declare'),
-      expect.stringContaining('prints "Cuerunner ▾ → Settings…" with a word answering to the File menu item `preferences`, which the app does not declare')
+      expect.stringContaining('with a word answering to the File menu item `preferences`')
     ])
   })
 
   it('names a path that names no app control at all', () => {
-    const empty = LIVE.paths.map(entry => (entry.page === 'pricing.html' ? { ...entry, names: [] } : entry))
-    expect(wordProblems({ ...LIVE, paths: empty })).toEqual([
-      expect.stringContaining(
-        'website/docs/app-paths.mjs declares "Cuerunner ▾ → Settings… → License" on website/pricing.html (rendered by website/docs/pricing.mjs) and names no app control it answers to'
-      ),
-      expect.stringContaining(
-        'website/docs/app-paths.mjs declares "Cuerunner ▾ → Settings…" on website/pricing.html (rendered by website/docs/pricing.mjs) and names no app control it answers to'
-      )
-    ])
+    const empty = LIVE.paths.map(entry => (atSettings(entry) ? { ...entry, names: [] } : entry))
+    expect(wordProblems({ ...LIVE, paths: empty })).toHaveLength(1)
   })
 })

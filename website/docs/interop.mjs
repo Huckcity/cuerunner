@@ -1,11 +1,11 @@
-// Where Cuerunner stops and the rest of the rig starts. A buyer asks the video question
+// Where Cuerunner stops and the rest of the rig starts. A reader asks the video question
 // before they ask anything else, and the answer is a page rather than a reply.
 //
 // Two claims here stand on lanes with nothing to point at yet — A&H desk acceptance and the
 // end-to-end MSC case — so they carry the phrase `pro.mjs` exports, immediately behind their
 // words: one string, never a second copy of it. `website/docs/lane-claims.mjs` declares both
 // claims, and `scripts/lane-claims.test.ts` holds this page and the record together.
-import { NOT_YET_PROVED } from './pro.mjs'
+import { NOT_YET_PROVED } from './lane-claims.mjs'
 
 export const INTEROP = [
   {

@@ -21,12 +21,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { readRecord, tableRows } from '../src/main/license/catalog'
+import { readRecord, tableRows } from './records'
 
 // @ts-ignore — js file, no type declarations
 import { COPY_CLAIMS } from '../website/docs/lane-claims.mjs'
 // @ts-ignore — js file, no type declarations
-import { NOT_YET_PROVED } from '../website/docs/pro.mjs'
+import { NOT_YET_PROVED } from '../website/docs/lane-claims.mjs'
 // @ts-ignore — js file, no type declarations
 import { PAGES } from '../website/docs/pages.mjs'
 // @ts-ignore — js file, no type declarations
@@ -1583,18 +1583,18 @@ describe('the record and the copy the checks exist to refuse', () => {
     })
 
     it('needs no phrase behind its words, and refuses one', () => {
-      const declaration = { page: 'pricing.html', claim: EW_DX, lane: NO_LANE, words: EW_DX }
-      expect(declarationProblems([declaration], LIVE.claims, LIVE.pages)).toEqual([])
+      const declaration = { page: 'interop.html', claim: EW_DX, lane: NO_LANE, words: EW_DX }
+      const page = `${LIVE.pages.get('interop.html') ?? ''} ${EW_DX}`
+      expect(declarationProblems([declaration], LIVE.claims, new Map(LIVE.pages).set('interop.html', page))).toEqual([])
 
-      const phrased = new Map(LIVE.pages)
-      phrased.set('pricing.html', (phrased.get('pricing.html') ?? '').replace(EW_DX, `${EW_DX} ${NOT_YET_PROVED}`))
+      const phrased = new Map(LIVE.pages).set('interop.html', `${page} ${NOT_YET_PROVED}`)
       expect(declarationProblems([declaration], LIVE.claims, phrased)).toEqual([
         expect.stringContaining('the copy\'s "Sennheiser EW-DX receivers" claim is witnessed on real hardware')
       ])
     })
 
     it('is not counted among the claims a page owes a phrase for', () => {
-      const declaration = { page: 'pricing.html', claim: EW_DX, lane: NO_LANE, words: EW_DX }
+      const declaration = { page: 'interop.html', claim: EW_DX, lane: NO_LANE, words: EW_DX }
       expect(phraseCountProblems([...LIVE.declarations, declaration], LIVE.claims, LIVE.pages)).toEqual([])
     })
   })
@@ -1781,7 +1781,7 @@ describe('the record and the copy the checks exist to refuse', () => {
 /**
  * The guard reads the record, and a record it cannot read is a failure rather than an empty
  * pass: a claim compared against nothing is the vacuous run the record exists to prevent.
- * catalog.ts holds the reader the free/Pro guard reads its record through, so a renamed table
+ * records.ts holds the reader the guards read their records through, so a renamed table
  * fails both the same way.
  */
 describe('the record the guard reads', () => {

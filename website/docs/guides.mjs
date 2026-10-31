@@ -492,9 +492,9 @@ export const GUIDES = [
             <tr><td>MIDI File</td><td>Play a <code>.mid</code> to a synth, a click, or anything else on a MIDI port.</td></tr>
             <tr><td>Show Control</td><td>MSC: GO, STOP and LOAD to a desk that speaks it.</td></tr>
             <tr><td>Script</td><td>Run JavaScript, including a system command.</td></tr>
-            <tr><td>Scene<span class="pro">Pro</span></td><td>Move the sound desk to a scene you built.</td></tr>
-            <tr><td>Light<span class="pro">Pro</span></td><td>Fade the lighting rig to a look, over sACN or Art-Net.</td></tr>
-            <tr><td>Timecode<span class="pro">Pro</span></td><td>Run a SMPTE clock — MTC, LTC and Art-Net — for the rest of the building to follow.</td></tr>
+            <tr><td>Scene</td><td>Move the sound desk to a scene you built.</td></tr>
+            <tr><td>Light</td><td>Fade the lighting rig to a look, over sACN or Art-Net.</td></tr>
+            <tr><td>Timecode</td><td>Run a SMPTE clock — MTC, LTC and Art-Net — for the rest of the building to follow.</td></tr>
             <tr><td>Devamp</td><td>Let a looping cue out of its loop and play on.</td></tr>
           </tbody>
         </table>
@@ -1406,7 +1406,7 @@ export const GUIDES = [
     </section>
 
     <section class="panel reveal delay-2" id="timecode">
-      <h2>Following timecode<span class="pro">Pro</span></h2>
+      <h2>Following timecode</h2>
       <p>
         When the show is driven by a clock — the band's playback rig, a video server, the
         lighting desk's own timeline — Cuerunner can follow it. Settings →
@@ -1462,7 +1462,7 @@ export const GUIDES = [
     pro: true,
     body: `
     <section class="panel reveal">
-      <h1>Scenes and the desk<span class="pro">Pro</span></h1>
+      <h1>Scenes and the desk</h1>
       <p class="doc-lede">
         Who rides which fader, scene by scene, as a grid you can read from the back of the
         room — and a cue that moves the desk to match.
@@ -1688,7 +1688,7 @@ export const GUIDES = [
     pro: true,
     body: `
     <section class="panel reveal">
-      <h1>Watching the radio mics<span class="pro">Pro</span></h1>
+      <h1>Watching the radio mics</h1>
       <p class="doc-lede">
         Two questions, all night: who is wearing which pack, and which one is about to die.
       </p>
@@ -1881,7 +1881,7 @@ export const GUIDES = [
     pro: true,
     body: `
     <section class="panel reveal">
-      <h1>Lighting from the cue list<span class="pro">Pro</span></h1>
+      <h1>Lighting from the cue list</h1>
       <p class="doc-lede">
         The lights in the same list as the sound, fired by the same GO: Cuerunner sends
         DMX over the network itself, as sACN or Art-Net, to whatever node or dimmer rack
@@ -1996,7 +1996,7 @@ export const GUIDES = [
     pro: true,
     body: `
     <section class="panel reveal">
-      <h1>Following the script<span class="pro">Pro</span></h1>
+      <h1>Following the script</h1>
       <p class="doc-lede">
         The book, beside the cue list, with the cues pinned to the lines they go on.
       </p>
@@ -2061,7 +2061,7 @@ export const GUIDES = [
     blurb: 'What each save changed, comparing two versions of a show, merging two people\'s work, and handing the whole thing over as one file.',
     body: `
     <section class="panel reveal">
-      <h1>Versions and handover<span class="pro">Pro</span></h1>
+      <h1>Versions and handover</h1>
       <p class="doc-lede">
         A show is worked on over weeks, by more than one person, and then handed to
         somebody else to run. These are the four things the file itself can tell you and
@@ -2095,9 +2095,8 @@ export const GUIDES = [
       </p>
       <div class="note">
         The history lives in the <code>.cuerunner</code>, so it survives being copied, emailed
-        or handed over. It is written whether or not this machine is licensed — it is the
-        show's own record of itself — and reading it back is free. What the key turns on is
-        comparing this file with another and merging two people's work.
+        or handed over. It is the show's own record of itself. From it you can compare this file with another and
+        merge two people's work.
       </div>
     </section>
 

@@ -1,7 +1,7 @@
 // The settings reference, held to the app's own settings dialog and to the tab it documents.
 //
 // `website/reference/settings.html` is where a reader is sent to find out what a setting does —
-// the trial and support pages both walk them to the License tab — and nothing read it: the
+// and nothing read it: the
 // page's sections were its own words, so a tab the app renamed, a section answering to a tab that
 // does not exist, and a tab the dialog shows with no section written for it would all ship. The
 // two sides are declared now (website/docs/reference.mjs), and this guard holds them:
@@ -10,14 +10,10 @@
 //   React component is not something this guard can import: every declared tab has exactly one
 //   section, every section names a declared tab, and each section's heading is the tab's own
 //   label, so the section a reader lands on is named the way the app names it;
-// - the License tab's rows, read out of `LicenseSection.tsx`: every row the page documents is a
-//   row the panel prints, in the panel's order, and every row the panel prints is documented —
-//   the tab a buyer is sent to has to be the tab the reference describes;
 // - the Channels tab's controls, read out of `ChannelsTab.tsx`: every row the page documents is a
 //   control the tab prints, in the tab's order, and every control the tab prints is documented —
 //   the guide sends a reader to that tab to set the desk's buttons, so the reference names the
-//   fields they will find there;
-// - the tab's own blurb (`TAB_BLURB.license`), which the section opens with.
+//   fields they will find there.
 //
 // Every check is a pure function of what it reads, so the second describe can hand it a page the
 // repository would never commit and get the failure back by name. The failure paths are what hold
@@ -28,7 +24,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 // @ts-ignore — js file, no type declarations
-import { CHANNELS_ROWS, LICENSE_BLURB, LICENSE_KEY_ROWS, LICENSE_ROWS, REFERENCE, SETTINGS_SECTIONS } from '../website/docs/reference.mjs'
+import { CHANNELS_ROWS, REFERENCE, SETTINGS_SECTIONS } from '../website/docs/reference.mjs'
 // @ts-ignore — js file, no type declarations
 import { renderPage } from '../website/build-docs.mjs'
 
@@ -36,8 +32,6 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 /** The dialog the settings tabs and their blurbs are declared in. */
 const SETTINGS_DIALOG = 'src/renderer/src/components/layout/SettingsDialog.tsx'
-/** The panel the License tab's rows are printed in. */
-const LICENSE_SECTION = 'src/renderer/src/components/license/LicenseSection.tsx'
 /** The tab the Channels rows are read out of. */
 const CHANNELS_TAB = 'src/renderer/src/components/show/ChannelsTab.tsx'
 
@@ -60,67 +54,15 @@ interface Row {
   prose: string
 }
 
-/** How a fact is read out of its source: the file's text in, the words it carries out. */
-type Reader = (source: string) => string | undefined
-
-/** One fact the page states in the app's own words, which the guard reads out of the app. */
-interface Fact {
-  what: string
-  file: string
-  read: Reader
-  stated: string
-}
-
 /** Everything the checks read, in one value: a case below hands them a mutation of it. */
 interface Reading {
   tabs: Tab[]
   sections: Section[]
-  rows: Row[]
   channels: Row[]
-  facts: Fact[]
   /** The sources the tabs and the rows are read from, read once. */
   files: Record<string, string>
   /** The settings page as the site serves it. */
   rendered: string
-}
-
-/**
- * The file's text with its own line wrapping taken out — a sentence a JSX comment wraps across two
- * lines reads as the one sentence it is, and a JSDoc's `*` prefixes go with the breaks — so a
- * phrase is read as the reader of the app reads it.
- */
-const unwrapped = (source: string): string => source.replace(/\n\s*\*\s?/g, ' ')
-
-/** The first capture group of a pattern, read against the file with its wrapping taken out. */
-const group = (pattern: RegExp): Reader => source => {
-  const found = pattern.exec(unwrapped(source))
-  return found === null ? undefined : found[1].replace(/\s+/g, ' ').trim()
-}
-
-/**
- * The License tab's own blurb, as the app writes it beside the tab. The reference opens the
- * section with it, so a reader sent to the tab meets the same line under the sidebar as the one
- * the page led them in with.
- */
-const FACTS: Fact[] = [
-  {
-    what: "the License tab's own blurb",
-    file: SETTINGS_DIALOG,
-    read: group(/\blicense:\s*'([^']+)'/),
-    stated: LICENSE_BLURB
-  }
-]
-
-/**
- * A control the License tab prints, as the file writes it: the `<label>` texts the panel carries
- * and the buttons under them, each with the words it shows. The self-closing spacers between rows
- * carry no words and are not controls.
- */
-const CONTROL = /<(label|button)\b(?![^>]*\/>)[^>]*>\s*([^<]+?)\s*<\/\1>/g
-
-/** The controls the tab prints, in the order the file prints them. */
-function controlsIn(source: string): Array<{ kind: string; words: string }> {
-  return [...source.matchAll(CONTROL)].map(found => ({ kind: found[1], words: found[2].replace(/\s+/g, ' ').trim() }))
 }
 
 /**
@@ -176,7 +118,6 @@ function readSource(relative: string): string {
 function sources(): Record<string, string> {
   return {
     [SETTINGS_DIALOG]: readSource(SETTINGS_DIALOG),
-    [LICENSE_SECTION]: readSource(LICENSE_SECTION),
     [CHANNELS_TAB]: readSource(CHANNELS_TAB)
   }
 }
@@ -191,9 +132,7 @@ if (SETTINGS_PAGE === undefined) {
 const LIVE: Reading = {
   tabs: settingsTabs(readSource(SETTINGS_DIALOG)),
   sections: SETTINGS_SECTIONS,
-  rows: [...LICENSE_ROWS, ...LICENSE_KEY_ROWS],
   channels: CHANNELS_ROWS,
-  facts: FACTS,
   files: sources(),
   rendered: renderPage(SETTINGS_PAGE)
 }
@@ -254,37 +193,8 @@ function headingProblems(reading: Reading): string[] {
 }
 
 /**
- * The License tab's rows, held to the panel that prints them: every row the page documents is one
- * the panel prints, every row the panel prints is one the page documents, and the two are in the
- * same order, so the page a reader is sent to follows the tab they will find.
- */
-function rowProblems(reading: Reading): string[] {
-  const shown = controlsIn(reading.files[LICENSE_SECTION] ?? '')
-  const declared = reading.rows.map(row => row.label)
-  const missing = declared.filter(label => !shown.some(control => control.words === label))
-  const extra = shown.filter(control => !declared.includes(control.words))
-  return [
-    ...missing.map(
-      label =>
-        `website/docs/reference.mjs documents the License tab's "${label}" row and ${LICENSE_SECTION} prints no row with that label: the page and the panel name the same rows`
-    ),
-    ...extra.map(
-      control =>
-        `${LICENSE_SECTION} prints the License tab's "${control.words}" ${control.kind} and website/docs/reference.mjs documents no row for it: every row the tab shows belongs on the page`
-    ),
-    ...(missing.length > 0 || extra.length > 0 || shown.map(control => control.words).join(' / ') === declared.join(' / ')
-      ? []
-      : [
-          `website/docs/reference.mjs documents the License tab's rows as "${declared.join(', ')}" and ${LICENSE_SECTION} prints them as "${shown
-            .map(control => control.words)
-            .join(', ')}": the page follows the panel's order`
-        ])
-  ]
-}
-
-/**
  * The Channels tab's controls, read as the file writes them: the tab's `<label>` texts (the markup
- * the License reader takes) and the three controls it titles inside a `<span>` — its two count
+ * the other readers take) and the three controls it titles inside a `<span>` — its two count
  * dials and the rule's own sentence. In the order the file prints them; a label the file writes in
  * more than one branch (a host for the OSC connection and one for a TCP desk) is one control,
  * taken where it first appears.
@@ -328,48 +238,6 @@ function channelsRowProblems(reading: Reading): string[] {
   ]
 }
 
-/** The rows and the tab's own line the module declares, held to the page: a declaration nothing renders is a page and a declaration that disagree. */
-function renderedProblems(reading: Reading): string[] {
-  return [
-    ...reading.rows
-      .filter(row => !reading.rendered.includes(`<td>${row.label}</td>`) || !reading.rendered.includes(row.prose))
-      .map(
-        row =>
-          `the rendered settings page does not carry the License tab's "${row.label}" row as website/docs/reference.mjs declares and renders it: the page states the rows its declaration holds`
-      ),
-    ...(reading.rendered.includes(LICENSE_BLURB)
-      ? []
-      : [
-          `the rendered settings page does not carry the License tab's own line ("${LICENSE_BLURB}"), which website/docs/reference.mjs declares and opens the section with`
-        ])
-  ]
-}
-
-/**
- * The page's facts, each held to its source: a file that no longer says what the page states fails
- * naming the file, and a page that copies the app's words when the app has moved on fails naming
- * both strings.
- */
-function factProblems(reading: Reading): string[] {
-  return reading.facts.flatMap(fact => {
-    const source = reading.files[fact.file]
-    if (source === undefined) {
-      return [`the page states ${fact.what}, read from ${fact.file}, and the guard has no reading of that file`]
-    }
-    const said = fact.read(source)
-    if (said === undefined) {
-      return [
-        `${fact.file} no longer carries ${fact.what}: the settings page states it, so the file a reader meets it in has to say it ("website/docs/reference.mjs" and ${fact.file} have to agree)`
-      ]
-    }
-    return said === fact.stated
-      ? []
-      : [
-          `website/docs/reference.mjs states "${fact.stated}" for ${fact.what}, and ${fact.file} says "${said}": the page renders the app's own words`
-        ]
-  })
-}
-
 describe('the settings reference', () => {
   it('documents every settings tab the app declares, and only those', () => {
     expect(tabProblems(LIVE)).toEqual([])
@@ -379,20 +247,8 @@ describe('the settings reference', () => {
     expect(headingProblems(LIVE)).toEqual([])
   })
 
-  it('documents the License tab\'s rows as the panel prints them', () => {
-    expect(rowProblems(LIVE)).toEqual([])
-  })
-
   it('documents the Channels tab\'s controls as the tab prints them', () => {
     expect(channelsRowProblems(LIVE)).toEqual([])
-  })
-
-  it('renders every row its declaration holds, and the tab\'s own line with them', () => {
-    expect(renderedProblems(LIVE)).toEqual([])
-  })
-
-  it('opens the License section with the tab\'s own blurb', () => {
-    expect(factProblems(LIVE)).toEqual([])
   })
 
   it('fails loudly on a dialog whose tabs it cannot read', () => {
@@ -407,8 +263,8 @@ describe('the settings reference', () => {
 
   it('reads a tab whose fields are written in another order', () => {
     const reordered = LIVE.files[SETTINGS_DIALOG].replace(
-      "{ id: 'license', label: 'License', scope: 'machine' }",
-      "{ label: 'License', scope: 'machine', id: 'license' }"
+      "{ id: 'updates', label: 'Updates', scope: 'machine' }",
+      "{ label: 'Updates', scope: 'machine', id: 'updates' }"
     )
     expect(reordered).not.toBe(LIVE.files[SETTINGS_DIALOG])
     expect(settingsTabs(reordered)).toEqual(settingsTabs(LIVE.files[SETTINGS_DIALOG]))
@@ -423,16 +279,16 @@ describe('the settings reference', () => {
  */
 describe('the page the checks exist to refuse', () => {
   it('names a tab the app declares and the page does not document', () => {
-    const without = LIVE.sections.filter(section => section.tab !== 'license')
+    const without = LIVE.sections.filter(section => section.tab !== 'updates')
     expect(tabProblems({ ...LIVE, sections: without })).toEqual([
-      expect.stringContaining('declares the settings tab `license` ("License") and website/docs/reference.mjs documents no section for it')
+      expect.stringContaining('declares the settings tab `updates` ("Updates") and website/docs/reference.mjs documents no section for it')
     ])
   })
 
   it('names a tab two sections answer to', () => {
-    const twice = [...LIVE.sections, { tab: 'network', anchor: 'license' }]
+    const twice = [...LIVE.sections, { tab: 'network', anchor: 'updates' }]
     expect(tabProblems({ ...LIVE, sections: twice })).toEqual([
-      expect.stringContaining('declares the settings tab `network` ("Network") and website/docs/reference.mjs names 2 sections for it (#network, #license)')
+      expect.stringContaining('declares the settings tab `network` ("Network") and website/docs/reference.mjs names 2 sections for it (#network, #updates)')
     ])
   })
 
@@ -458,70 +314,14 @@ describe('the page the checks exist to refuse', () => {
     ])
   })
 
-  it('names a row the page documents and the panel stops printing', () => {
-    const shortened = LIVE.files[LICENSE_SECTION].replace('<label>Expires</label>', '')
-    expect(rowProblems({ ...LIVE, files: { ...LIVE.files, [LICENSE_SECTION]: shortened } })).toEqual([
-      expect.stringContaining('documents the License tab\'s "Expires" row and src/renderer/src/components/license/LicenseSection.tsx prints no row with that label')
-    ])
-  })
-
-  it('names a row the panel prints and the page documents nowhere', () => {
-    const grown = LIVE.files[LICENSE_SECTION].replace('<label>Key id</label>', '<label>Key ID</label>')
-    expect(rowProblems({ ...LIVE, files: { ...LIVE.files, [LICENSE_SECTION]: grown } })).toEqual([
-      expect.stringContaining('documents the License tab\'s "Key id" row and src/renderer/src/components/license/LicenseSection.tsx prints no row with that label'),
-      expect.stringContaining('prints the License tab\'s "Key ID" label and website/docs/reference.mjs documents no row for it')
-    ])
-  })
-
-  it('names the two orders when the panel prints the same rows the other way round', () => {
-    const reordered = LIVE.files[LICENSE_SECTION]
-      .replace('<label>Issued</label>', '<label>@@</label>')
-      .replace('<label>Expires</label>', '<label>Issued</label>')
-      .replace('<label>@@</label>', '<label>Expires</label>')
-    expect(rowProblems({ ...LIVE, files: { ...LIVE.files, [LICENSE_SECTION]: reordered } })).toEqual([
-      expect.stringContaining(
-        'documents the License tab\'s rows as "License, Key id, Issued, Expires, Deactivate, License key, Activate" and src/renderer/src/components/license/LicenseSection.tsx prints them as "License, Key id, Expires, Issued, Deactivate, License key, Activate": the page follows the panel\'s order'
-      )
-    ])
-  })
-
   it('names the two orders when the page documents the tabs in another one', () => {
     const swapped = LIVE.sections.map(section =>
       section.tab === 'general' ? { ...section, tab: 'audio' } : section.tab === 'audio' ? { ...section, tab: 'general' } : section
     )
     expect(tabProblems({ ...LIVE, sections: swapped })).toEqual([
       expect.stringContaining(
-        'website/docs/reference.mjs documents the tabs as audio, general, midi, network, wireless, redundancy, timecode, license, updates and src/renderer/src/components/layout/SettingsDialog.tsx\'s `SETTINGS_TABS` declares them as general, audio, midi, network, wireless, redundancy, timecode, license, updates'
+        'website/docs/reference.mjs documents the tabs as audio, general, midi, network, wireless, redundancy, timecode, updates and src/renderer/src/components/layout/SettingsDialog.tsx\'s `SETTINGS_TABS` declares them as general, audio, midi, network, wireless, redundancy, timecode, updates'
       )
-    ])
-  })
-
-  it('names the tab line the rendered page loses', () => {
-    const dropped = LIVE.rendered.replace(LICENSE_BLURB, 'Pro')
-    expect(dropped).not.toBe(LIVE.rendered)
-    expect(renderedProblems({ ...LIVE, rendered: dropped })).toEqual([
-      expect.stringContaining('does not carry the License tab\'s own line ("Cuerunner Pro on this machine.")')
-    ])
-  })
-
-  it('names a row the rendered page loses', () => {
-    const dropped = LIVE.rendered.replace('<td>Deactivate</td>', '<td>De-activate</td>')
-    expect(renderedProblems({ ...LIVE, rendered: dropped })).toEqual([
-      expect.stringContaining('does not carry the License tab\'s "Deactivate" row')
-    ])
-  })
-
-  it('names the blurb the app rewords, and the page that keeps the old one', () => {
-    const reworded = LIVE.facts.map(fact => ({ ...fact, stated: 'Cuerunner Pro for this machine.' }))
-    expect(factProblems({ ...LIVE, facts: reworded })).toEqual([
-      expect.stringContaining('website/docs/reference.mjs states "Cuerunner Pro for this machine." for the License tab\'s own blurb, and src/renderer/src/components/layout/SettingsDialog.tsx says "Cuerunner Pro on this machine."')
-    ])
-  })
-
-  it('names the file when the blurb it is read from goes', () => {
-    const moved = { ...LIVE.files, [SETTINGS_DIALOG]: 'const TAB_BLURB = {}' }
-    expect(factProblems({ ...LIVE, files: moved })).toEqual([
-      expect.stringContaining(`src/renderer/src/components/layout/SettingsDialog.tsx no longer carries the License tab's own blurb`)
     ])
   })
 

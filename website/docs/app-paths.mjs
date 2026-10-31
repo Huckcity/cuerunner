@@ -36,13 +36,11 @@
 // it is), so the guard holds those names rather than their punctuation. A word the app declares
 // nothing for — the row a path walks on into, as `Settings → Network → OSC control` does — is part
 // of `printed` and is not named.
-import { BRAND, BRAND_CARET, LICENSE_TAB, SETTINGS_ITEM } from './pricing.mjs'
-// The same words, as the pages that state them hold them: `trial.mjs` and `support.mjs` export
-// the labels their own sentences are built from, and `scripts/pricing-page.test.ts` holds those to
-// the app already. A path drawn from one of those pages reads the label out of that module, so the
-// declaration is never the second place a word is written.
-import { APP as TRIAL } from './trial.mjs'
-import { LICENSE_TAB as SUPPORT_LICENSE_TAB, SETTINGS_ITEM as SUPPORT_SETTINGS_ITEM } from './support.mjs'
+
+/** The window's brand menu and the File menu item under it, as the app names them. */
+export const BRAND = 'Cuerunner'
+export const BRAND_CARET = '▾'
+export const SETTINGS_ITEM = 'Settings…'
 
 /** The head of a path under the window's brand, as the site writes it. */
 const CARET = `${BRAND} ${BRAND_CARET}`
@@ -60,16 +58,6 @@ const prose = label => label.replace(/…$/, '')
 export const APP_PATHS = [
   // Under the brand caret: the words after it are the File menu item, and they carry its label
   // exactly, ellipsis included.
-  {
-    page: 'pricing.html',
-    printed: `${CARET} → ${SETTINGS_ITEM} → ${LICENSE_TAB}`,
-    names: [{ menu: 'settings' }, { tab: 'license' }]
-  },
-  {
-    page: 'pricing.html',
-    printed: `${TRIAL.menu} ${TRIAL.caret} → ${TRIAL.settings}`,
-    names: [{ menu: 'settings' }]
-  },
   {
     page: 'reference/settings.html',
     printed: `${CARET} → ${SETTINGS_ITEM}`,
@@ -272,11 +260,6 @@ export const APP_PATHS = [
     page: 'reference/troubleshooting.html',
     printed: `${prose(SETTINGS_ITEM)} → Wireless`,
     names: [{ tab: 'wireless' }]
-  },
-  {
-    page: 'support.html',
-    printed: `${SUPPORT_SETTINGS_ITEM} → ${SUPPORT_LICENSE_TAB}`,
-    names: [{ tab: 'license' }]
   },
 
   // The keyboard reference's rows: the keys the app binds, and what the page says they run. A row

@@ -21,13 +21,11 @@ const site = path.dirname(fileURLToPath(import.meta.url))
 
 /**
  * The links across the top of every page. Exported beside the renderer so a guard can read the
- * list the pages were rendered from: a page whose header loses the price page's link is a page
- * a buyer cannot buy from.
+ * list the pages were rendered from.
  */
 export const NAV = [
   ['guide.html', 'Guides'],
   ['reference/index.html', 'Reference'],
-  ['pricing.html', 'Pricing'],
   ['support.html', 'Support'],
   ['interop.html', 'Other programs'],
   ['reliability.html', 'Reliability']
@@ -90,7 +88,7 @@ ${crumb}${page.body.trimEnd()}
   </main>
 
   <footer class="site-footer">
-    <p>Cuerunner — show control for Windows, macOS and Linux. <a href="${up}guide.html">Guides</a> · <a href="${up}reference/index.html">Reference</a></p>
+    <p>Cuerunner — show control for Windows, macOS and Linux. <a href="${up}guide.html">Guides</a> · <a href="${up}reference/index.html">Reference</a> · <a href="https://github.com/Huckcity/cuerunner">Source on GitHub</a> (MIT)</p>
     <p class="seller">${esc(SELLER_BLOCK)}</p>
   </footer>
 </body>
