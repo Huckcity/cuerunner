@@ -378,5 +378,6 @@ await page.locator('.show-settings-close').click()
 await page.locator('.toolbar-view-btn', { hasText: 'Cues' }).click()
 
 await app.evaluate(({ app: electronApp }) => electronApp.exit(0))
-fs.rmSync(userDataDir, { recursive: true, force: true })
+// The app can still be writing here for a moment after it closes.
+fs.rmSync(userDataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
 console.log('Done.')

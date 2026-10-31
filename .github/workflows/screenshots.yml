@@ -32,6 +32,9 @@ jobs:
           sudo apt-get install -y xvfb
 
       - name: Capture
+        env:
+          # A hosted runner has no audio device, and the figures show a cue running.
+          CUERUNNER_AUDIO_BACKEND: silent
         run: xvfb-run -a npm run screenshots
 
       - uses: actions/upload-artifact@v7
