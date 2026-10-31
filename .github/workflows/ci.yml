@@ -161,6 +161,8 @@ jobs:
           echo LIBPATH=%LIBPATH%>>"%GITHUB_ENV%"
           echo VCToolsInstallDir=%VCToolsInstallDir%>>"%GITHUB_ENV%"
           for %%p in ("%PATH:;=" "%") do echo %%~p>>"%GITHUB_PATH%"
+          rem Last, so it comes first: Git for Windows also has a `link`, and it is not the linker.
+          echo %VCToolsInstallDir%bin\Hostx64\x64>>"%GITHUB_PATH%"
 
       - name: Locate the ASIO SDK
         if: runner.os == 'Windows'
@@ -340,6 +342,8 @@ jobs:
           echo LIBPATH=%LIBPATH%>>"%GITHUB_ENV%"
           echo VCToolsInstallDir=%VCToolsInstallDir%>>"%GITHUB_ENV%"
           for %%p in ("%PATH:;=" "%") do echo %%~p>>"%GITHUB_PATH%"
+          rem Last, so it comes first: Git for Windows also has a `link`, and it is not the linker.
+          echo %VCToolsInstallDir%bin\Hostx64\x64>>"%GITHUB_PATH%"
 
       # Same reason as the step above: the suite builds the native engine, and ASIO is
       # opt-in on the machine rather than in the repository (Steinberg's licence forbids

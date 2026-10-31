@@ -112,6 +112,8 @@ jobs:
           echo LIBPATH=%LIBPATH%>>"%GITHUB_ENV%"
           echo VCToolsInstallDir=%VCToolsInstallDir%>>"%GITHUB_ENV%"
           for %%p in ("%PATH:;=" "%") do echo %%~p>>"%GITHUB_PATH%"
+          rem Last, so it comes first: Git for Windows also has a `link`, and it is not the linker.
+          echo %VCToolsInstallDir%bin\Hostx64\x64>>"%GITHUB_PATH%"
 
       # The SDK is fetched from Steinberg for this build and never committed or uploaded: its licence
       # forbids redistributing it. Pinned by hash, so a changed download stops here. A failure is

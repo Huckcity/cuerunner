@@ -53,7 +53,8 @@ function download(url, out) {
   const hasCurl = existsSync('/usr/bin/curl')
   const command = hasCurl ? 'curl' : 'wget'
   const args = hasCurl ? ['-sSL', '--fail', '-o', out, url] : ['-q', '-O', out, url]
-  execFileSync(command, args, { stdio: 'inherit' })
+  // shellcheck's `info` notes are style, and actionlint fails on any of them.
+  execFileSync(command, args, { stdio: 'inherit', env: { ...process.env, SHELLCHECK_OPTS: '--severity=warning' } })
 }
 
 /** The linting tool, from PATH or from the pin. */
