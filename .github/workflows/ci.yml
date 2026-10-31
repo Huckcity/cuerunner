@@ -364,8 +364,19 @@ jobs:
 
       # Electron opens a real window; the wrapper gives it a private Xvfb display on
       # Linux, where a runner has none of its own (scripts/run-e2e.js).
+      # Two processes on a Mac: a hosted Mac has hung launching the app after about 515 launches in
+      # one worker, and a fresh process starts clean.
       - name: E2E tests
+        if: runner.os != 'macOS'
         run: npm run test:e2e
+
+      - name: E2E tests, first half
+        if: runner.os == 'macOS'
+        run: npm run test:e2e -- --shard=1/2
+
+      - name: E2E tests, second half
+        if: runner.os == 'macOS'
+        run: npm run test:e2e -- --shard=2/2
 
       # The one half of ASIO that no other lane can reach: hosting a real driver. It needs
       # a build with the SDK (the step above) and a driver the machine has installed —

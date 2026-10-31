@@ -71,8 +71,11 @@ jobs:
       # browser bundles the command downloads are never opened — and this lane gates all
       # three packaging jobs, which is no place for a download nothing uses.
 
-      - name: E2E tests
-        run: npm run test:e2e
+      - name: E2E tests, first half
+        run: npm run test:e2e -- --shard=1/2
+
+      - name: E2E tests, second half
+        run: npm run test:e2e -- --shard=2/2
 
   build-windows:
     needs: [ test, test-e2e ]
