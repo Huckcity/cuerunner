@@ -7,7 +7,6 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MergeReportDialog } from './MergeReportDialog'
 import { useStore, type MergeReport } from '../../store'
-import { TEST_LICENSE } from '../../../../test/license'
 
 let container: HTMLDivElement
 let root: Root
@@ -44,7 +43,6 @@ beforeEach(() => {
     }
   })
   useStore.setState({
-    license: { state: 'active', license: TEST_LICENSE },
     mergeReport: report(),
     workspacePath: null,
     isDirty: false
@@ -54,7 +52,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount())
   container.remove()
-  useStore.setState({ license: { state: 'unlicensed' }, mergeReport: null })
+  useStore.setState({ mergeReport: null })
 })
 
 async function show(report: MergeReport | null = useStore.getState().mergeReport): Promise<void> {
@@ -126,13 +124,5 @@ describe('the merge report', () => {
 
     expect(container.querySelector('.changes-note')).toBeNull()
     expect(container.querySelector('.changes-empty')?.textContent).toContain('nothing needed deciding')
-  })
-
-  it('describes what merging is, on a machine with no key', async () => {
-    useStore.setState({ license: { state: 'unlicensed' } })
-    await show()
-
-    expect(container.querySelector('.pro-lock[data-feature="Merging two shows"]')).not.toBeNull()
-    expect(container.querySelector('.changes-actions')).toBeNull()
   })
 })

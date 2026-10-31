@@ -79,8 +79,7 @@ function setup(cues: Cue[]) {
     appendLog,
     getWorkspacePath: () => null,
     getMidiDefaultPort: () => '',
-    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
-    isPro: () => true
+    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD
   })
   runners.push(runner)
   return { runner, setRunning, setLastRun, appendLog, syncCueDuration, select: (id: string) => { selected = id } }

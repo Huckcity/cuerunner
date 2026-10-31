@@ -3,11 +3,9 @@
 // built on the faders and recorded into a new Light cue, and GO sends it. What the listener reads
 // is the sACN packets the app actually put on the loopback, decoded with the same reader a
 // receiver uses — not the app's account of itself — and the monitor is held to the same values.
-//
-// Without a key the view is a lock and the cue type carries the Pro mark.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
 import { createSocket, type Socket } from 'node:dgram'
-import { addCueFromMoreMenu, closeApp, launchApp, mintLicense } from './helpers'
+import { closeApp, launchApp } from './helpers'
 import { decodeSacnData, type SacnDataPacket } from '../src/main/dmx/packets'
 
 let app: ElectronApplication
@@ -50,7 +48,7 @@ async function lightingTab(page: Page, name: string): Promise<void> {
 test('patch, record a Light cue from the faders, GO, and the DMX arrives and shows', async () => {
   const listener = await listen()
   try {
-    ;({ app, page } = await launchApp({ license: mintLicense() }))
+    ;({ app, page } = await launchApp())
     await openLighting(page)
 
     // Two pars of a built-in type, in the first gaps of universe 1.
@@ -128,20 +126,4 @@ test('patch, record a Light cue from the faders, GO, and the DMX arrives and sho
   } finally {
     listener.socket.close()
   }
-})
-
-test('without a key the lighting is locked, and the Light cue carries the mark', async () => {
-  ;({ app, page } = await launchApp())
-  await openLighting(page)
-  await expect(page.locator('.pro-lock[data-feature="Lighting"]')).toBeVisible()
-  await page.getByRole('tab', { name: 'Cues' }).click()
-  await page.locator('.toolbar-more-btn').click()
-  const item = page.locator('.toolbar-more-menu-item', { hasText: 'Light' })
-  await expect(item).toHaveAttribute('data-locked', 'true')
-  await expect(item.locator('.pro-mark')).toBeVisible()
-  await page.keyboard.press('Escape')
-  // Adding one without a key goes to where the key is entered, rather than adding a cue that cannot run.
-  await addCueFromMoreMenu(page, 'Light')
-  await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible()
-  await expect(page.locator('.cue-row')).toHaveCount(0)
 })

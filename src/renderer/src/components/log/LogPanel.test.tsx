@@ -7,7 +7,6 @@ import { LogPanel, logRows } from './LogPanel'
 import { describeEvent } from '../monitor/MonitorPanel'
 import { useStore, type LogEntry } from '../../store'
 import { formatClock } from '../../utils/cueDefaults'
-import { TEST_LICENSE } from '../../../../test/license'
 import type { ShowEvent } from '../../../../shared/show'
 
 const AT = 1_700_000_000_000
@@ -109,13 +108,13 @@ describe('LogPanel', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
-    useStore.setState({ log: [], showEvents: [], license: { state: 'unlicensed' } })
+    useStore.setState({ log: [], showEvents: [] })
   })
 
   afterEach(() => {
     act(() => root.unmount())
     container.remove()
-    useStore.setState({ log: [], showEvents: [], license: { state: 'unlicensed' } })
+    useStore.setState({ log: [], showEvents: [] })
   })
 
   const count = (): string | null | undefined => container.querySelector('.log-count')?.textContent
@@ -138,7 +137,7 @@ describe('LogPanel', () => {
   })
 
   it('labels what came in from the show by its kind, in the operator’s terms', () => {
-    useStore.setState({ showEvents: EVENTS, license: { state: 'active', license: TEST_LICENSE } })
+    useStore.setState({ showEvents: EVENTS })
     render()
 
     expect([...container.querySelectorAll('.log-event')].map(row => row.getAttribute('data-kind')))
@@ -151,10 +150,10 @@ describe('LogPanel', () => {
     ])
   })
 
-  it('offers the filter with or without a licence, and filters either half', () => {
+  it('offers the filter, and filters either half', () => {
     render()
     // The log holds two kinds of row — what the cues did, and what the show sent in —
-    // and the filter is how either is read. It is not a Pro surface.
+    // and the filter is how either is read.
     expect(container.querySelector('.log-filters')).not.toBeNull()
 
     act(() => { useStore.setState({ showEvents: EVENTS }) })
@@ -165,7 +164,7 @@ describe('LogPanel', () => {
   })
 
   it('clears both halves at once', () => {
-    useStore.setState({ showEvents: EVENTS, license: { state: 'active', license: TEST_LICENSE } })
+    useStore.setState({ showEvents: EVENTS })
     act(() => { useStore.getState().appendLog([{ level: 'info', message: 'started' }]) })
     render()
 

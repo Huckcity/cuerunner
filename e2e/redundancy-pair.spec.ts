@@ -11,7 +11,7 @@ import fs from 'node:fs'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
-import { closeApp, launchApp, mintLicense, openFromRecent } from './helpers'
+import { closeApp, launchApp, openFromRecent } from './helpers'
 
 const TOKEN = 'pair-token'
 const TRACK_SECONDS = 30
@@ -89,9 +89,9 @@ test.beforeAll(async () => {
     peerHost: '127.0.0.1', peerPort: livePort, token: TOKEN, timeoutMs: 1500, takeover: 'auto'
   }))
 
-  ;({ app: liveApp, page: live } = await launchApp({ userDataDir: liveDir, license: mintLicense() }))
+  ;({ app: liveApp, page: live } = await launchApp({ userDataDir: liveDir }))
   await openFromRecent(live, liveDir, showPath)
-  ;({ app: backupApp, page: backup } = await launchApp({ userDataDir: backupDir, license: mintLicense() }))
+  ;({ app: backupApp, page: backup } = await launchApp({ userDataDir: backupDir }))
   await openFromRecent(backup, backupDir, showPath)
 })
 

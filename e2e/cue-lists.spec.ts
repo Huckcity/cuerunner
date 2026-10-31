@@ -8,7 +8,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import {
-  closeApp, launchApp, mintLicense, oscPortOfItsOwn, openLogPanel, sendOsc, toolbarCueBtn
+  closeApp, launchApp, oscPortOfItsOwn, openLogPanel, sendOsc, toolbarCueBtn
 } from './helpers'
 
 let app: ElectronApplication
@@ -257,7 +257,7 @@ function artTimecode(hours: number, minutes: number, seconds: number, frames: nu
 }
 
 test('each list follows the clock at its own offset, or not at all', async () => {
-  ;({ app, page } = await launchApp({ license: mintLicense() }))
+  ;({ app, page } = await launchApp())
   const port = 47900 + Math.floor(Math.random() * 90)
   await page.locator('.toolbar-brand').click()
   await page.locator('.file-menu [data-action="settings"]').click()

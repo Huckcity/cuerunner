@@ -36,8 +36,8 @@ test('the Cuerunner button and the File menu offer the same things', async () =>
   const { file } = await menu()
 
   await page.locator('.toolbar-brand').click()
-  // The label specifically: a Pro entry carries a chip of its own inside the same button,
-  // and the application menu has no equivalent of it.
+  // The label specifically: an entry's shortcut sits inside the same button, and the
+  // application menu carries it elsewhere.
   const inWindow = await page.locator('.file-menu button[data-action] .file-menu-label').allTextContents()
 
   // Settings sits under the app's name on a Mac, and Exit is the menu bar's own.
@@ -47,8 +47,8 @@ test('the Cuerunner button and the File menu offer the same things', async () =>
 })
 
 test('the File menu opens the demo as the button does', async () => {
-  // The window answers once it has drawn; the app reads its license before the first
-  // frame, so a click the moment the process is up can arrive with nobody listening.
+  // The window answers once it has drawn, so a click the moment the process is up can
+  // arrive with nobody listening.
   await expect(page.locator('.toolbar')).toBeVisible()
   // Clicked the way the menu-undo spec clicks: with the window the menu belongs to.
   await app.evaluate(({ Menu, BrowserWindow }) => {

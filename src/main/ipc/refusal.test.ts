@@ -51,21 +51,8 @@ const ends = vi.hoisted(() => {
   return { handlers, appOn, userData, packaged }
 })
 
-/**
- * The Pro gate, held open for the one channel here that sits behind it. The gate itself is
- * not what this file pins (the licence suite covers it); the flag starts false so
- * registration starts the free services exactly as a launch does, and the import test is
- * what flips it.
- */
-const licenseGate = vi.hoisted(() => ({ pro: false }))
-
 /** The one password the mocked keychain refuses to keep, so a test can lock it on demand. */
 const keychain = vi.hoisted(() => ({ refuse: '' }))
-
-vi.mock('../../shared/license', async importOriginal => ({
-  ...(await importOriginal()) as Record<string, unknown>,
-  isPro: () => licenseGate.pro
-}))
 
 // The factory is hoisted above this file's imports, so it cannot use them: node's own
 // modules are pulled in here rather than imported statically, which is the only way the
@@ -430,21 +417,15 @@ describe('a refusal is a value', () => {
   })
 
   it('answers a file that is not a bundle with its refusal arm, not a rejection', async () => {
-    // The import channels are Pro-gated; the gate is not this file's subject, so it is
-    // let through and the archive's own refusal — a file that is not a zip — is what must
-    // come back, as the value the union declares.
+    // The archive's own refusal — a file that is not a zip — is what must come back, as
+    // the value the union declares.
     const notABundle = join(ends.userData.path, 'notes.cuerunnerx')
     writeFileSync(notABundle, 'this is not an archive')
     vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: false, filePaths: [notABundle] })
-    licenseGate.pro = true
-    try {
-      const result = await handler(WORKSPACE_CHANNELS.importBundle)('event') as { ok: boolean; error?: string }
+    const result = await handler(WORKSPACE_CHANNELS.importBundle)('event') as { ok: boolean; error?: string }
 
-      expect(result.ok).toBe(false)
-      expect(result.error).toBe('that file is not a zip archive')
-    } finally {
-      licenseGate.pro = false
-    }
+    expect(result.ok).toBe(false)
+    expect(result.error).toBe('that file is not a zip archive')
   })
 
   it('keeps the success arm unchanged', async () => {
@@ -460,7 +441,7 @@ describe('a refusal is a value', () => {
   })
 })
 
-describe('the Pro channels refuse through the dialogs too', () => {
+describe('the merge and compare channels refuse through the dialogs too', () => {
   it('answers a merge whose other side this build cannot draw', async () => {
     // Two dialogs — the other person's copy, then the version both sides started from —
     // and the refusal comes from reading the first of them.
@@ -469,35 +450,25 @@ describe('the Pro channels refuse through the dialogs too', () => {
     vi.mocked(dialog.showOpenDialog)
       .mockResolvedValueOnce({ canceled: false, filePaths: [theirs] })
       .mockResolvedValueOnce({ canceled: false, filePaths: [ancestor] })
-    licenseGate.pro = true
-    try {
-      const result = await handler(WORKSPACE_CHANNELS.merge)('event', {
-        workspace: showPayload('Show'),
-        workspacePath: null
-      }) as { ok: boolean; error?: string }
+    const result = await handler(WORKSPACE_CHANNELS.merge)('event', {
+      workspace: showPayload('Show'),
+      workspacePath: null
+    }) as { ok: boolean; error?: string }
 
-      expect(result.ok).toBe(false)
-      expect(result.error).toContain('does not know (hologram)')
-    } finally {
-      licenseGate.pro = false
-    }
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('does not know (hologram)')
   })
 
   it('answers a comparison against a file this build cannot draw', async () => {
     const other = writeShow('compare-other.cuerunner', [{ id: 'v1', type: 'hologram', name: 'Effect' }])
     vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: false, filePaths: [other] })
-    licenseGate.pro = true
-    try {
-      const result = await handler(WORKSPACE_CHANNELS.compare)('event', showPayload('Show')) as {
-        ok: boolean
-        error?: string
-      }
-
-      expect(result.ok).toBe(false)
-      expect(result.error).toContain('does not know (hologram)')
-    } finally {
-      licenseGate.pro = false
+    const result = await handler(WORKSPACE_CHANNELS.compare)('event', showPayload('Show')) as {
+      ok: boolean
+      error?: string
     }
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('does not know (hologram)')
   })
 })
 
@@ -507,48 +478,30 @@ describe('the EW-DX credential channels', () => {
   const setPassword = (sourceId: string, password: unknown): Promise<unknown> =>
     Promise.resolve(handler(SHOW_CHANNELS.ewDxSetPassword)('event', { sourceId, password }))
 
-  it('refuses a password without a Pro licence, with the sentence the other Pro services use, and keeps nothing', async () => {
-    const result = await setPassword('rack-locked', PASSWORD)
-
-    expect(result).toEqual({ ok: false, error: 'Cuerunner Pro is required for the show services' })
-    expect(await status('rack-locked')).toMatchObject({ hasPassword: false })
-  })
-
   it('refuses a blank or an absurd password as a value, because a person typed it', async () => {
-    licenseGate.pro = true
-    try {
-      expect(await setPassword('rack-blank', '')).toEqual({
-        ok: false,
-        error: 'Enter the password set for this receiver in WSM'
-      })
-      expect(await setPassword('rack-long', 'x'.repeat(257))).toEqual({
-        ok: false,
-        error: 'That password is too long to be one'
-      })
-      expect(await status('rack-blank')).toMatchObject({ hasPassword: false })
-    } finally {
-      licenseGate.pro = false
-    }
+    expect(await setPassword('rack-blank', '')).toEqual({
+      ok: false,
+      error: 'Enter the password set for this receiver in WSM'
+    })
+    expect(await setPassword('rack-long', 'x'.repeat(257))).toEqual({
+      ok: false,
+      error: 'That password is too long to be one'
+    })
+    expect(await status('rack-blank')).toMatchObject({ hasPassword: false })
   })
 
   it('keeps a password, says it holds one, and never says what it is', async () => {
-    licenseGate.pro = true
-    try {
-      const result = await setPassword('rack-held', PASSWORD)
+    const result = await setPassword('rack-held', PASSWORD)
 
-      expect(result).toEqual({ ok: true, hasPassword: true, encrypted: true, fingerprint: null, serial: null, moved: null })
-      expect(JSON.stringify(await status('rack-held'))).not.toContain(PASSWORD)
-      // What is on disk is what the keychain made of it, not what was typed.
-      const onDisk = readFileSync(join(ends.userData.path, 'ew-dx.json'), 'utf-8')
-      expect(onDisk).not.toContain(PASSWORD)
-      expect(onDisk).toContain('rack-held')
-    } finally {
-      licenseGate.pro = false
-    }
+    expect(result).toEqual({ ok: true, hasPassword: true, encrypted: true, fingerprint: null, serial: null, moved: null })
+    expect(JSON.stringify(await status('rack-held'))).not.toContain(PASSWORD)
+    // What is on disk is what the keychain made of it, not what was typed.
+    const onDisk = readFileSync(join(ends.userData.path, 'ew-dx.json'), 'utf-8')
+    expect(onDisk).not.toContain(PASSWORD)
+    expect(onDisk).toContain('rack-held')
   })
 
   it('answers a locked keychain with a sentence, and keeps nothing', async () => {
-    licenseGate.pro = true
     keychain.refuse = 'locked-out-password'
     try {
       expect(await setPassword('rack-locked-keychain', 'locked-out-password')).toEqual({
@@ -558,11 +511,10 @@ describe('the EW-DX credential channels', () => {
       expect(await status('rack-locked-keychain')).toMatchObject({ hasPassword: false })
     } finally {
       keychain.refuse = ''
-      licenseGate.pro = false
     }
   })
 
-  it('looks for receivers with no licence, because it reads and changes nothing', async () => {
+  it('looks for receivers, and reads and changes nothing', async () => {
     // A harness names the announcements itself, as the packaged app never lets it; nothing is
     // listening on the port, so identifying it finds no receiver and the answer is empty.
     process.env['CUERUNNER_TEST_EWDX_ANNOUNCED'] = JSON.stringify(['127.0.0.1:9'])
@@ -573,20 +525,8 @@ describe('the EW-DX credential channels', () => {
     }
   })
 
-  it('refuses to trust a certificate again without a Pro licence', async () => {
-    expect(await handler(SHOW_CHANNELS.ewDxTrustAgain)('event', 'rack-held')).toEqual({
-      ok: false,
-      error: 'Cuerunner Pro is required for the show services'
-    })
-  })
-
-  it('forgets a removed receiver even when the licence has lapsed', async () => {
-    licenseGate.pro = true
-    try {
-      await setPassword('rack-gone', PASSWORD)
-    } finally {
-      licenseGate.pro = false
-    }
+  it('forgets a removed receiver', async () => {
+    await setPassword('rack-gone', PASSWORD)
 
     expect(await handler(SHOW_CHANNELS.ewDxForget)('event', 'rack-gone')).toMatchObject({ hasPassword: false })
     expect(await status('rack-gone')).toMatchObject({ hasPassword: false })
@@ -665,7 +605,7 @@ describe('the QLab import channels', () => {
     })
   })
 
-  it('answers a cancelled dialog as the null inside the success arm, with no licence asked for', async () => {
+  it('answers a cancelled dialog as the null inside the success arm', async () => {
     vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: true, filePaths: [] })
 
     expect(await handler(QLAB_CHANNELS.importFile)('event')).toEqual({ ok: true, imported: null })

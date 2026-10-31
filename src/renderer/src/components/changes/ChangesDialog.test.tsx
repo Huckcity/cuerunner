@@ -7,7 +7,6 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ChangesDialog } from './ChangesDialog'
 import { useStore } from '../../store'
-import { TEST_LICENSE } from '../../../../test/license'
 import type { WorkspaceDiff } from '../../../../shared/showfile'
 
 let container: HTMLDivElement
@@ -38,7 +37,6 @@ beforeEach(() => {
   compare = window.cuerunner.workspace.compare as unknown as Mock
   compare.mockReset().mockResolvedValue({ ok: true, comparison: null })
   useStore.setState({
-    license: { state: 'active', license: TEST_LICENSE },
     changesTab: null,
     showHistory: [],
     workspaceId: 'w1',
@@ -50,7 +48,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount())
   container.remove()
-  useStore.setState({ license: { state: 'unlicensed' }, showHistory: [], cues: [] })
+  useStore.setState({ showHistory: [], cues: [] })
 })
 
 async function show(tab: 'history' | 'compare' = 'history'): Promise<void> {
@@ -197,40 +195,12 @@ describe('comparing with another file', () => {
   })
 
   it('shows what the main process said instead of an empty list', async () => {
-    compare.mockResolvedValue({ ok: false, error: 'Cuerunner Pro is required for the show services' })
+    compare.mockResolvedValue({ ok: false, error: 'that file could not be read' })
     await show('compare')
     await act(async () => {
       container.querySelector<HTMLButtonElement>('.changes-choose')?.click()
     })
 
-    expect(container.querySelector('.changes-error')?.textContent).toContain('Cuerunner Pro is required')
-  })
-})
-
-describe('without a license', () => {
-  it('reads the show’s own history', async () => {
-    useStore.setState({
-      license: { state: 'unlicensed' },
-      showHistory: [
-        {
-          at: '2026-09-14T18:30:00.000Z',
-          by: 'associate',
-          cues: [{ kind: 'added', id: 'a', label: '3 Bows' }],
-          settings: []
-        }
-      ]
-    })
-    await show('history')
-
-    expect(container.querySelectorAll('.changes-entry')).toHaveLength(1)
-    expect(container.querySelector('.pro-lock')).toBeNull()
-  })
-
-  it('locks the comparison', async () => {
-    useStore.setState({ license: { state: 'unlicensed' } })
-    await show('compare')
-
-    expect(container.querySelector('.pro-lock')).not.toBeNull()
-    expect(container.querySelector('.changes-choose')).toBeNull()
+    expect(container.querySelector('.changes-error')?.textContent).toContain('that file could not be read')
   })
 })

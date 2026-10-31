@@ -19,7 +19,6 @@ function cueAt(id: string, type: 'audio' | 'osc', label: string, duration = 0): 
 function harness(options: {
   chase?: boolean
   onStop?: TimecodeOnStop
-  pro?: boolean
   tolerance?: number
   listShift?: ChaseDeps['listShift']
 } = {}) {
@@ -33,7 +32,6 @@ function harness(options: {
   const deps: ChaseDeps = {
     getCues: () => cues,
     settings: () => ({ chase: options.chase ?? false, toleranceFrames: options.tolerance ?? 10, onStop: options.onStop ?? 'hold' }),
-    isPro: () => options.pro ?? true,
     fire: cue => {
       log.push(`fire ${cue.id}`)
       running.add(cue.id)
@@ -100,12 +98,6 @@ describe('timecode triggers', () => {
     located.run(at('01:00:01:00'), 200)
     located.run(at('01:00:30:00'), 200)
     expect(located.log).toEqual([])
-  })
-
-  it('leave every cue alone on a machine without Pro', () => {
-    const { log, run } = harness({ pro: false })
-    run(at('00:59:59:00'), 8000)
-    expect(log).toEqual([])
   })
 })
 

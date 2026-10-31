@@ -38,8 +38,7 @@ function setup(cues: Cue[], selected: string): { runner: CueEngine; setRunning: 
     appendLog: vi.fn(),
     getWorkspacePath: () => null,
     getMidiDefaultPort: () => '',
-    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
-    isPro: () => false
+    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD
   })
   runners.push(runner)
   return { runner, setRunning, setLastRun, setSelected }
@@ -54,7 +53,7 @@ describe('a memo cue', () => {
     expect(cue).toMatchObject({ type: 'memo', name: 'Memo', number: '7', notes: '' })
   })
 
-  it('completes the moment it is fired, and needs no licence', () => {
+  it('completes the moment it is fired', () => {
     const { runner, setLastRun } = setup([memo()], 'memo')
     runner.go()
     vi.advanceTimersByTime(30)

@@ -11,13 +11,13 @@ import fs from 'fs'
 import net from 'net'
 import os from 'os'
 import path from 'path'
-import { buildDeskShow, closeApp, launchApp, mintLicense, openFromRecent, openShowSettings, pointDeskAtTcp } from './helpers'
+import { buildDeskShow, closeApp, launchApp, openFromRecent, openShowSettings, pointDeskAtTcp } from './helpers'
 
 let app: ElectronApplication
 let page: Page
 
 test.beforeAll(async () => {
-  ;({ app, page } = await launchApp({ license: mintLicense() }))
+  ;({ app, page } = await launchApp())
 })
 
 test.afterAll(async () => {
@@ -234,7 +234,7 @@ test('a show whose settings carry one section and not the rest is refused, and s
   fs.mkdirSync(userDataDir, { recursive: true })
 
   await closeApp(app)
-  ;({ app, page } = await launchApp({ license: mintLicense(), userDataDir }))
+  ;({ app, page } = await launchApp({ userDataDir }))
   await openFromRecent(page, userDataDir, showPath)
 
   const notice = page.locator('.app-notice[data-kind="error"]')

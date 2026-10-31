@@ -2,68 +2,16 @@ import { _electron as electron, expect, type ElectronApplication, type Locator, 
 import { createServer, type IncomingHttpHeaders, type Server } from 'http'
 import type { ChildProcess } from 'child_process'
 import { createSocket } from 'dgram'
-import { generateKeyPairSync } from 'crypto'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'fs'
 import path from 'path'
-// The spec process mints keys with the same codec the app reads them with, so a test
-// cannot pass against a format the app does not actually accept.
-import { createLicense } from '../src/main/license/key.ts'
 import { workerDisplay } from './display.ts'
 
-/**
- * A license minted for a test run.
- *
- * The private half of the product key is deliberately not in the repository, so a spec
- * that needs the Pro surfaces brings a key of its own: `launchApp({ license })` writes
- * it where the app keeps its own and points the app at the public half that signed it.
- * That override is honoured by a build running out of the source tree and ignored by a
- * packaged one — see src/main/license/trustedKeys.ts — so this unlocks a test, never a
- * release.
- */
-export interface TestLicense {
-  /** The key as an operator would paste it. */
-  text: string
-  /** The public half, for the app that has to trust it. */
-  publicKeyPem: string
-  /** The private half, so a spec can mint a second key from the same issuer — an
-   *  expired one, say — without the app having to trust a second key. */
-  privateKeyPem: string
-}
-
-export function mintLicense(
-  options: { licensee?: string; expires?: string; issuer?: TestLicense } = {}
-): TestLicense {
-  const { privateKeyPem, publicKeyPem } = options.issuer ?? newIssuer()
-  const payload = {
-    v: 1,
-    id: `CRN-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-    licensee: options.licensee ?? 'End to End Test',
-    issued: '2026-01-01',
-    ...(options.expires === undefined ? {} : { expires: options.expires })
-  }
-  return {
-    privateKeyPem,
-    publicKeyPem,
-    text: createLicense(payload, privateKeyPem)
-  }
-}
-
-/** A pair to sign test licenses with. Nothing it signs leaves this machine. */
-function newIssuer(): { privateKeyPem: string; publicKeyPem: string } {
-  const { privateKey, publicKey } = generateKeyPairSync('ed25519')
-  return {
-    privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
-    publicKeyPem: publicKey.export({ type: 'spki', format: 'pem' }).toString()
-  }
-}
-
-/** Environment for a launch, with any license override the shell happens to carry removed. */
-function launchEnv(trustPublicKey?: string): Record<string, string> {
+/** The shell's environment, with the unset entries Electron's launch type does not take removed. */
+function stringEnv(): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) {
-    if (value !== undefined && !key.startsWith('CUERUNNER_LICENSE_')) env[key] = value
+    if (value !== undefined) env[key] = value
   }
-  if (trustPublicKey !== undefined) env['CUERUNNER_LICENSE_PUBLIC_KEY'] = trustPublicKey
   return env
 }
 
@@ -74,8 +22,6 @@ function launchEnv(trustPublicKey?: string): Record<string, string> {
 export async function launchApp(
   options: {
     userDataDir?: string
-    license?: TestLicense
-    trustPublicKey?: string
     /**
      * Extra environment for the app process. Used for the dev-only harness switches a
      * spec needs — never for anything the product reads in a packaged build.
@@ -102,12 +48,6 @@ export async function launchApp(
     userDataDir = mkdtempSync(path.join('test-results', 'userdata-'))
   }
 
-  // The key goes where the app puts its own, so a licensed spec exercises the same path
-  // an operator's license takes — and a launch without one starts locked.
-  if (options.license) {
-    writeFileSync(path.join(userDataDir, 'license.key'), options.license.text, 'utf-8')
-  }
-
   // Each worker's windows go to a virtual display of that worker's own: on one shared
   // server, a pointer drag in one app was lost when another worker's app dragged at the
   // same moment. display.ts carries the measurements.
@@ -128,7 +68,7 @@ export async function launchApp(
       ...(options.args ?? [])
     ],
     env: {
-      ...launchEnv(options.license?.publicKeyPem ?? options.trustPublicKey),
+      ...stringEnv(),
       // Electron prints its security advice into the renderer's console once per window
       // while unpackaged, and the suite opens hundreds. It says so itself — "this warning
       // will not show up once the app is packaged" — and where the harness tees the app's
@@ -224,10 +164,9 @@ export async function readRecovered(app: ElectronApplication, expression: string
 // Adds a cue from the toolbar's "More" menu (MIDI, OSC, Network, Script).
 export async function addCueFromMoreMenu(page: Page, label: string): Promise<void> {
   await page.locator('.toolbar-more-btn').click()
-  // The whole label, not a part of it: "MIDI" is also the start of "MIDI File". A locked
-  // entry carries its Pro mark after the label, which the match allows.
+  // The whole label, not a part of it: "MIDI" is also the start of "MIDI File".
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  await page.locator('.toolbar-more-menu-item', { hasText: new RegExp(`^\\s*${escaped}\\s*(pro)?\\s*$`) }).click()
+  await page.locator('.toolbar-more-menu-item', { hasText: new RegExp(`^\\s*${escaped}\\s*$`) }).click()
 }
 
 /** Sets the show's firing window, the way an operator would, and closes the panel. */
@@ -613,7 +552,7 @@ export async function buildDeskShow(
 
 /**
  * Moves this app's OSC input off the default port, onto one nothing else in the run is
- * using, and waits for the service to say so. Every licensed app in a parallel run
+ * using, and waits for the service to say so. Every app in a parallel run
  * listens on the default, and a datagram sent there lands in whichever one the OS picks
  * — so a spec that sends OSC to the app it launched sends it here.
  */

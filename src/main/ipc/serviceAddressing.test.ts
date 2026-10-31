@@ -35,7 +35,6 @@ import type { BrowserWindow } from 'electron'
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { APP_CHANNELS } from '../../shared/ipc/app'
-import { LICENSE_CHANNELS } from '../../shared/ipc/license'
 import { REDUNDANCY_CHANNELS } from '../../shared/ipc/redundancy'
 import { SHOW_CHANNELS } from '../../shared/ipc/show'
 import { registerIpcHandlers } from './handlers'
@@ -88,18 +87,6 @@ const ends = vi.hoisted(() => {
   return { registered, calls, stub, appOn, userData }
 })
 
-/**
- * The Pro gate, held open for the one channel that sits behind it. A machine's configure
- * is Pro-gated in main, and what this file pins is what it does once it runs; the gate
- * itself is the licence suite's subject.
- */
-const licenseGate = vi.hoisted(() => ({ pro: false }))
-
-vi.mock('../../shared/license', async importOriginal => ({
-  ...(await importOriginal()) as Record<string, unknown>,
-  isPro: () => licenseGate.pro
-}))
-
 // The factory is hoisted above this file's imports, so a statically imported binding
 // would still be in its temporal dead zone when it runs: node's own modules are pulled in
 // here instead, which is the only way the temporary directory can exist before
@@ -108,8 +95,8 @@ vi.mock('electron', async () => {
   const { mkdtempSync } = await import('node:fs')
   const { tmpdir } = await import('node:os')
   const { join } = await import('node:path')
-  // A real directory, as the refusal test uses: registration reads the licence and this
-  // machine's redundancy settings from `userData`, and the probes write them back.
+  // A real directory, as the refusal test uses: registration reads this machine's
+  // redundancy settings from `userData`, and the probes write them back.
   ends.userData.path = mkdtempSync(join(tmpdir(), 'cuerunner-addressing-'))
   return {
     app: {
@@ -235,8 +222,7 @@ function probeRequest(sentinel: string): Record<string, unknown> {
 /**
  * A channel's probe, in the shapes a payload arrives in: the two objects above, one
  * answering the sentinel for any name a handler reads and one a validation would accept,
- * and the sentinel itself, for the channels that take a bare string (an id, a path, a
- * licence key).
+ * and the sentinel itself, for the channels that take a bare string (an id, a path).
  */
 function probeValues(sentinel: string): unknown[] {
   return [probeObject(sentinel), probeRequest(sentinel), sentinel]
@@ -293,8 +279,7 @@ function callsOf(channel: string): RuntimeCall[] {
  * refusal.
  *
  * The window matters as much as the sentinel: a call is read against the channel being
- * probed when it was made, so a reach that belongs to no channel — the licence subscriber
- * re-sending the settings the window last sent, a quit's teardown — is never credited to
+ * probed when it was made, so a reach that belongs to no channel — a quit's teardown — is never credited to
  * whichever channel happened to be under the probe at the time.
  */
 async function probeSurface(surface: ReadonlyMap<string, ChannelHandler>): Promise<Probe> {
@@ -420,26 +405,21 @@ describe('a channel outside the show channels may not address a service', () => 
     // gate has to see that call and permit it (which is why it sits on the runtime rather
     // than on a list of four names), so the permit is pinned here rather than left to the
     // absence of a finding.
-    licenseGate.pro = true
-    try {
-      const probe = await probeSurface(
-        new Map([
-          [SHOW_CHANNELS.configure, handler(SHOW_CHANNELS.configure)],
-          [REDUNDANCY_CHANNELS.configure, handler(REDUNDANCY_CHANNELS.configure)]
-        ])
-      )
+    const probe = await probeSurface(
+      new Map([
+        [SHOW_CHANNELS.configure, handler(SHOW_CHANNELS.configure)],
+        [REDUNDANCY_CHANNELS.configure, handler(REDUNDANCY_CHANNELS.configure)]
+      ])
+    )
 
-      expect(probe.addressing.map(finding => finding.channel)).toEqual([SHOW_CHANNELS.configure])
-      // Every call its probe made restarted the service the code names — once per probe
-      // shape, with nothing of the caller's patch in any argument.
-      const restarted = probeValues(sentinelFor(REDUNDANCY_CHANNELS.configure)).map(() => ({
-        verb: 'restart',
-        args: ['redundancy']
-      }))
-      expect(probe.windows.get(REDUNDANCY_CHANNELS.configure)).toEqual(restarted)
-    } finally {
-      licenseGate.pro = false
-    }
+    expect(probe.addressing.map(finding => finding.channel)).toEqual([SHOW_CHANNELS.configure])
+    // Every call its probe made restarted the service the code names — once per probe
+    // shape, with nothing of the caller's patch in any argument.
+    const restarted = probeValues(sentinelFor(REDUNDANCY_CHANNELS.configure)).map(() => ({
+      verb: 'restart',
+      args: ['redundancy']
+    }))
+    expect(probe.windows.get(REDUNDANCY_CHANNELS.configure)).toEqual(restarted)
   })
 
   it('flags nothing for the reaches that are not channels', async () => {
@@ -447,28 +427,6 @@ describe('a channel outside the show channels may not address a service', () => 
     // launch defaults, before any window has sent settings: reaches into a service that
     // belong to no channel, already in the record when the surface was probed.
     expect(launch.map(call => call.verb)).toEqual(expect.arrayContaining(['configure', 'subscribe']))
-
-    // A licence change re-sends the settings the window last sent — another reach that is
-    // not a channel, made by the subscriber in `handlers.ts` rather than by a request. It
-    // is recorded, carrying the data the show:configure route had put there, and the gate,
-    // which judges each channel against its own probe alone, credits it to no channel.
-    const probe = await probeSurface(
-      new Map([
-        [SHOW_CHANNELS.configure, handler(SHOW_CHANNELS.configure)],
-        [LICENSE_CHANNELS.deactivate, handler(LICENSE_CHANNELS.deactivate)]
-      ])
-    )
-
-    expect(probe.addressing.map(finding => finding.channel)).toEqual([SHOW_CHANNELS.configure])
-    // What the licence channel's probe caused: the subscriber re-sending the settings the
-    // route had put in `lastShowSettings`, once per probe. No channel's own data is in
-    // them, so nothing here is a route — and the reach is in the record rather than merely
-    // unfound.
-    const reSends = probe.windows.get(LICENSE_CHANNELS.deactivate) ?? []
-    expect(reSends.length).toBeGreaterThan(0)
-    expect(
-      reSends.every(call => call.verb === 'configure' && carries(call.args, sentinelFor(SHOW_CHANNELS.configure)))
-    ).toBe(true)
   })
 
   it('catches a channel the app does not have that forwards its caller’s payload', async () => {

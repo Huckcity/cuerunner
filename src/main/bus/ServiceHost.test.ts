@@ -33,7 +33,6 @@ interface FakeOptions {
   stop?: () => void | Promise<void>
   command?: (action: string, payload?: unknown) => unknown
   withCommand?: boolean
-  pro?: true
 }
 
 const running = (context: ServiceContext): void => context.setState('running', 'up')
@@ -54,7 +53,6 @@ function fakeService(options: FakeOptions) {
     settingsSections: options.sections ?? [],
     start,
     stop,
-    ...(options.pro === true ? { pro: true as const } : {}),
     ...(options.withCommand === false ? {} : { command })
   }
   return { service, start, stop, command }
@@ -66,9 +64,9 @@ interface Harness {
   alerts(): ShowAlert[]
 }
 
-function harness(options: { entitled?: () => boolean } = {}): Harness {
+function harness(): Harness {
   const bus = new ShowBus({ now: () => 1000 })
-  const host = new ServiceHost(bus, options.entitled ?? (() => true))
+  const host = new ServiceHost(bus)
   return { host, bus, alerts: () => bus.snapshot().alerts }
 }
 
@@ -566,7 +564,7 @@ describe('ServiceHost — restart and stop', () => {
   })
 
   it('says stopped afterwards, because a snapshot is read after the fact', async () => {
-    // Suspending the show (a licence removed, a quit) stops services on the host's
+    // Suspending the show (a quit) stops services on the host's
     // instruction, and none of them reports that. A window that asks what is listening
     // must not be told about a port that was closed.
     const { host } = harness()
@@ -598,81 +596,5 @@ describe('ServiceHost — restart and stop', () => {
     await host.stopAll()
 
     expect(host.status('bad')?.state).toBe('running')
-  })
-})
-
-describe('ServiceHost — entitlement', () => {
-  it('starts the free services and leaves the Pro ones stopped, with the reason', async () => {
-    const { host } = harness({ entitled: () => false })
-    const free = fakeService({ id: 'osc-in' })
-    const paid = fakeService({ id: 'rf', label: 'Wireless', pro: true })
-    host.register(free.service)
-    host.register(paid.service)
-
-    await host.startAll(showSettings())
-
-    expect(free.start).toHaveBeenCalledTimes(1)
-    expect(paid.start).not.toHaveBeenCalled()
-    expect(host.status('rf')).toMatchObject({
-      state: 'stopped',
-      detail: 'Wireless is part of Cuerunner Pro'
-    })
-  })
-
-  it('refuses a Pro service’s command and restart by name, and lets the free one work', async () => {
-    const { host } = harness({ entitled: () => false })
-    host.register(fakeService({ id: 'rf', label: 'Wireless', pro: true }).service)
-    host.register(fakeService({ id: 'osc-in' }).service)
-    await host.startAll(showSettings())
-
-    expect(await host.command('rf', 'repoll')).toEqual({
-      ok: false, error: 'Wireless is part of Cuerunner Pro'
-    })
-    expect(await host.restart('rf')).toEqual({
-      ok: false, error: 'Wireless is part of Cuerunner Pro'
-    })
-    expect(await host.command('osc-in', 'anything')).toEqual({ ok: true, result: 'ok' })
-  })
-
-  it('answers the licence afresh, so a key arriving brings the Pro half up and losing it puts it down', async () => {
-    let licensed = false
-    const { host } = harness({ entitled: () => licensed })
-    const paid = fakeService({ id: 'rf', label: 'Wireless', pro: true })
-    host.register(paid.service)
-
-    await host.startAll(showSettings())
-    expect(paid.start).not.toHaveBeenCalled()
-
-    licensed = true
-    await host.startAll(showSettings())
-    expect(paid.start).toHaveBeenCalledTimes(1)
-
-    licensed = false
-    await host.startAll(showSettings())
-    expect(paid.stop).toHaveBeenCalledTimes(1)
-    expect(host.status('rf')?.state).toBe('stopped')
-  })
-
-  it('restarts a service whose slice moved in the same pass as a licence change', async () => {
-    // The licence pass leaves the services that are already up alone, so entering a key
-    // mid-session does not re-bind every port. A service whose settings moved in that
-    // same configure is the exception: its settings are only in force once it has
-    // restarted, and the caller records the configure as applied.
-    let licensed = false
-    const { host } = harness({ entitled: () => licensed })
-    const listener = fakeService({ id: 'osc-in', sections: ['oscIn'] })
-    const other = fakeService({ id: 'midi-in', sections: ['midiIn'] })
-    host.register(listener.service)
-    host.register(other.service)
-    const before = showSettings()
-    await host.startAll(before)
-
-    licensed = true
-    const moved = { ...before, oscIn: { enabled: true, port: 53001 } }
-    await host.startAll(moved, { entitlementOnly: true })
-
-    expect(listener.start).toHaveBeenCalledTimes(2)
-    expect(listener.start).toHaveBeenLastCalledWith(expect.anything(), moved)
-    expect(other.start).toHaveBeenCalledTimes(1)
   })
 })

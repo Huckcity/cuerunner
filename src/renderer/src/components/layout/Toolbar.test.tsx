@@ -6,7 +6,6 @@ import { act, Profiler } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { Toolbar } from './Toolbar'
 import { useStore } from '../../store'
-import { TEST_LICENSE } from '../../../../test/license'
 
 let container: HTMLDivElement
 let root: Root
@@ -57,39 +56,6 @@ describe('Toolbar', () => {
       expect(icon, `${button.textContent} has no icon`).not.toBeNull()
       expect(icon?.getAttribute('data-type')).toBeTruthy()
     }
-  })
-
-  it('marks the File menu entries a key turns on, on a machine without one, and none with one', () => {
-    const marked = (): string[] =>
-      [...container.querySelectorAll<HTMLButtonElement>('.file-menu button')]
-        .filter(button => button.querySelector('.pro-mark') !== null)
-        .map(button => button.dataset.action ?? '')
-
-    useStore.setState({ license: { state: 'unlicensed' } })
-    render('cues')
-    act(() => container.querySelector<HTMLButtonElement>('.toolbar-brand')!.click())
-    // Show Settings among them: it is the console and the cast, which Scenes run on.
-    expect(marked()).toEqual(['compare', 'merge', 'export-bundle', 'import-bundle', 'show-settings'])
-
-    act(() => { useStore.setState({ license: { state: 'active', license: TEST_LICENSE } }) })
-    expect(marked()).toEqual([])
-  })
-
-  it('marks the Pro cue types in the add menu, read from the declaration', () => {
-    useStore.setState({ license: { state: 'unlicensed' } })
-    render('cues')
-    act(() => container.querySelector<HTMLButtonElement>('.toolbar-more-btn')!.click())
-
-    const item = (label: string): HTMLButtonElement =>
-      [...container.querySelectorAll<HTMLButtonElement>('.toolbar-more-menu-item')]
-        .find(candidate => candidate.textContent?.startsWith(label))!
-
-    // The class is `isProCueType`'s answer, so a type added to `PRO_CUE_TYPES` is locked
-    // and marked here without the menu being edited.
-    expect(item('Scene').getAttribute('data-locked')).toBe('true')
-    expect(item('Scene').querySelector('.pro-mark')).not.toBeNull()
-    expect(item('MIDI').getAttribute('data-locked')).not.toBe('true')
-    expect(item('MIDI').querySelector('.pro-mark')).toBeNull()
   })
 
   it('names the show by its own name, which is the one the window title carries', () => {
@@ -259,8 +225,6 @@ describe('Toolbar', () => {
 
   it('marks which view the window is showing', () => {
     render('scenes')
-    // Unlicensed, the Scenes press also carries its Pro mark, so the check is on the
-    // name rather than on everything inside the button.
     const active = [...container.querySelectorAll('.toolbar-view-btn')]
       .filter(button => button.getAttribute('data-active') === 'true')
     expect(active.length).toBe(1)

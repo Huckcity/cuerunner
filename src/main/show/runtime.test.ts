@@ -283,61 +283,8 @@ describe('createShowRuntime', () => {
     runtime.close()
   })
 
-  it('does not ask about the licence before it is given settings', () => {
-    // This factory runs at module load, before the manager that answers exists, so an
-    // eager question here is a crash on the first launch — and only a real window would
-    // find it. The question belongs to configure, where the answer is used.
-    const entitled = vi.fn(() => true)
-    createShowRuntime([], entitled)
-    expect(entitled).not.toHaveBeenCalled()
-  })
-
-  it('re-decides every service when the licence changes, without dropping the free ones', async () => {
-    let licensed = false
-    const calls: string[] = []
-    const service = (id: string, pro: boolean): ShowService => ({
-      id,
-      label: id,
-      // A licence change re-decides every service; the declarations here are beside the
-      // point, which the test says by leaving them empty.
-      settingsSections: [],
-      ...(pro ? { pro: true as const } : {}),
-      start: (context: ServiceContext) => {
-        calls.push(`start:${id}`)
-        context.setState('running', 'up')
-      },
-      stop: () => {
-        calls.push(`stop:${id}`)
-      }
-    })
-    const runtime = createShowRuntime(
-      [service('osc-in', false), service('rf', true)],
-      () => licensed
-    )
-
-    await runtime.configure(defaultShowSettings())
-    expect(calls).toEqual(['start:osc-in'])
-    expect(runtime.snapshot().services.find(status => status.id === 'rf')).toMatchObject({
-      state: 'stopped',
-      detail: 'rf is part of Cuerunner Pro'
-    })
-
-    // Identical settings: the licence alone changed, and the listener that was already
-    // up is left where it is.
-    licensed = true
-    await runtime.configure(defaultShowSettings())
-    expect(calls).toEqual(['start:osc-in', 'start:rf'])
-
-    licensed = false
-    await runtime.configure(defaultShowSettings())
-    expect(calls).toEqual(['start:osc-in', 'start:rf', 'stop:rf'])
-    expect(runtime.snapshot().services.find(status => status.id === 'osc-in')?.state).toBe('running')
-
-    runtime.close()
-  })
-
   it('applies a configure that arrives mid-apply after the first, not alongside it', async () => {
-    // The renderer's settings effect, a licence change and redundancy:configure all fire
+    // The renderer's settings effect and redundancy:configure both fire
     // without waiting for an apply in flight. Two applies interleaved at a service's
     // start can leave it on the older settings while the memory records the newer ones,
     // and no later configure then corrects it — the memory says they are in force.
@@ -420,26 +367,6 @@ describe('createShowRuntime', () => {
 
     // Skipped on honest memory, not waved through while the service was starting.
     expect(starts).toBe(1)
-    runtime.close()
-  })
-
-  it('applies a move that arrives with a licence change, rather than recording it unapplied', async () => {
-    // Entering a key re-decides every service, and a service already up is left alone by
-    // that pass — but not when its settings moved in the same configure. Recorded as
-    // applied, the move would never come again: the renderer re-sends the same settings
-    // on every autosave tick, and the memory answers for it.
-    let licensed = false
-    const listener = new FakeService('osc-in', 'OSC input', ['oscIn'])
-    const runtime = createShowRuntime([listener], () => licensed)
-    await runtime.configure(defaultShowSettings())
-
-    licensed = true
-    const moved = movedPort(53001)
-    await runtime.configure(moved)
-    expect(listener.starts).toBe(2)
-
-    await runtime.configure(moved)
-    expect(listener.starts).toBe(2)
     runtime.close()
   })
 

@@ -1,6 +1,6 @@
 // The report is what a person answering the mail would otherwise ask for one question at a
-// time, and the one thing it must not be is a way for the operator's account name, their
-// licence, or an unbounded log to leave the machine unread. These hold the composer to that.
+// time, and the one thing it must not be is a way for the operator's account name or an
+// unbounded log to leave the machine unread. These hold the composer to that.
 import { afterEach, describe, expect, it } from 'vitest'
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -28,7 +28,6 @@ function facts(over: Partial<ReportFacts> = {}): ReportFacts {
     osRelease: '10.0.22631',
     engine: null,
     engineStatus: { connected: true, binaryPath: null, restarts: 0, lastError: null, started: true, stderrTail: [] },
-    license: 'unlicensed',
     crashDumps: [],
     crashDumpDir: 'C:\\Users\\ruth\\AppData\\Roaming\\Cuerunner\\Crashpad',
     home: 'C:\\Users\\ruth',
@@ -64,12 +63,6 @@ describe('composeReport', () => {
     expect(text).toContain('last error: device removed')
     expect(text).toContain('wasapi: lost the device')
     expect(text).toContain('Nothing has been sent anywhere.')
-  })
-
-  it('says the licence state and never anything a key carries', () => {
-    const text = composeReport(facts({ license: 'active' }), { description: '', log: [] })
-    expect(text).toContain('licence: active')
-    expect(text).not.toMatch(/licensee|CRN-/i)
   })
 
   it('strips the home folder from the log and from the crash folder', () => {

@@ -53,8 +53,8 @@ const ends = vi.hoisted(() => {
 })
 
 vi.mock('electron', () => ({
-  // Main reads these while its modules load — `app.getPath` for the license, the machine's
-  // redundancy settings and the recent files, `app.isPackaged` for the key ring — so they
+  // Main reads these while its modules load — `app.getPath` for the machine's redundancy
+  // settings and the recent files, `app.isPackaged` for the dev-only harness switches — so they
   // have to answer before `handlers.ts` is imported. A directory that holds no files is
   // the state a machine that has never run Cuerunner is in, and every reader copes with it.
   app: {

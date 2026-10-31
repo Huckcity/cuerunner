@@ -11,7 +11,7 @@ import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import dgram from 'node:dgram'
 import { startEosPeer, type EosPeer } from '../peers/eos'
-import { closeApp, launchApp, mintLicense, openFromRecent, sendOsc } from '../../e2e/helpers'
+import { closeApp, launchApp, openFromRecent, sendOsc } from '../../e2e/helpers'
 import { firedAddress, writeEosShow } from './eosFixture'
 
 /** The cue the show fires in the console, and the one the console's own GO fires after it. */
@@ -52,7 +52,7 @@ test.beforeAll(async () => {
     oscInPort: appPort,
     cue: CUE
   })
-  ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
+  ;({ app, page, userDataDir } = await launchApp())
   await openFromRecent(page, userDataDir, show)
   // The show has to be *in* before anything else is fair: the cue rows are the app saying
   // so, and the services are configured from the workspace once it is loaded.

@@ -20,7 +20,7 @@
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { startDeskPeer, type DeskPeer } from '../peers/desk'
-import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel } from '../../e2e/helpers'
+import { closeApp, launchApp, openFromRecent, openLogPanel } from '../../e2e/helpers'
 import {
   BACK_GROUP,
   BACK_NOTE,
@@ -74,7 +74,7 @@ test.beforeAll(async () => {
   // was left that way — so its report at connect is a state and not a press.
   peer.setMute(CHANNEL, GO_GROUP - 1, true, MUTE_GROUP_PAGE)
   const show = writeDeskButtonsShow({ port: peer.port })
-  ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
+  ;({ app, page, userDataDir } = await launchApp())
   await openFromRecent(page, userDataDir, show)
   await openLogPanel(page)
 })

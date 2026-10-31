@@ -9,7 +9,7 @@ import { test, expect, type ElectronApplication, type Page } from '@playwright/t
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { closeApp, launchApp, mintLicense, type TestLicense } from './helpers'
+import { closeApp, launchApp } from './helpers'
 
 let app: ElectronApplication | undefined
 let root: string
@@ -93,13 +93,13 @@ function writeShow(file: string, cues: unknown[]): void {
   )
 }
 
-async function start(options: { license?: TestLicense } = {}): Promise<Page> {
-  const userDataDir = path.join(root, `userdata-${options.license ? 'pro' : 'free'}`)
+async function start(): Promise<Page> {
+  const userDataDir = path.join(root, 'userdata')
   fs.mkdirSync(userDataDir, { recursive: true })
   // The app's own recent list, written where it reads it from: an operator's way in that
   // does not need a file dialog.
   fs.writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([showPath]))
-  const launched = await launchApp({ ...options, userDataDir })
+  const launched = await launchApp({ userDataDir })
   app = launched.app
   return launched.page
 }
@@ -159,7 +159,7 @@ function historyOnDisk(): Array<{ at: string; by: string; cues: Array<{ kind: st
 
 test('the history says what a save changed, and nothing about a save that did not', async () => {
   test.setTimeout(120_000)
-  const page = await start({ license: mintLicense() })
+  const page = await start()
   await openShow(page)
 
   // The first save writes the file in this build's shape — the services section, the
@@ -201,7 +201,7 @@ test('the history says what a save changed, and nothing about a save that did no
 
 test('the comparison says how this show differs from another file', async () => {
   test.setTimeout(120_000)
-  const page = await start({ license: mintLicense() })
+  const page = await start()
   await openShow(page)
 
   // The pick is answered in the main process; everything after it — reading the file,
@@ -222,23 +222,4 @@ test('the comparison says how this show differs from another file', async () => 
   await expect(dialog.locator('[data-group="changed"] .changes-cue-name')).toHaveText(['1 Walk-in Music'])
   await expect(dialog.locator('[data-group="changed"] .changes-field')).toHaveText(['name “Walk-in” → “Walk-in Music”'])
   await expect(dialog.locator('.changes-foot')).toContainText('the same in both files')
-})
-
-test('a machine with no key still reads the history, and is told what comparing is', async () => {
-  const page = await start()
-  await openShow(page)
-
-  // The history is the show's own record of itself, so the menu does not mark it and
-  // nothing locks it; what needs a key is comparing this file with another.
-  await page.locator('.toolbar-brand').click()
-  await expect(page.locator('.file-menu button[data-action="history"] .pro-mark')).toHaveCount(0)
-  await page.locator('.file-menu button[data-action="history"]').click()
-
-  const dialog = page.getByRole('dialog', { name: 'Changes' })
-  await expect(dialog.locator('.pro-lock')).toHaveCount(0)
-  await expect(dialog.locator('.changes-body')).toBeVisible()
-
-  await dialog.getByRole('button', { name: 'Compare', exact: true }).click()
-  await expect(dialog.locator('.pro-lock[data-feature="Comparing shows"]')).toBeVisible()
-  await expect(dialog.locator('.changes-choose')).toHaveCount(0)
 })

@@ -6,7 +6,6 @@ let app: ElectronApplication
 let page: Page
 
 test.beforeEach(async () => {
-  // No key: a memo is part of the free cue stack.
   ;({ app, page } = await launchApp())
 })
 

@@ -7,7 +7,6 @@ let app: ElectronApplication
 let page: Page
 
 test.beforeEach(async () => {
-  // No key: the Control cue is the free half of the app.
   ;({ app, page } = await launchApp())
 })
 

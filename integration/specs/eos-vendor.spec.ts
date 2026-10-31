@@ -11,7 +11,7 @@ import type { ElectronApplication, Page } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { startEosPeer, type EosPeer } from '../peers/eos'
-import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel } from '../../e2e/helpers'
+import { closeApp, launchApp, openFromRecent, openLogPanel } from '../../e2e/helpers'
 import { firedAddress, VERSION_ANSWER, writeEosShow } from './eosFixture'
 
 /**
@@ -122,7 +122,7 @@ test.beforeAll(async () => {
     oscInPort: appPort,
     cue: CUE
   })
-  ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
+  ;({ app, page, userDataDir } = await launchApp())
   await openFromRecent(page, userDataDir, show)
   // The show has to be *in* before anything else is fair: the cue rows are the app saying
   // so, and the services are configured from the workspace once it is loaded.

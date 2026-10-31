@@ -13,7 +13,7 @@ import fs from 'node:fs'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
-import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel } from './helpers'
+import { closeApp, launchApp, openFromRecent, openLogPanel } from './helpers'
 import { cueListHash, decodeMessage, REDUNDANCY_PROTOCOL } from '../src/shared/redundancy'
 import type { RedundancyDigest } from '../src/shared/redundancy'
 
@@ -204,8 +204,8 @@ test.beforeAll(async () => {
 
   peer = await startLivePeer()
 
-  // This machine's own half of the pair, written where the app keeps it: with the
-  // license and not with the show.
+  // This machine's own half of the pair, written where the app keeps it: in its user
+  // data and not with the show.
   userData = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-redundancy-user-'))
   fs.writeFileSync(path.join(userData, 'redundancy.json'), JSON.stringify({
     enabled: true,
@@ -220,7 +220,7 @@ test.beforeAll(async () => {
     takeover: 'auto'
   }))
 
-  ;({ app, page } = await launchApp({ userDataDir: userData, license: mintLicense() }))
+  ;({ app, page } = await launchApp({ userDataDir: userData }))
   await openFromRecent(page, userData, showPath)
 })
 

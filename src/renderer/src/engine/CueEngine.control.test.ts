@@ -36,7 +36,6 @@ function setup(cues: Cue[], selected = cues[0].id) {
     getMidiDefaultPort: () => '',
     getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
     getRunning: () => running,
-    isPro: () => false,
     setArmed
   })
   runners.push(runner)
@@ -245,7 +244,6 @@ describe('a Control, Stop and Fade cue across cue lists', () => {
       getMidiDefaultPort: () => '',
       getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
       getRunning: () => running,
-      isPro: () => false,
       getCueLists: () => [{ id: 'main', name: 'Main Cue List' }, { id: 'sfx', name: 'Effects', cart: true, disarmed: disarmedCart }],
       getActiveListId: () => 'main',
       getListPlayhead: () => null,

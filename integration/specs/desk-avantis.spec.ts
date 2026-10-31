@@ -26,7 +26,7 @@
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { startDeskPeer, type DeskPeer } from '../peers/desk'
-import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel, openScenesView, openShowSettings } from '../../e2e/helpers'
+import { closeApp, launchApp, openFromRecent, openLogPanel, openScenesView, openShowSettings } from '../../e2e/helpers'
 import { DESK_HOST, writeDeskShow } from './deskFixture'
 
 /** The desk's own channel, 12 — its default — which is what the show is told. */
@@ -65,7 +65,7 @@ function micMute(): { on: boolean; label: string } | undefined {
 test.beforeAll(async () => {
   peer = await startDeskPeer({ host: DESK_HOST, profile: 'avantis', midiChannel: DESK_CHANNEL })
   const show = writeDeskShow({ port: peer.port, channel: DESK_CHANNEL, profile: 'avantis' })
-  ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
+  ;({ app, page, userDataDir } = await launchApp())
   await openFromRecent(page, userDataDir, show)
   await openScenesView(page)
 })

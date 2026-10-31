@@ -42,7 +42,7 @@ function light(overrides: Partial<LightCue> = {}): LightCue {
   }
 }
 
-function setup(cues: Cue[], licensed = true): { runner: CueEngine; setLastRun: Mock; appendLog: Mock } {
+function setup(cues: Cue[]): { runner: CueEngine; setLastRun: Mock; appendLog: Mock } {
   const runner = new CueEngine()
   let selected: string | null = cues[0]?.id ?? null
   const setLastRun = vi.fn()
@@ -58,8 +58,7 @@ function setup(cues: Cue[], licensed = true): { runner: CueEngine; setLastRun: M
     appendLog,
     getWorkspacePath: () => null,
     getMidiDefaultPort: () => '',
-    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
-    isPro: () => licensed
+    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD
   })
   runners.push(runner)
   return { runner, setLastRun, appendLog }
@@ -134,14 +133,6 @@ describe('a Light cue', () => {
       outcome: 'error', error: 'the lighting reaches more than 64 universes'
     }))
     expect(appendLog).toHaveBeenCalledWith([expect.objectContaining({ level: 'error' })])
-  })
-
-  it('is refused without a licence, and main is not asked', async () => {
-    const { runner, setLastRun, appendLog } = setup([light()], false)
-    runner.go()
-    await vi.waitFor(() => expect(setLastRun).toHaveBeenCalled())
-    expect(sent('go')).toEqual([])
-    expect(appendLog).toHaveBeenCalledWith([expect.objectContaining({ message: 'light cues need Cuerunner Pro' })])
   })
 })
 

@@ -10,9 +10,6 @@ let server: TestServer | undefined
 let port: number
 
 test.beforeEach(async () => {
-  // No key: the path this spec is about — a datagram arrives, lands on the bus, reaches
-  // the renderer, and the cue's own work happens — is the free half of the app, and the
-  // spec would be lying about the free half if it proved it with a licence.
   ;({ app, page } = await launchApp())
   // A message that does nothing proves nothing if it went to another app in the run.
   port = await oscPortOfItsOwn(page)

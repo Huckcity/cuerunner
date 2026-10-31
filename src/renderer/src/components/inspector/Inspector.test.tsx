@@ -7,7 +7,6 @@ import { createRoot, type Root } from 'react-dom/client'
 import { Inspector } from './Inspector'
 import { useStore } from '../../store'
 import { createCue } from '../../utils/cueDefaults'
-import { TEST_LICENSE } from '../../../../test/license'
 import type { Cue, GroupCue } from '../../../../shared/cue'
 
 function cue(type: Cue['type'], patch: Partial<Cue> = {}): Cue {
@@ -23,13 +22,12 @@ describe('Inspector', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
-    useStore.setState({ license: { state: 'active', license: TEST_LICENSE } })
   })
 
   afterEach(() => {
     act(() => root.unmount())
     container.remove()
-    useStore.setState({ cues: [], selectedId: null, license: { state: 'unlicensed' } })
+    useStore.setState({ cues: [], selectedId: null })
   })
 
   function show(cues: Cue[], selected: Cue): void {
@@ -71,47 +69,6 @@ describe('Inspector', () => {
 
     openTab('Triggers')
     expect(container.querySelectorAll('.trigger-row')).toHaveLength(2)
-  })
-
-  it('gives an unlicensed machine the Triggers tab, and keeps the lock for a scene cue', () => {
-    useStore.setState({ license: { state: 'unlicensed' } })
-    const wait = cue('wait')
-    show([wait], wait)
-
-    // Firing a cue from the desk's key or a footswitch is the free half: the tab is
-    // not a Pro surface, and a show with no key can still be driven.
-    openTab('Triggers')
-    expect(container.querySelector('.pro-lock')).toBeNull()
-    // The free type's own tab is not the one the class locks.
-    const waitTab = [...container.querySelectorAll('.inspector-tab')]
-      .find(tab => tab.textContent?.startsWith('Wait'))!
-    expect(waitTab.getAttribute('data-locked')).not.toBe('true')
-
-    const scene = cue('scene')
-    show([scene], scene)
-    openTab('Scene')
-    expect(container.querySelector('.pro-lock[data-feature="Scene cues"]')).not.toBeNull()
-    // And the tab that locks is marked where the operator chooses it, not only where its
-    // content renders: the type's class is read, so a type added to `PRO_CUE_TYPES` is
-    // marked here too.
-    const sceneTab = [...container.querySelectorAll('.inspector-tab')]
-      .find(tab => tab.textContent?.startsWith('Scene'))!
-    expect(sceneTab.getAttribute('data-locked')).toBe('true')
-    expect(sceneTab.querySelector('.pro-mark')).not.toBeNull()
-  })
-
-  it('locks a mic cue on an unlicensed machine, as it locks a scene cue, and marks the tab', () => {
-    useStore.setState({ license: { state: 'unlicensed' } })
-    const mic = cue('mic')
-    show([mic], mic)
-
-    openTab('Mic')
-    expect(container.querySelector('.pro-lock[data-feature="Mic cues"]')).not.toBeNull()
-    expect(container.querySelector('#mic-cue-channel')).toBeNull()
-    const micTab = [...container.querySelectorAll('.inspector-tab')]
-      .find(tab => tab.textContent?.startsWith('Mic'))!
-    expect(micTab.getAttribute('data-locked')).toBe('true')
-    expect(micTab.querySelector('.pro-mark')).not.toBeNull()
   })
 
   it('asks for a timeline offset only inside a timeline group, and in seconds', () => {

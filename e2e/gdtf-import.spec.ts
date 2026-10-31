@@ -7,7 +7,7 @@ import { test, expect, type ElectronApplication, type Page } from '@playwright/t
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { closeApp, launchApp, mintLicense } from './helpers'
+import { closeApp, launchApp } from './helpers'
 import { writeZip } from '../src/main/workspace/zip'
 
 let app: ElectronApplication
@@ -46,7 +46,7 @@ const DESCRIPTION = [
 
 test.beforeEach(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'feat-ship-gdtf-e2e-'))
-  ;({ app, page } = await launchApp({ license: mintLicense() }))
+  ;({ app, page } = await launchApp())
   await page.getByRole('tab', { name: /Lighting/ }).click()
 })
 

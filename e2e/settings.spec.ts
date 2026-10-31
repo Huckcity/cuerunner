@@ -249,15 +249,15 @@ test('the dialog is the same box on every tab, and only its own ways close it', 
 
   // A tab with a different amount on it does not move the frame: the header, the tab
   // strip and the ✕ stay where the operator's pointer left them.
-  await dialog.getByRole('button', { name: 'License', exact: true }).click()
-  await expect(dialog.locator('.settings-tab[data-active="true"]')).toHaveText('License')
-  const license = await dialog.boundingBox()
-  expect(license).not.toBeNull()
+  await dialog.getByRole('button', { name: 'Updates', exact: true }).click()
+  await expect(dialog.locator('.settings-tab[data-active="true"]')).toHaveText('Updates')
+  const updates = await dialog.boundingBox()
+  expect(updates).not.toBeNull()
   expect({
-    x: Math.round(license!.x),
-    y: Math.round(license!.y),
-    width: Math.round(license!.width),
-    height: Math.round(license!.height)
+    x: Math.round(updates!.x),
+    y: Math.round(updates!.y),
+    width: Math.round(updates!.width),
+    height: Math.round(updates!.height)
   }).toEqual({
     x: Math.round(audio!.x),
     y: Math.round(audio!.y),
@@ -304,10 +304,10 @@ test('settings are grouped by what is being set up, and close one way', async ()
   await openSettings(page)
   const dialog = page.getByRole('dialog', { name: 'Settings' })
 
-  // The backup machine, the timecode it follows, the licence and updates are this machine's own
+  // The backup machine, the timecode it follows and updates are this machine's own
   // settings rather than the show's, so they sit last, under a heading that says so.
   await expect(dialog.locator('.settings-tab')).toHaveText([
-    'General', 'Audio', 'MIDI', 'Network', 'Wireless', 'Backup machine', 'Timecode', 'License', 'Updates'
+    'General', 'Audio', 'MIDI', 'Network', 'Wireless', 'Backup machine', 'Timecode', 'Updates'
   ])
 
   // MIDI out and MIDI in are one subject, on one tab.

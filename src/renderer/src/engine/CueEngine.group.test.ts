@@ -51,8 +51,7 @@ function setup(cues: Cue[]) {
     appendLog: vi.fn(),
     getWorkspacePath: () => null,
     getMidiDefaultPort: () => 'default-midi-port',
-    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
-    isPro: () => true
+    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD
   })
   runners.push(runner)
   return { runner, setRunning, setSelected }
@@ -271,8 +270,7 @@ describe('CueEngine — selection skips group children', () => {
       appendLog: vi.fn(),
       getWorkspacePath: () => null,
       getMidiDefaultPort: () => 'default-midi-port',
-      getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
-      isPro: () => true
+      getTriggerGuard: () => DEFAULT_TRIGGER_GUARD
     })
     runners.push(runner)
 

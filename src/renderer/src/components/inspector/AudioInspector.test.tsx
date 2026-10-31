@@ -8,7 +8,6 @@ import { AudioInspector } from './AudioInspector'
 import { useStore } from '../../store'
 import { audioEngine } from '../../engine/audioEngineClient'
 import { cueEngine } from '../../engine/CueEngine'
-import { TEST_LICENSE } from '../../../../test/license'
 import type { AudioCue } from '../../../../shared/cue'
 
 vi.mock('../../engine/audioEngineClient')
@@ -98,7 +97,6 @@ describe('AudioInspector', () => {
     useStore.setState({
       cues: [],
       audioSettings: { outputDeviceId: 'default' },
-      license: { state: 'unlicensed' },
       silenceFailures: {},
       settingsTab: null
     })
@@ -284,7 +282,6 @@ describe('AudioInspector', () => {
   })
 
   it('says it is measuring until the file has been scanned', async () => {
-    useStore.setState({ license: { state: 'active', license: TEST_LICENSE } })
     await show(audioCue({ filePath: '/shows/walk-in.wav', trimSilence: true }), 'Time & Loops')
 
     expect(container.querySelector('.trim-silence-readout')?.textContent).toBe('measuring…')
@@ -300,7 +297,6 @@ describe('AudioInspector', () => {
 
   it('asks the question again after the cue is pointed at another file', async () => {
     useStore.setState({
-      license: { state: 'active', license: TEST_LICENSE },
       silenceFailures: { a1: '/shows/broken.wav' }
     })
     await show(audioCue({ filePath: '/shows/walk-in.wav', trimSilence: true }), 'Time & Loops')
@@ -320,7 +316,6 @@ describe('AudioInspector', () => {
   })
 
   it('turns the trim on the cue from the checkbox', async () => {
-    useStore.setState({ license: { state: 'active', license: TEST_LICENSE } })
     await show(audioCue({ filePath: '/shows/walk-in.wav' }), 'Time & Loops')
 
     await act(async () => {
@@ -330,13 +325,12 @@ describe('AudioInspector', () => {
     expect(useStore.getState().cues[0]).toMatchObject({ trimSilence: true })
   })
 
-  it('trims without a licence, and says nothing about one', async () => {
+  it('shows a flagged cue’s trim on, and it can be changed', async () => {
     await show(audioCue({ filePath: '/shows/walk-in.wav', trimSilence: true }), 'Time & Loops')
 
     const box = container.querySelector<HTMLInputElement>('#inspector-trim-silence')!
     expect(box.checked).toBe(true)
     expect(box.disabled).toBe(false)
-    expect(container.querySelector('.license-hint')).toBeNull()
   })
 
   async function browse(cue: AudioCue): Promise<void> {

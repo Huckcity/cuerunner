@@ -16,7 +16,6 @@ import {
   freePort,
   launchApp,
   listenOsc,
-  mintLicense,
   readRecovered,
   sendOsc,
   startServer,
@@ -339,12 +338,11 @@ test('a crashed renderer mid-playback is silenced from main before it is brought
   }
 })
 
-// ── The licensed show inputs ───────────────────────────────────────────────────
+// ── The show inputs ────────────────────────────────────────────────────────────
 
-test('OSC /cuerunner/panic silences the show through the licensed input', async ({}, testInfo) => {
+test('OSC /cuerunner/panic silences the show through the OSC input', async ({}, testInfo) => {
   const capturePath = testInfo.outputPath('engine-output.wav')
   const { app, page } = await launchApp({
-    license: mintLicense(),
     env: { CUERUNNER_TEST_AUDIO_CAPTURE: capturePath }
   })
   const port = freePort()

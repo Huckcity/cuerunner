@@ -5,16 +5,14 @@ import { createSocket } from 'dgram'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
-import { closeApp, launchApp, mintLicense, openFromRecent, oscPortOfItsOwn, sendOsc } from './helpers'
+import { closeApp, launchApp, openFromRecent, oscPortOfItsOwn, sendOsc } from './helpers'
 
 let app: ElectronApplication
 let page: Page
 let userDataDir: string
 
 test.beforeEach(async () => {
-  // The show services, the scenes view, the panels that read them: everything this spec
-  // is about is the licensed half of the app.
-  ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
+  ;({ app, page, userDataDir } = await launchApp())
 })
 
 test.afterEach(async () => {

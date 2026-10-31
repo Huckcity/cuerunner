@@ -123,7 +123,7 @@ interface TestSetup {
   clearAllRunning: Mock
 }
 
-function setup(initialCues: Cue[], initialSelectedId?: string, licensed = true): TestSetup {
+function setup(initialCues: Cue[], initialSelectedId?: string): TestSetup {
   const runner = new CueEngine()
   let selected: string | null = initialSelectedId ?? initialCues[0]?.id ?? null
   const setRunning = vi.fn()
@@ -144,8 +144,7 @@ function setup(initialCues: Cue[], initialSelectedId?: string, licensed = true):
     appendLog,
     getWorkspacePath: () => null,
     getMidiDefaultPort: () => 'default-midi-port',
-    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
-    isPro: () => licensed
+    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD
   })
   runners.push(runner)
 
@@ -1451,8 +1450,8 @@ describe('CueEngine — engine failures are reported', () => {
   it('never finishes a run on an event type the declaration does not name', async () => {
     // A build from another meaning of the wire can send a type this projection has no
     // meaning for, carrying a cue id that matches a running cue. It must be reported, and
-    // it must never be read as that cue's natural end: an unrecognised line is not a
-    // licence to close a run.
+    // it must never be read as that cue's natural end: an unrecognised line does not
+    // close a run.
     const cue = makeAudio({ id: 'a1', duration: 5000 })
     const { runner, setRunning, appendLog } = setup([cue])
 
@@ -1677,16 +1676,6 @@ describe('CueEngine — mic cues', () => {
     expect(appendLog).toHaveBeenCalledWith([expect.objectContaining({ level: 'error', message: 'no mic chosen' })])
     expect(setLastRun).toHaveBeenCalledWith('mi1', expect.objectContaining({ outcome: 'error', error: 'no mic chosen' }))
   })
-
-  it('is refused without a licence, and the receiver is not touched', async () => {
-    const { runner, appendLog, setLastRun } = setup([makeMic()], undefined, false)
-
-    runner.go()
-    await vi.waitFor(() => expect(setLastRun).toHaveBeenCalled())
-
-    expect(window.cuerunner.show.command).not.toHaveBeenCalled()
-    expect(appendLog).toHaveBeenCalledWith([expect.objectContaining({ level: 'error', message: 'mic cues need Cuerunner Pro' })])
-  })
 })
 
 describe('CueEngine — scene cues', () => {
@@ -1780,26 +1769,6 @@ describe('CueEngine — scene cues', () => {
     expect(window.cuerunner.midi.send).not.toHaveBeenCalled()
     // Still the record nothing has been sent against: a refused cue writes no fact.
     expect(useStore.getState().deskState).toEqual({ mutes: {}, assignments: {} })
-    expect(useStore.getState().deskSceneId).toBeNull()
-  })
-
-  it('refuses a scene cue when this machine is not licensed', async () => {
-    // The cue stays in the file and the rest of the show carries on: a show written on a
-    // licensed machine opens anywhere, and the desk is simply not driven here. A cue that
-    // did nothing quietly would be worse than one that says why.
-    const { runner, appendLog, setLastRun } = setup([withDesk()], undefined, false)
-
-    runner.go()
-    await vi.waitFor(() => expect(setLastRun).toHaveBeenCalled())
-
-    expect(appendLog).toHaveBeenCalledWith([
-      expect.objectContaining({ level: 'error', message: 'scene cues need Cuerunner Pro' })
-    ])
-    expect(setLastRun).toHaveBeenCalledWith('sc1', expect.objectContaining({
-      outcome: 'error',
-      error: 'Cuerunner Pro is required'
-    }))
-    expect(window.cuerunner.midi.send).not.toHaveBeenCalled()
     expect(useStore.getState().deskSceneId).toBeNull()
   })
 })
@@ -1912,23 +1881,6 @@ describe('CueEngine — silence trim', () => {
       startTime: 3000,
       endTime: 5000
     }))
-  })
-
-  it('applies the trim on a machine with no licence', async () => {
-    // The trim is the cue's own behaviour, not the machine's: a show written with it on
-    // sounds the same everywhere, and nothing says otherwise in the log.
-    const cue = makeAudio({ duration: 20_000, trimSilence: true, soundRegion: SOUND })
-    const { runner, appendLog } = setup([cue], undefined, false)
-
-    runner.go()
-    await vi.advanceTimersByTimeAsync(0)
-
-    expect(engine.start).toHaveBeenCalledWith('a1', expect.any(Number), expect.objectContaining({
-      startTime: 2000,
-      endTime: 8000
-    }))
-    const licenceLines = appendLog.mock.calls.flat(2).filter(entry => /licen[cs]e/i.test(entry.message))
-    expect(licenceLines).toEqual([])
   })
 })
 

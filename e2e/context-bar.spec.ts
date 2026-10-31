@@ -1,17 +1,13 @@
 // The context bar: what is playing on the left, what GO fires on the right, each with the
 // cue's own notes. It answers for GO, so it says the same thing in every view.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
-import { closeApp, launchApp, mintLicense } from './helpers'
+import { closeApp, launchApp } from './helpers'
 
 let app: ElectronApplication
 let page: Page
 
-// Only the Scenes test needs the licensed half. A licensed app listens for OSC on the
-// default port, and every one launched alongside the rest of the suite is one more
-// instance contending for it.
-test.beforeEach(async ({}, testInfo) => {
-  const licensed = testInfo.title.includes('Scenes view')
-  ;({ app, page } = await launchApp(licensed ? { license: mintLicense() } : {}))
+test.beforeEach(async () => {
+  ;({ app, page } = await launchApp())
   await page.locator('.toolbar-brand').click()
   await page.locator('.file-menu button', { hasText: 'Open Demo Workspace' }).click()
   await page.locator('.cue-row', { hasText: 'Walk-in Music' }).waitFor()

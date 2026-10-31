@@ -18,7 +18,7 @@ import { createConnection } from 'node:net'
 import type { Socket } from 'node:net'
 import { once } from 'node:events'
 import { startDeskPeer, type DeskPeer } from '../peers/desk'
-import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel, openScenesView } from '../../e2e/helpers'
+import { closeApp, launchApp, openFromRecent, openLogPanel, openScenesView } from '../../e2e/helpers'
 import { DESK_HOST, writeDeskShow } from './deskFixture'
 
 /** The channel the desk is set to, and the one the show is told it is. */
@@ -55,7 +55,7 @@ test.beforeAll(async () => {
   holder = createConnection({ host: DESK_HOST, port: peer.port })
   await once(holder, 'connect')
   const show = writeDeskShow({ port: peer.port, channel: CHANNEL, profile: 'sq' })
-  ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
+  ;({ app, page, userDataDir } = await launchApp())
   await openFromRecent(page, userDataDir, show)
   await openScenesView(page)
   running = true

@@ -39,8 +39,7 @@ function setup(cues: Cue[]): CueEngine {
     appendLog: vi.fn(),
     getWorkspacePath: () => null,
     getMidiDefaultPort: () => '',
-    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
-    isPro: () => false
+    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD
   })
   runners.push(runner)
   return runner

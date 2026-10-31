@@ -8,7 +8,7 @@ import { test, expect, type ElectronApplication, type Page } from '@playwright/t
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { closeApp, launchApp, mintLicense, type TestLicense } from './helpers'
+import { closeApp, launchApp } from './helpers'
 // The app's own reader, used here to say *what* differs if two bundles ever do: a bare
 // `Buffer.equals` failing says only "not the same file", and this assertion is the one
 // that would have to explain itself on a runner nobody can log into.
@@ -61,11 +61,11 @@ function writeWav(filePath: string, tone: number): void {
   fs.writeFileSync(filePath, buffer)
 }
 
-async function start(options: { license?: TestLicense } = {}): Promise<Page> {
-  const userDataDir = path.join(root, `userdata-${options.license ? 'pro' : 'free'}`)
+async function start(): Promise<Page> {
+  const userDataDir = path.join(root, 'userdata')
   fs.mkdirSync(userDataDir, { recursive: true })
   fs.writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([showPath]))
-  const launched = await launchApp({ ...options, userDataDir })
+  const launched = await launchApp({ userDataDir })
   app = launched.app
   return launched.page
 }
@@ -155,7 +155,7 @@ async function exportTo(page: Page, target: string): Promise<void> {
 
 test('a show and its audio leave as one file and come back playable', async () => {
   test.setTimeout(120_000)
-  const page = await start({ license: mintLicense() })
+  const page = await start()
   await openShow(page)
 
   await exportTo(page, bundled)
@@ -214,16 +214,4 @@ test('a show and its audio leave as one file and come back playable', async () =
     cues: Array<{ media: { path: string } }>
   }
   expect(stored.cues.map(cue => cue.media.path)).toEqual(['media/walk-in.wav', 'media/bows.wav'])
-})
-
-test('a machine with no key is told what a bundle is for, and bundles nothing', async () => {
-  const page = await start()
-  await openShow(page)
-
-  await page.locator('.toolbar-brand').click()
-  await expect(page.locator('.file-menu button[data-action="export-bundle"] .pro-mark')).toHaveCount(1)
-  await page.locator('.file-menu button[data-action="export-bundle"]').click()
-
-  await expect(page.locator('.app-notice')).toContainText('Cuerunner Pro is required')
-  expect(fs.existsSync(bundled)).toBe(false)
 })

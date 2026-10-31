@@ -32,7 +32,7 @@ import { startSqNativePeer } from '../peers/sqNative.ts'
 import type { SqNativeFlagFrame, SqNativePairFrame, SqNativePeer } from '../peers/sqNative.ts'
 import { startDeskRelay } from '../deskRelay.ts'
 import type { DeskRelay } from '../deskRelay.ts'
-import { closeApp, launchApp, mintLicense, openFromRecent, openScenesView } from '../../e2e/helpers'
+import { closeApp, launchApp, openFromRecent, openScenesView } from '../../e2e/helpers'
 import { writeDeskShow, DCA_ID, membershipFrames } from './deskFixture'
 import type { DeskShowFader, DeskShowScene } from './deskFixture'
 import { createFrameReader } from '../../src/main/desk/frames'
@@ -171,7 +171,7 @@ test.beforeAll(async () => {
     faders: FADERS,
     scenes: [OPENING, CLOSING]
   })
-  ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
+  ;({ app, page, userDataDir } = await launchApp())
   await openFromRecent(page, userDataDir, show)
   await openScenesView(page)
   running = true

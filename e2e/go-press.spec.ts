@@ -17,7 +17,7 @@ import { test, expect, type ElectronApplication, type Page } from '@playwright/t
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { closeApp, launchApp, mintLicense, openFromRecent, toolbarCueBtn } from './helpers'
+import { closeApp, launchApp, openFromRecent, toolbarCueBtn } from './helpers'
 
 let app: ElectronApplication
 let page: Page
@@ -101,9 +101,6 @@ test('the panel’s Escape closes the panel and nothing else', async () => {
 
 test('the changes dialog stands the transport down', async () => {
   await standOnTheFirstCue()
-  // This machine is unlicensed, so what the dialog draws is the lock rather than a list of
-  // saves — the frame and the modal registration are the same either way, and those are
-  // what this rule is about.
   await page.locator('.toolbar-brand').click()
   await page.locator('.file-menu button[data-action="history"]').click()
   await expect(page.getByRole('dialog', { name: 'Changes' })).toBeVisible()
@@ -213,36 +210,36 @@ test('the missing-media dialog stands the transport down', async () => {
 })
 
 test('the Show Settings dialog stands the transport down', async () => {
-  // The plot is the licensed half of the app, and its own instance: the editor is a tab
-  // of Show Settings now, reachable from the RF panel with a rack to patch.
-  const licensed = await launchApp({ license: mintLicense() })
+  // The plot gets an instance of its own: the editor is a tab of Show Settings now,
+  // reachable from the RF panel with a rack to patch.
+  const plotted = await launchApp()
   try {
-    await toolbarCueBtn(licensed.page, 'Wait').click()
-    await toolbarCueBtn(licensed.page, 'Wait').click()
+    await toolbarCueBtn(plotted.page, 'Wait').click()
+    await toolbarCueBtn(plotted.page, 'Wait').click()
     // The selection is made while the list is still reachable: the dialog is modal.
-    await licensed.page.locator('.cue-row').first().click()
-    await licensed.page.locator('.btn-rf').click()
-    await licensed.page.locator('.rf-demo-btn').click()
-    await licensed.page.locator('.rf-edit').click()
-    const dialog = licensed.page.locator('.show-settings-dialog')
+    await plotted.page.locator('.cue-row').first().click()
+    await plotted.page.locator('.btn-rf').click()
+    await plotted.page.locator('.rf-demo-btn').click()
+    await plotted.page.locator('.rf-edit').click()
+    const dialog = plotted.page.locator('.show-settings-dialog')
     await expect(dialog).toBeVisible()
     await expect(dialog.locator('.show-settings-tab', { hasText: 'Mic plot' }))
       .toHaveAttribute('data-active', 'true')
 
-    await licensed.page.locator('.show-settings-close').focus()
-    await licensed.page.keyboard.press('Space')
+    await plotted.page.locator('.show-settings-close').focus()
+    await plotted.page.keyboard.press('Space')
 
     // The modal owns the keyboard: the cue the selection was standing on has not moved.
-    await expect(licensed.page.locator('.cue-row').first())
+    await expect(plotted.page.locator('.cue-row').first())
       .not.toHaveAttribute('data-running', 'true')
 
     // And once it is closed the keyboard is the show's again.
-    await licensed.page.keyboard.press('Escape')
+    await plotted.page.keyboard.press('Escape')
     await expect(dialog).toHaveCount(0)
-    await licensed.page.keyboard.press('Space')
-    await expect(licensed.page.locator('.cue-row').first()).toHaveAttribute('data-running', 'true')
+    await plotted.page.keyboard.press('Space')
+    await expect(plotted.page.locator('.cue-row').first()).toHaveAttribute('data-running', 'true')
   } finally {
-    await closeApp(licensed.app)
+    await closeApp(plotted.app)
   }
 })
 

@@ -38,7 +38,7 @@
 // stands.
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
-import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel, openScenesView } from '../../e2e/helpers'
+import { closeApp, launchApp, openFromRecent, openLogPanel, openScenesView } from '../../e2e/helpers'
 import { startDeskRelay } from '../deskRelay.ts'
 import type { DeskRelay } from '../deskRelay.ts'
 import { writeDeskShow, DCA_ID, membershipFrames } from './deskFixture'
@@ -292,7 +292,7 @@ test.beforeAll(async () => {
       }
     })
   })
-  ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
+  ;({ app, page, userDataDir } = await launchApp())
   await openFromRecent(page, userDataDir, show)
   await openScenesView(page)
 })

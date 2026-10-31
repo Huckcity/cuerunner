@@ -7,7 +7,7 @@ import { test, expect, type ElectronApplication, type Page } from '@playwright/t
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { closeApp, launchApp, mintLicense, openFromRecent, toolbarCueBtn } from './helpers'
+import { closeApp, launchApp, openFromRecent, toolbarCueBtn } from './helpers'
 
 let app: ElectronApplication
 let page: Page
@@ -76,11 +76,9 @@ function writeShow(cues: unknown[], audioSettings: Record<string, unknown> = {})
 
 /**
  * The file and show for one test, a launch, and the show opened from the app's own
- * recents. Licensed unless the test says otherwise: the trim needs no licence, and the
- * unlicensed launch is the test that keeps that true.
+ * recents.
  */
 async function openShow(options: {
-  licensed?: boolean
   cues?: unknown[]
   audioSettings?: Record<string, unknown>
 } = {}): Promise<void> {
@@ -94,10 +92,7 @@ async function openShow(options: {
   )
   userDataDir = path.join(root, 'userdata')
   fs.mkdirSync(userDataDir, { recursive: true })
-  ;({ app, page } = await launchApp({
-    userDataDir,
-    ...(options.licensed === false ? {} : { license: mintLicense() })
-  }))
+  ;({ app, page } = await launchApp({ userDataDir }))
   await openFromRecent(page, userDataDir, showPath)
   await expect(page.locator('.cue-row').first()).toBeVisible()
 }
@@ -200,21 +195,4 @@ test('the show setting seeds the cues added after it, not the show it was set in
   await toolbarCueBtn(page, 'Audio').click()
   await page.locator('.inspector-tab', { hasText: 'Time & Loops' }).click()
   await expect(page.locator('#inspector-trim-silence')).not.toBeChecked()
-})
-
-test('the trim applies on a machine with no key', async () => {
-  await openShow({ licensed: false })
-  await inspect('Reel One')
-
-  // Nothing about this row asks for a key. A machine with no licence gets the same trim
-  // as any other, because the trim is the cue's own behaviour rather than an entitlement.
-  await expect(page.locator('.license-hint')).toHaveCount(0)
-  const trim = page.locator('#inspector-trim-silence')
-  await expect(trim).toBeEnabled()
-  await expect(trim).toBeChecked()
-
-  // The measurement pass runs here too, and the panel shades what the cue plays.
-  await expect(page.locator('.waveform-total')).toHaveText('0:11.0')
-  await expect(page.locator('.trim-silence-readout')).toHaveText(TRIMMED)
-  await expect(page.locator('.waveform-region-tag')).toHaveText('plays 0:02.0–0:08.0')
 })

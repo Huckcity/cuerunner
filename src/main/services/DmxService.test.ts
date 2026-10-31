@@ -1,5 +1,5 @@
-// The lighting service as the host addresses it: by id, over `show:command`, refused whole on a
-// machine without a licence, and refusing a payload it cannot read with a sentence.
+// The lighting service as the host addresses it: by id, over `show:command`, and refusing a
+// payload it cannot read with a sentence.
 import { describe, expect, it, vi } from 'vitest'
 import { DmxService } from './DmxService'
 import { ServiceHost } from '../bus/ServiceHost'
@@ -33,10 +33,9 @@ const GO: DmxGo = {
 }
 
 describe('the lighting service', () => {
-  it('is Pro, reads no show settings, and is addressed as dmx', () => {
+  it('reads no show settings, and is addressed as dmx', () => {
     const { service: dmx } = service()
     expect(dmx.id).toBe('dmx')
-    expect(dmx.pro).toBe(true)
     expect(dmx.settingsSections).toEqual([])
   })
 
@@ -108,7 +107,7 @@ describe('the lighting service', () => {
     await expect(dmx.command('setInterface', { name: 'wlan9' })).rejects.toThrow(/no interface called wlan9/)
   })
 
-  it('panics only while it is sending: an unlicensed machine has no lights of its own', async () => {
+  it('panics only while it is sending: a service not started has no lights of its own', async () => {
     const { service: dmx, engine } = service()
     await dmx.command('configure', { outputs: [], inputs: [], sync: false, syncUniverse: 63999, panic: 'blackout' })
     await dmx.command('go', GO)
@@ -117,21 +116,13 @@ describe('the lighting service', () => {
   })
 })
 
-describe('the lighting behind the licence', () => {
-  it('is refused by the host on a machine without a key, and taken with one', async () => {
+describe('the lighting through the host', () => {
+  it('runs once the host starts it, takes a cue’s GO, and keeps streaming through a configure', async () => {
     const bus = new ShowBus()
-    let licensed = false
-    const host = new ServiceHost(bus, () => licensed)
+    const host = new ServiceHost(bus)
     const { service: dmx, lighting } = service()
     host.register(dmx)
     await host.startAll(defaultShowSettings())
-    expect(lighting.running).toBe(false)
-    expect(host.status('dmx')?.detail).toMatch(/part of Cuerunner Pro/)
-    const refused = await host.command('dmx', 'go', GO)
-    expect(refused).toEqual({ ok: false, error: 'Lighting (sACN / Art-Net) is part of Cuerunner Pro' })
-
-    licensed = true
-    await host.startAll(defaultShowSettings(), { entitlementOnly: true })
     expect(lighting.running).toBe(true)
     expect(await host.command('dmx', 'go', GO)).toEqual({ ok: true, result: null })
     // A configure reconfigures; it never restarts the stream.

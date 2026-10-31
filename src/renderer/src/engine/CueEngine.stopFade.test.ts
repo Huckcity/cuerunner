@@ -28,8 +28,7 @@ function setup(cues: Cue[], guard: TriggerGuardSettings) {
     appendLog,
     getWorkspacePath: () => null,
     getMidiDefaultPort: () => '',
-    getTriggerGuard: () => guard,
-    isPro: () => false
+    getTriggerGuard: () => guard
   })
   runners.push(runner)
   return { runner, clearAllRunning, appendLog }

@@ -45,7 +45,6 @@ function setup(cues: Cue[], options: { lists?: CueListInfo[]; active?: string; s
     getWorkspacePath: () => null,
     getMidiDefaultPort: () => '',
     getTriggerGuard: () => ({ ...DEFAULT_TRIGGER_GUARD, windowMs: 0, stopFadeMs: options.stopFadeMs }),
-    isPro: () => false,
     getCueLists: () => options.lists ?? LISTS,
     getActiveListId: () => options.active ?? 'main',
     getListPlayhead: listId => playheads.has(listId) ? playheads.get(listId) ?? null : cues.find(c => c.listId === listId)?.id ?? null,

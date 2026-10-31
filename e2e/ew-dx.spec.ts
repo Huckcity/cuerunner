@@ -10,7 +10,7 @@ import { test, expect, type ElectronApplication, type Page } from '@playwright/t
 import { existsSync, mkdtempSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { addCueFromMoreMenu, closeApp, launchApp, mintLicense } from './helpers'
+import { addCueFromMoreMenu, closeApp, launchApp } from './helpers'
 import { startFakeReceiver, type FakeReceiver } from '../src/main/ewdx/fakeReceiver'
 import { makeTestCertificate, type TestCertificate } from '../src/main/ewdx/testCertificate'
 import { FIXTURE_SERIAL } from '../src/main/ewdx/fixtures'
@@ -39,7 +39,6 @@ test.beforeEach(async () => {
   // by mDNS. Each is still identified over HTTPS, which is the part worth testing here. One serial
   // is one receiver, so both announcements are offered as the one.
   ;({ app, page, userDataDir } = await launchApp({
-    license: mintLicense(),
     env: { CUERUNNER_TEST_EWDX_ANNOUNCED: JSON.stringify([address(), moved.origin.replace(/^https:\/\//, '')]) }
   }))
 })
@@ -193,7 +192,6 @@ test('a pack that a show would use up is flagged by the check, from what it used
   }))
   ;({ app, page, userDataDir } = await launchApp({
     userDataDir: userData,
-    license: mintLicense(),
     env: { CUERUNNER_TEST_EWDX_ANNOUNCED: JSON.stringify([address()]) }
   }))
 

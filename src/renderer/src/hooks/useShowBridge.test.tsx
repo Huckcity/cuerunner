@@ -7,7 +7,6 @@ import { createRoot, type Root } from 'react-dom/client'
 import { useShowBridge } from './useShowBridge'
 import { useStore } from '../store'
 import { defaultShowSettings } from '../../../shared/show'
-import { TEST_LICENSE } from '../../../test/license'
 import type { ShowEvent, ShowSettings, ShowSnapshot } from '../../../shared/show'
 
 function Harness() {
@@ -63,7 +62,6 @@ describe('useShowBridge', () => {
 
     settings = defaultShowSettings()
     useStore.setState({
-      license: { state: 'active', license: TEST_LICENSE },
       showSettings: settings,
       showServices: [],
       showDevices: [],
@@ -135,21 +133,5 @@ describe('useShowBridge', () => {
     act(() => { root.unmount() })
 
     expect(off).toHaveBeenCalled()
-  })
-
-  it('subscribes and configures on a machine with no licence, because the inputs are free', async () => {
-    // The Pro services are gated in the main process and report themselves as stopped;
-    // the window still has to listen, or a desk's key would fire a cue the monitor
-    // never showed.
-    act(() => root.unmount())
-    vi.clearAllMocks()
-    act(() => { useStore.setState({ license: { state: 'unlicensed' } }) })
-    root = createRoot(container)
-    act(() => { root.render(<Harness />) })
-    await settle()
-
-    expect(vi.mocked(window.cuerunner.show.onEvents)).toHaveBeenCalled()
-    expect(vi.mocked(window.cuerunner.show.snapshot)).toHaveBeenCalled()
-    expect(vi.mocked(window.cuerunner.show.configure)).toHaveBeenCalled()
   })
 })

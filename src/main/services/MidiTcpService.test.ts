@@ -154,9 +154,8 @@ describe('MidiTcpService', () => {
     service.stop()
 
     expect(link.closeAll).toHaveBeenCalled()
-    // Nothing may be published after the show has been told the services are down: the
-    // next licence check could be suspending everything, and a stale desk would keep
-    // talking into a bus nobody is reading.
+    // Nothing may be published after the show has been told the services are down: a stale
+    // desk would keep talking into a bus nobody is reading.
     expect(link.onMessage).toBeNull()
     expect(link.onStatus).toBeNull()
   })

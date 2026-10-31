@@ -19,7 +19,6 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { useDeskButtons } from './useDeskButtons'
 import { useStore } from '../store'
-import { TEST_LICENSE } from '../../../test/license'
 import { defaultShowSettings, type DeskSettings } from '../../../shared/show'
 import type { MidiMessageKind } from '../../../shared/cue'
 import type { ShowEvent } from '../../../shared/show'
@@ -120,7 +119,6 @@ describe('useDeskButtons', () => {
     })
 
     useStore.setState({
-      license: { state: 'active', license: TEST_LICENSE },
       cues: [],
       log: [],
       // Where the desk was left: nothing has been sent to it yet, so both facts are

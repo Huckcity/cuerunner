@@ -5,16 +5,14 @@ import { test, expect, type ElectronApplication, type Page } from '@playwright/t
 import path from 'path'
 import os from 'os'
 import fs from 'fs'
-import { closeApp, launchApp, mintLicense, toolbarCueBtn } from './helpers'
+import { closeApp, launchApp, toolbarCueBtn } from './helpers'
 
 let app: ElectronApplication
 let page: Page
 const tempDirs: string[] = []
 
 test.beforeEach(async () => {
-  // The show services, the scenes view, the panels that read them: everything this spec
-  // is about is the licensed half of the app.
-  ;({ app, page } = await launchApp({ license: mintLicense() }))
+  ;({ app, page } = await launchApp())
 })
 
 test.afterEach(async () => {

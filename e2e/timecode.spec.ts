@@ -8,7 +8,7 @@ import { createSocket, type Socket } from 'node:dgram'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { addCueFromMoreMenu, closeApp, launchApp, mintLicense, openFromRecent, openLogPanel, toolbarCueBtn } from './helpers'
+import { addCueFromMoreMenu, closeApp, launchApp, openFromRecent, openLogPanel, toolbarCueBtn } from './helpers'
 
 let app: ElectronApplication
 let page: Page
@@ -17,7 +17,7 @@ const sockets: Socket[] = []
 const timers: NodeJS.Timeout[] = []
 
 test.beforeEach(async () => {
-  ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
+  ;({ app, page, userDataDir } = await launchApp())
 })
 
 test.afterEach(async () => {

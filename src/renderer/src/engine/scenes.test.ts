@@ -530,8 +530,8 @@ describe('recallScene', () => {
   })
 
   it('records nothing when the service never took the membership', async () => {
-    // An outer refusal is the command never reaching the service at all — not running, not
-    // licensed — and the write must not be remembered as landed: a record that says the
+    // An outer refusal is the command never reaching the service at all — not running —
+    // and the write must not be remembered as landed: a record that says the
     // desk holds an assignment it never heard is a diff that will never offer it again.
     command.mockImplementation(() => Promise.resolve({ ok: false, error: 'the service is not running' }))
     seed({ mutes: { 'ch-1': true }, assignments: { 'ch-1': [] } }, 's-1', cast(), SQ)

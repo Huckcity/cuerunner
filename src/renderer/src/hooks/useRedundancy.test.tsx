@@ -9,7 +9,6 @@ import { useRedundancy } from './useRedundancy'
 import { cueEngine } from '../engine/CueEngine'
 import { audioEngine } from '../engine/audioEngineClient'
 import { useStore } from '../store'
-import { TEST_LICENSE } from '../../../test/license'
 import {
   NOTICE_FRESH_MS,
   defaultRedundancySettings,
@@ -123,7 +122,6 @@ describe('useRedundancy', () => {
       paired()
     )
     useStore.setState({
-      license: { state: 'active', license: TEST_LICENSE },
       cues: [audioCue()],
       selectedId: 'a1',
       workspaceId: 'show-1',
@@ -182,13 +180,6 @@ describe('useRedundancy', () => {
     // Off is the default: a machine nobody has paired has no show to offer.
     vi.mocked(window.cuerunner.redundancy.settings).mockResolvedValue(defaultRedundancySettings('desk-b', 'id-b'))
     useStore.setState({ redundancySettings: defaultRedundancySettings('desk-b', 'id-b') })
-    render()
-    await flush()
-    expect(published()).toEqual([])
-  })
-
-  it('says nothing while the machine is not licensed', async () => {
-    useStore.setState({ license: { state: 'unlicensed' }, redundancySettings: paired() })
     render()
     await flush()
     expect(published()).toEqual([])

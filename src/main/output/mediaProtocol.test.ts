@@ -20,7 +20,7 @@ describe('the media scheme', () => {
     expect(servable('/a/clip.mp4')).toBe(true)
     expect(servable('/a/still.PNG')).toBe(true)
     expect(servable('/etc/passwd')).toBe(false)
-    expect(servable('/home/me/license.key')).toBe(false)
+    expect(servable('/home/me/ew-dx.json')).toBe(false)
     expect(contentTypeOf('/a/b.webm')).toBe('video/webm')
   })
 

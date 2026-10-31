@@ -78,8 +78,7 @@ function setup(cues: Cue[], settings: PictureSettings = { stopOnNextGo: false })
     getMidiDefaultPort: () => '',
     getTriggerGuard: () => ({ ...DEFAULT_TRIGGER_GUARD, windowMs: 0 }),
     getPictureSettings: () => settings,
-    getVideoOutputs: () => [createOutput('o1', 'Stage')],
-    isPro: () => false
+    getVideoOutputs: () => [createOutput('o1', 'Stage')]
   })
   runners.push(runner)
   return { runner, setLastRun, appendLog, select: (id: string) => { selected = id } }

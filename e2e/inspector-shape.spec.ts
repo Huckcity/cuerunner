@@ -2,13 +2,13 @@
 // arrow appears only where the cue has been changed, and a timeline offset only where
 // there is a timeline.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
-import { closeApp, launchApp, mintLicense, toolbarCueBtn } from './helpers'
+import { closeApp, launchApp, toolbarCueBtn } from './helpers'
 
 let app: ElectronApplication
 let page: Page
 
 test.beforeEach(async () => {
-  ;({ app, page } = await launchApp({ license: mintLicense() }))
+  ;({ app, page } = await launchApp())
 })
 
 test.afterEach(async () => {

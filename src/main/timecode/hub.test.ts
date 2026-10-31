@@ -56,7 +56,7 @@ function harness(stored?: object) {
 }
 
 describe('the timecode hub', () => {
-  it('starts on the defaults with no file, and keeps what it is given beside the licence', async () => {
+  it('starts on the defaults with no file, and keeps what it is given in its own file', async () => {
     const h = harness()
     expect(h.hub.current().source).toBe('none')
     const updated = await h.hub.update({ source: 'artnet', artnetPort: 47001 })

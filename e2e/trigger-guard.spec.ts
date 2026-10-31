@@ -13,7 +13,6 @@ import {
   addCueFromMoreMenu,
   closeApp,
   launchApp,
-  mintLicense,
   openFromRecent,
   oscPortOfItsOwn,
   sendOsc,
@@ -27,7 +26,7 @@ let page: Page
 let server: TestServer | undefined
 
 test.beforeEach(async () => {
-  ;({ app, page } = await launchApp({ license: mintLicense() }))
+  ;({ app, page } = await launchApp())
 })
 
 test.afterEach(async () => {
@@ -136,7 +135,7 @@ test('the guard travels with the show and comes back with it', async () => {
   fs.writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([showPath]))
 
   await closeApp(app)
-  ;({ app, page } = await launchApp({ license: mintLicense(), userDataDir }))
+  ;({ app, page } = await launchApp({ userDataDir }))
 
   await openFromRecent(page, userDataDir, showPath)
   await page.locator('.toolbar-brand').click()
@@ -159,7 +158,7 @@ test('the guard travels with the show and comes back with it', async () => {
   // And the show it comes back as says the same thing, which is what an operator sees
   // when they open the file on another machine.
   await closeApp(app)
-  ;({ app, page } = await launchApp({ license: mintLicense(), userDataDir }))
+  ;({ app, page } = await launchApp({ userDataDir }))
   await openFromRecent(page, userDataDir, showPath)
   await page.locator('.toolbar-brand').click()
   await page.locator('.file-menu button[data-action="settings"]').click()

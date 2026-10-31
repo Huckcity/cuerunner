@@ -24,7 +24,7 @@ const makeTimecode = (overrides: Partial<TimecodeCue> = {}): TimecodeCue => ({
 
 const runners: CueEngine[] = []
 
-function setup(cue: TimecodeCue, licensed = true) {
+function setup(cue: TimecodeCue) {
   const runner = new CueEngine()
   const setLastRun = vi.fn()
   const appendLog = vi.fn()
@@ -40,8 +40,7 @@ function setup(cue: TimecodeCue, licensed = true) {
     appendLog,
     getWorkspacePath: () => null,
     getMidiDefaultPort: () => 'default-midi-port',
-    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
-    isPro: () => licensed
+    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD
   })
   runners.push(runner)
   return { runner, setLastRun, appendLog }
@@ -126,12 +125,5 @@ describe('CueEngine — timecode cues', () => {
     expect(window.cuerunner.timecode.control).toHaveBeenCalledWith({ cueId: 'tc1', action: { action: 'pause' } })
     runner.resumeAll()
     expect(window.cuerunner.timecode.control).toHaveBeenCalledWith({ cueId: 'tc1', action: { action: 'resume' } })
-  })
-
-  it('is refused without a licence', async () => {
-    const { runner, appendLog } = setup(makeTimecode(), false)
-    runner.go()
-    await vi.waitFor(() => expect(appendLog).toHaveBeenCalledWith([expect.objectContaining({ message: 'timecode cues need Cuerunner Pro' })]))
-    expect(window.cuerunner.timecode.generate).not.toHaveBeenCalled()
   })
 })

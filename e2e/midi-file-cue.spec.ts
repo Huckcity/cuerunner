@@ -90,7 +90,6 @@ function field(label: string) {
 
 test.beforeAll(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-feat-midi-file-cue-'))
-  // No licence: the MIDI File cue is the free half of the app.
   ;({ app, page } = await launchApp({ env: { CUERUNNER_TEST_MIDI_LOOPBACK: PORT } }))
   // The repeat guard off. Its window swallows a GO that comes within 300 ms of the one before,
   // which is its job — and on a fast runner one case's GO lands that close to the last case's,

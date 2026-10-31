@@ -9,7 +9,6 @@ import { useStore } from '../../store'
 import { defaultShowSettings } from '../../../../shared/show'
 import { AUDIO_CHANNELS } from '../../../../shared/audio'
 import type { AudioEngineInfo } from '../../engine/audioEngineClient'
-import { TEST_LICENSE } from '../../../../test/license'
 
 let container: HTMLDivElement
 let root: Root
@@ -86,8 +85,7 @@ beforeEach(() => {
       { id: 'osc-in', label: 'OSC input', state: 'running', detail: 'listening on port 53000', since: 0 },
       { id: 'presence', label: 'Network presence', state: 'stopped', detail: 'disabled', since: 0 },
       { id: 'companion', label: 'Companion', state: 'stopped', detail: 'disabled', since: 0 }
-    ],
-    license: { state: 'active', license: TEST_LICENSE }
+    ]
   })
 })
 
@@ -102,7 +100,7 @@ describe('SettingsDialog', () => {
     render()
     expect(text('.settings-tab-group-title')).toBe('This show|This computer')
     expect(text('.settings-tab')).toBe(
-      'General|Audio|MIDI|Network|Wireless|Backup machine|Timecode|License|Updates'
+      'General|Audio|MIDI|Network|Wireless|Backup machine|Timecode|Updates'
     )
   })
 

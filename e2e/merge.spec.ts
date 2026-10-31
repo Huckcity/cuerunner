@@ -8,7 +8,7 @@ import { test, expect, type ElectronApplication, type Page } from '@playwright/t
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { closeApp, launchApp, mintLicense, type TestLicense } from './helpers'
+import { closeApp, launchApp } from './helpers'
 
 let app: ElectronApplication | undefined
 let root: string
@@ -75,11 +75,11 @@ function cuesOnDisk(file: string): Array<{ name: string; volume?: number }> {
   return JSON.parse(fs.readFileSync(file, 'utf-8')).cues
 }
 
-async function start(options: { license?: TestLicense } = {}): Promise<Page> {
-  const userDataDir = path.join(root, `userdata-${options.license ? 'pro' : 'free'}`)
+async function start(): Promise<Page> {
+  const userDataDir = path.join(root, 'userdata')
   fs.mkdirSync(userDataDir, { recursive: true })
   fs.writeFileSync(path.join(userDataDir, 'recent.json'), JSON.stringify([ours]))
-  const launched = await launchApp({ ...options, userDataDir })
+  const launched = await launchApp({ userDataDir })
   app = launched.app
   return launched.page
 }
@@ -140,7 +140,7 @@ async function stubMergeDialogs(destination: string): Promise<void> {
 
 test('two people changing different things merge into a third file', async () => {
   test.setTimeout(120_000)
-  const page = await start({ license: mintLicense() })
+  const page = await start()
   await openShow(page)
   await stubMergeDialogs(merged)
 
@@ -181,7 +181,7 @@ test('a cue both people changed is named, and the other side can have it with on
     audioCue('z', '4', 'Curtain call')
   ])
 
-  const page = await start({ license: mintLicense() })
+  const page = await start()
   await openShow(page)
   await stubMergeDialogs(merged)
 
@@ -201,21 +201,9 @@ test('a cue both people changed is named, and the other side can have it with on
   await expect.poll(() => cuesOnDisk(merged)[0].volume).toBe(0.9)
 })
 
-test('a machine with no key is told what merging is for, and merges nothing', async () => {
-  const page = await start()
-  await openShow(page)
-
-  await page.locator('.toolbar-brand').click()
-  await expect(page.locator('.file-menu button[data-action="merge"] .pro-mark')).toHaveCount(1)
-  await page.locator('.file-menu button[data-action="merge"]').click()
-
-  await expect(page.locator('.app-notice')).toContainText('Cuerunner Pro is required')
-  expect(fs.existsSync(merged)).toBe(false)
-})
-
 test('cancelling the save dialog merges nothing and leaves the show where it was', async () => {
   test.setTimeout(120_000)
-  const page = await start({ license: mintLicense() })
+  const page = await start()
   await openShow(page)
 
   // The two files answer; the one that decides all three — where to write — is cancelled.
@@ -255,7 +243,7 @@ test('a rig one side took out is left out of the merged show, which opens', asyn
   writeShow(ancestor, base, { lighting: rig })
   writeShow(theirs, JSON.parse(fs.readFileSync(theirs, 'utf-8')).cues, { lighting: rig })
 
-  const page = await start({ license: mintLicense() })
+  const page = await start()
   await openShow(page)
   await stubMergeDialogs(merged)
   await page.locator('.toolbar-brand').click()

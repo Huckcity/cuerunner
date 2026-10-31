@@ -2,15 +2,13 @@
 // one icon column, a header that reads as words, and an empty list that says so where
 // the list is.
 import { test, expect, type ElectronApplication, type Page } from '@playwright/test'
-import { addCueFromMoreMenu, closeApp, launchApp, mintLicense, toolbarCueBtn, unreadableText } from './helpers'
+import { addCueFromMoreMenu, closeApp, launchApp, toolbarCueBtn, unreadableText } from './helpers'
 
 let app: ElectronApplication
 let page: Page
 
-test.beforeEach(async ({}, testInfo) => {
-  // A scene cue is the licensed half of the app; the rest is not.
-  const licensed = testInfo.title.includes('scene cue')
-  ;({ app, page } = await launchApp(licensed ? { license: mintLicense() } : {}))
+test.beforeEach(async () => {
+  ;({ app, page } = await launchApp())
 })
 
 test.afterEach(async () => {

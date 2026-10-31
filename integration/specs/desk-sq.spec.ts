@@ -43,7 +43,7 @@ import {
   type SqNativePairFrame,
   type SqNativePeer
 } from '../peers/sqNative'
-import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel, openScenesView, openShowSettings } from '../../e2e/helpers'
+import { closeApp, launchApp, openFromRecent, openLogPanel, openScenesView, openShowSettings } from '../../e2e/helpers'
 import { writeDeskShow } from './deskFixture'
 import type { DeskShowFader, DeskShowScene } from './deskFixture'
 import { BACK_GROUP, GO_GROUP } from './deskButtonsFixture'
@@ -183,7 +183,7 @@ test.beforeAll(async () => {
     faders: FADERS,
     scenes: SCENES
   })
-  ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
+  ;({ app, page, userDataDir } = await launchApp())
   await openFromRecent(page, userDataDir, show)
   await openScenesView(page)
   running = true
@@ -420,7 +420,7 @@ test.describe('the show the fixture writes', () => {
       buttons: { go: GO_GROUP, back: BACK_GROUP },
       msc: { port: CONSOLE_PORT, ...CONSOLE_COMMAND }
     })
-    ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
+    ;({ app, page, userDataDir } = await launchApp())
     await openFromRecent(page, userDataDir, show)
   })
 

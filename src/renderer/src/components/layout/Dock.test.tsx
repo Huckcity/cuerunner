@@ -35,7 +35,7 @@ describe('Dock', () => {
     // A workspace with a cue in it: the dock of an empty one opens folded, which is a case
     // of its own below.
     const count = cue('wait', { name: 'Count 8', number: '3' })
-    useStore.setState({ cues: [count], selectedId: count.id, license: { state: 'unlicensed' } })
+    useStore.setState({ cues: [count], selectedId: count.id })
   })
 
   afterEach(() => {
@@ -75,12 +75,6 @@ describe('Dock', () => {
     act(() => tab('btn-log').click())
     expect(container.querySelector('.log-panel')).toBeNull()
     expect(tab('btn-cue').dataset.active).toBe('true')
-  })
-
-  it('shows an unlicensed machine the lock inside a Pro panel', () => {
-    act(() => { root.render(<Harness />) })
-    act(() => tab('btn-rf').click())
-    expect(container.querySelector('.pro-lock[data-feature="Wireless"]')).not.toBeNull()
   })
 
   it('counts the errors written to the log since it was last on screen, on its tab', () => {

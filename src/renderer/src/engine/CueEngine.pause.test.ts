@@ -55,8 +55,7 @@ function setup(cues: Cue[], selected = cues[0]?.id ?? null): Setup {
     getWorkspacePath: () => null,
     getMidiDefaultPort: () => '',
     getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
-    getRunning: () => rows,
-    isPro: () => false
+    getRunning: () => rows
   })
   runners.push(runner)
   return { runner, rows, setLastRun, appendLog }

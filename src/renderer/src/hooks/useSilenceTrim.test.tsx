@@ -12,7 +12,6 @@ import { useSilenceTrim } from './useSilenceTrim'
 import { audioEngine } from '../engine/audioEngineClient'
 import type { AudioEngineSessionChange } from '../engine/audioEngineClient'
 import { useStore } from '../store'
-import { TEST_LICENSE } from '../../../test/license'
 import type { AudioCue } from '../../../shared/cue'
 import type { AudioSilence } from '../../../shared/audio'
 
@@ -73,8 +72,7 @@ describe('useSilenceTrim', () => {
       isDirty: false,
       mediaLengths: {},
       missingMedia: [],
-      silenceFailures: {},
-      license: { state: 'active', license: TEST_LICENSE }
+      silenceFailures: {}
     })
   })
 
@@ -165,18 +163,6 @@ describe('useSilenceTrim', () => {
     await settle()
 
     expect(scan).toHaveBeenCalledTimes(2)
-  })
-
-  it('measures for a machine with no licence', async () => {
-    // The trim is cue behaviour, so the scan runs wherever the trim is on.
-    scan.mockImplementation(async (filePath: string) => scanOf(filePath))
-    useStore.setState({ cues: [audio({ trimSilence: true })], license: { state: 'unlicensed' } })
-
-    act(() => { root.render(<Harness />) })
-    await settle()
-
-    expect(scan).toHaveBeenCalledWith(TRACK)
-    expect(regionOf('a1')).not.toBeNull()
   })
 
   it('writes nothing for a measurement that arrives after the window is gone', async () => {

@@ -9,7 +9,6 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { ShowSettings } from './ShowSettings'
 import { useStore, type ShowSettingsTab } from '../../store'
-import { TEST_LICENSE } from '../../../../test/license'
 import { defaultShowSettings } from '../../../../shared/show'
 import type {
   CastSettings, Dca, DeskSettings, Ensemble, MicScene, Performer, RfPack, RfPlot, RfSwap, ShowChannel
@@ -62,7 +61,6 @@ describe('ShowSettings', () => {
     useStore.setState({
       showSettings: defaultShowSettings(),
       showSettingsTab: null,
-      license: { state: 'unlicensed' },
       modals: 0,
       log: [],
       showDevices: []
@@ -77,8 +75,6 @@ describe('ShowSettings', () => {
     swaps?: RfSwap[]
     ports?: string[]
     tab?: ShowSettingsTab
-    /** The mic plot is the Pro surface in here; the cast and the channels are free. */
-    licensed?: boolean
   }
 
   // The dialog reads its tab from the store, so a test opens it where an operator would
@@ -95,8 +91,7 @@ describe('ShowSettings', () => {
           scenes: { list: state.scenes ?? [], allowDuplicateAssignment: true },
           rf: { ...defaults.rf, plot: state.plot ?? { packs: [] }, swaps: state.swaps ?? [] }
         },
-        showSettingsTab: state.tab ?? 'channels',
-        license: state.licensed ? { state: 'active', license: TEST_LICENSE } : { state: 'unlicensed' }
+        showSettingsTab: state.tab ?? 'channels'
       })
       root.render(<ShowSettings />)
     })
@@ -162,24 +157,6 @@ describe('ShowSettings', () => {
     expect(useStore.getState().showSettingsTab).toBeNull()
   })
 
-  // Without a key the dialog opened on a desk and twelve faders with no word about what
-  // they were for: they are what Scenes run on, and Scenes are what the key turns on.
-  it('says what the console and the cast are for on a machine without a key, and nothing with one', async () => {
-    await show({ tab: 'channels' })
-    const note = (): HTMLElement | null => document.querySelector('.show-settings-pro-note')
-    expect(note()?.textContent).toContain('what Scenes run on')
-    // Still set up here, key or no key: the note is in front of nothing.
-    expect(document.querySelector('.show-settings-body')?.textContent).toContain('Desk')
-
-    act(() => note()!.querySelector<HTMLButtonElement>('.license-link')!.click())
-    expect(useStore.getState().showSettingsTab).toBeNull()
-    expect(useStore.getState().settingsTab).toBe('license')
-
-    useStore.setState({ settingsTab: null })
-    await show({ tab: 'channels', licensed: true })
-    expect(note()).toBeNull()
-  })
-
   it('switches tabs, showing the one the header was pressed for', async () => {
     await show({ tab: 'channels' })
 
@@ -190,10 +167,7 @@ describe('ShowSettings', () => {
 
     await act(async () => { field<HTMLButtonElement>('.show-settings-tab', 2).click() })
     expect(useStore.getState().showSettingsTab).toBe('mic-plot')
-    // The plot reads the rack the show is running on, so it is the one tab behind the
-    // license — an unlicensed machine gets the lock, not an empty plot.
-    expect(container.querySelector('.pro-lock')).not.toBeNull()
-    expect(container.querySelector('.plot-add-pack')).toBeNull()
+    expect(container.querySelector('.plot-add-pack')).not.toBeNull()
   })
 
   describe('performers', () => {
@@ -719,7 +693,6 @@ describe('ShowSettings', () => {
     it('edits the plot from its tab, recording a pack that changes hands', async () => {
       await show({
         tab: 'mic-plot',
-        licensed: true,
         cast: { performers: [performer()] },
         plot: { packs: [pack()] }
       })

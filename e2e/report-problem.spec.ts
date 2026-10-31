@@ -34,7 +34,6 @@ test('the report shows this build, this machine and the engine before anything i
   await expect(reportText()).toContainText('Nothing has been sent anywhere.')
   await expect(reportText()).toContainText(`${process.platform} ${process.arch}`)
   await expect(reportText()).toContainText('AUDIO ENGINE')
-  await expect(reportText()).toContainText('licence: unlicensed')
 })
 
 test('what is written under "What happened" is in the report, and the home folder is not', async () => {

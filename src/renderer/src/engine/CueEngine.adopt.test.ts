@@ -89,8 +89,7 @@ function setup(initialCues: Cue[], selectedId?: string): TestSetup {
     appendLog,
     getWorkspacePath: () => null,
     getMidiDefaultPort: () => 'default-midi-port',
-    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
-    isPro: () => true
+    getTriggerGuard: () => DEFAULT_TRIGGER_GUARD
   })
   runners.push(runner)
 

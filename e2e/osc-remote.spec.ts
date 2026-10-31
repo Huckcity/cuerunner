@@ -9,7 +9,6 @@ let page: Page
 let port: number
 
 test.beforeEach(async () => {
-  // No key: the remote is the free half of the app, like the triggers it sits beside.
   ;({ app, page } = await launchApp())
   port = await oscPortOfItsOwn(page)
 })

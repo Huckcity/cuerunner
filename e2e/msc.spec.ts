@@ -16,7 +16,6 @@ import {
   addCueFromMoreMenu,
   closeApp,
   launchApp,
-  mintLicense,
   openFromRecent,
   openLogPanel
 } from './helpers'
@@ -39,9 +38,6 @@ const CUE = '12'
 
 test.beforeAll(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'cuerunner-msc-'))
-  // No license: the show control cue is the free half of the app, and this launch is what
-  // says so by using it. The Triggers tab the last case reads is the licensed one, so
-  // that case starts its own instance with a key of its own.
   ;({ app, page } = await launchApp())
 })
 
@@ -257,7 +253,7 @@ test('a show file’s own Show Control trigger reads back in the Triggers tab', 
   // A fresh instance with a fresh profile: the trigger has to be the file's, not
   // something this machine learned by watching the desk earlier in the run.
   await closeApp(app)
-  ;({ app, page } = await launchApp({ license: mintLicense(), userDataDir }))
+  ;({ app, page } = await launchApp({ userDataDir }))
   await openFromRecent(page, userDataDir, showPath)
 
   // The cue the desk's own go answers to, rather than the cue that tells the desk to go.

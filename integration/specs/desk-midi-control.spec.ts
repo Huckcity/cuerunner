@@ -18,7 +18,7 @@
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { startDeskPeer, type DeskPeer } from '../peers/desk'
-import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel, openScenesView } from '../../e2e/helpers'
+import { closeApp, launchApp, openFromRecent, openLogPanel, openScenesView } from '../../e2e/helpers'
 import { writeDeskShow } from './deskFixture'
 import type { DeskProfile } from '../../src/shared/show'
 
@@ -164,7 +164,7 @@ test.beforeAll(async () => {
     channel: CHANNEL,
     profile: PROFILE
   })
-  ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
+  ;({ app, page, userDataDir } = await launchApp())
   await openFromRecent(page, userDataDir, show)
   // The show has to be in before anything else is fair: the cue row is the app saying so.
   await expect(page.locator('.cue-row')).toHaveCount(1)

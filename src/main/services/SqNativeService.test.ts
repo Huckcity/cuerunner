@@ -175,8 +175,7 @@ describe('SqNativeService', () => {
     service.stop()
 
     expect(session.closeAll).toHaveBeenCalled()
-    // Nothing may be published after the show has been told the services are down: the next
-    // licence check could be suspending everything.
+    // Nothing may be published after the show has been told the services are down.
     expect(session.onStatus).toBeNull()
     expect(row(bus)).toMatchObject({ service: 'sq-native', online: false })
   })

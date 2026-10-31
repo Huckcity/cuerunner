@@ -33,7 +33,6 @@ function setup(cues: Cue[], patches: OscPatch[] = []) {
     getMidiDefaultPort: () => '',
     getTriggerGuard: () => DEFAULT_TRIGGER_GUARD,
     getRunning: () => running,
-    isPro: () => true,
     getOscPatches: () => patches
   })
   runners.push(runner)

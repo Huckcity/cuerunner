@@ -20,7 +20,7 @@
 import { test, expect } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
 import { startDeskPeer, type DeskPeer } from '../peers/desk'
-import { closeApp, launchApp, mintLicense, openFromRecent, openLogPanel } from '../../e2e/helpers'
+import { closeApp, launchApp, openFromRecent, openLogPanel } from '../../e2e/helpers'
 import { MSC_HOST, SOFT_KEY, writeMscShow } from './mscFixture'
 
 /** The cue the show names on the desk's list. */
@@ -39,7 +39,7 @@ function firings(): Promise<number> {
 test.beforeAll(async () => {
   peer = await startDeskPeer({ host: MSC_HOST, profile: 'sq' })
   const show = writeMscShow({ port: peer.port, cue: CUE })
-  ;({ app, page, userDataDir } = await launchApp({ license: mintLicense() }))
+  ;({ app, page, userDataDir } = await launchApp())
   await openFromRecent(page, userDataDir, show)
 })
 

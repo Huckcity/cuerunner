@@ -78,8 +78,6 @@ async function narrowTo(inset: number): Promise<number> {
   return width
 }
 
-// The free build is the wider row — its Scenes button carries the Pro mark — so it is the
-// one measured.
 for (const [name, inset] of [
   ['the smallest window the app allows', 0],
   // Windows draws the resize border inside the window's own bounds, about eight pixels a

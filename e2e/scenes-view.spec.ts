@@ -14,7 +14,6 @@ import {
   freePort,
   launchApp,
   listenOsc,
-  mintLicense,
   openLogPanel,
   openScenesView,
   openShowSettings,
@@ -26,9 +25,7 @@ let app: ElectronApplication
 let page: Page
 
 test.beforeEach(async () => {
-  // The show services, the scenes view, the panels that read them: everything this spec
-  // is about is the licensed half of the app.
-  ;({ app, page } = await launchApp({ license: mintLicense() }))
+  ;({ app, page } = await launchApp())
 })
 
 test.afterEach(async () => {
