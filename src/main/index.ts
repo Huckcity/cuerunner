@@ -20,6 +20,7 @@ import { existingOutputManager, registerOutputWindowHandlers, streamAllowance } 
 import { isOutputWindow } from './output/OutputManager'
 import { STREAM_SCHEME_PRIVILEGES, installStreamProtocol } from './output/streamProtocol'
 import { fakeCameraSwitches, installCameraPermissions } from './output/cameraAccess'
+import { ASIO_NOTICE } from '../shared/trademarks'
 
 // The schemes pictures are read through have to be privileged before the app is ready —
 // Electron's rule — so they are declared here, at load, and answered once the app is up: the
@@ -372,7 +373,8 @@ app.whenReady().then(() => {
   app.setAboutPanelOptions({
     applicationName: 'Cuerunner',
     applicationVersion: app.getVersion(),
-    copyright: 'Copyright © 2026'
+    // In the copyright line because it is the one field the panel shows on all three platforms.
+    copyright: `Copyright © 2026 Adam Gibbons. MIT License.\n${ASIO_NOTICE}`
   })
   
   createMenu()

@@ -342,7 +342,7 @@ milliseconds on the engine's own sample clock. `src/shared/audio.ts` is the cont
 processes and the engine speak.
 
 - **Device I/O**: miniaudio (MIT-0). Windows WASAPI shared **and** exclusive, macOS Core
-  Audio, Linux PulseAudio / ALSA / JACK — and, on Windows, **ASIO** when Steinberg's SDK was
+  Audio, Linux PulseAudio / ALSA / JACK — and, on Windows, **ASIO®** when Steinberg's SDK was
   present at build time (see *Packaging prerequisites*): one interface, its own driver, its
   own buffer sizes. Exclusive access is requested, never assumed: if the device or mode
   asked for cannot be honoured, `configure` fails and says why.
@@ -965,3 +965,5 @@ Cuerunner is free and open source under the [MIT License](./LICENSE).
   `native/audio/third_party/DEPENDENCIES.json`), so a build from source has no ASIO unless you
   supply the SDK yourself — see *Packaging prerequisites*.
 - **The name and logo.** The code licence does not grant the Cuerunner name or logo.
+
+The ASIO Compatible logo (`website/assets/asio-compatible.svg`, `src/renderer/src/assets/asio-compatible.svg`) is Steinberg's artwork, not MIT licensed, and is used here under Steinberg's agreement. A fork that ships it needs its own right to use it. ASIO is a registered trademark of Steinberg Media Technologies GmbH.

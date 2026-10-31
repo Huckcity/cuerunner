@@ -28,6 +28,8 @@ import { UpdateSection } from '../update/UpdateSection'
 import { OscSettings } from '../osc/OscSettings'
 import { AudioRoutingSection } from '../audio/AudioRoutingSection'
 import './SettingsDialog.css'
+import { ASIO_NOTICE } from '../../../../shared/trademarks'
+import asioLogo from '../../assets/asio-compatible.svg'
 
 interface Props {
   onClose: () => void
@@ -403,6 +405,13 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                 </select>
                 <span className="settings-info">The audio stack the engine plays through</span>
               </div>
+              {/* Steinberg's guidelines ask for the logo in the dialog that turns ASIO on. */}
+              {asioOffered && (
+                <div className="settings-asio-mark">
+                  <img src={asioLogo} alt="ASIO Compatible" />
+                  <span className="settings-info">{ASIO_NOTICE}</span>
+                </div>
+              )}
               <div className="field-row">
                 <label>Output device</label>
                 <select
