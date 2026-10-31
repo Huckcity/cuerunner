@@ -8,8 +8,8 @@
 // few hundred microseconds of arithmetic; nothing in it waits, reads a file or allocates more
 // than the frames themselves, so main's event loop is never held by the lights.
 //
-// The state outlives the loop. A licence that lapses stops the sending (the service is Pro)
-// but not the record of what each cue holds, so a key entered again puts the same look back.
+// The state outlives the loop: a service that stops ends the sending but not the record of
+// what each cue holds, so starting it again puts the same look back.
 
 import { performance } from 'node:perf_hooks'
 import type { RemoteInfo } from 'node:dgram'
@@ -178,8 +178,7 @@ export class DmxLighting {
   }
 
   /**
-   * The show's panic, by the show's own rule — and only on a machine that is sending: an
-   * unlicensed one has no lights of its own to panic.
+   * The show's panic, by the show's own rule — and only on a machine that is sending.
    */
   panic(): void {
     if (!this.running) return

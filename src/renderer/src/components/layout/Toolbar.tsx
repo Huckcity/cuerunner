@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useStore, usePro } from '../../store'
+import { useStore } from '../../store'
 import {
   useWorkspace,
   openDemoWorkspace,
@@ -8,8 +8,6 @@ import {
   mergeAnotherShow
 } from '../../hooks/useWorkspace'
 import type { CueType } from '../../../../shared/cue'
-import { isProCueType } from '../../../../shared/cue'
-import { ProMark } from '../license/ProLock'
 import { CueIcon } from '../../utils/cueIcons'
 import { formatShortcut } from '../../utils/shortcuts'
 import { startNewCueDrag } from '../../utils/newCueDrag'
@@ -31,19 +29,6 @@ const PRIMARY_CUES: { type: CueType; label: string }[] = [
   { type: 'wait',  label: 'Wait'  },
   { type: 'stop',  label: 'Stop'  },
 ]
-
-/** The File menu entries that open a Pro surface. The file records its own history
- *  whether or not this machine is licensed; comparing it, merging it and bundling it are
- *  what the key turns on. Show Settings is the console, the cast and the mic plot — what
- *  Scenes run on — so it carries the mark too: unmarked, it read as the show's main
- *  settings and opened a desk nobody on a free build had asked about. */
-const PRO_FILE_ACTIONS = new Set<FileMenuAction>([
-  'compare',
-  'merge',
-  'export-bundle',
-  'import-bundle',
-  'show-settings'
-])
 
 const MORE_CUES: { type: CueType; label: string }[] = [
   { type: 'midi',    label: 'MIDI'    },
@@ -81,20 +66,11 @@ export type AppView = 'cues' | 'scenes' | 'lighting'
 export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
   const addCue = useStore(s => s.addCue)
   const selectedId = useStore(s => s.selectedId)
-  const pro = usePro()
-  const openSettings = useStore(s => s.openSettings)
   const openShowSettings = useStore(s => s.openShowSettings)
   const openChanges = useStore(s => s.openChanges)
   const openReport = useStore(s => s.openReport)
 
   const handleAddCue = (type: CueType) => {
-    // A scene cue belongs to the scenes the license unlocks: without one there is
-    // nothing for it to point at, so the click goes to the place that fixes that
-    // rather than adding a cue that cannot run.
-    if (isProCueType(type) && !pro) {
-      openSettings('license')
-      return
-    }
     // A fade made with an audio cue selected is a fade of that cue: it is born named for it
     // and aimed at it, as part of the add — written afterwards it was a second edit, and
     // the first undo after adding a fade only un-named it. Only an audio cue: a fade moves
@@ -213,7 +189,6 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
       <span className="file-menu-label">{item.label}</span>
       {/* On a machine without a key only: the mark says a press leads to something the
           key turns on, and with the key there is nothing to say. */}
-      {PRO_FILE_ACTIONS.has(item.action) && !pro && <ProMark />}
       {item.accelerator && <kbd>{shortcutLabel(item.accelerator)}</kbd>}
     </button>
   )
@@ -338,14 +313,12 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
                 <button
                   key={type}
                   className="toolbar-more-menu-item"
-                  data-locked={isProCueType(type) && !pro}
                   onClick={() => { handleAddCue(type); setMoreMenuOpen(false) }}
                   draggable
                   onDragStart={e => startNewCueDrag(e.dataTransfer, type)}
                 >
                   <CueIcon type={type} className="toolbar-more-menu-icon" />
                   {label}
-                  {isProCueType(type) && !pro && <ProMark />}
                 </button>
               ))}
             </div>
@@ -392,24 +365,20 @@ export function Toolbar({ onOpenSettings, view, onSwitchView }: Props) {
           role="tab"
           aria-selected={view === 'scenes'}
           data-active={view === 'scenes'}
-          data-locked={!pro}
           onClick={() => onSwitchView('scenes')}
-          title={pro ? 'Scenes and mics, for running the show' : 'Scenes — part of Cuerunner Pro'}
+          title='Scenes and mics, for running the show'
         >
           Scenes
-          {!pro && <ProMark />}
         </button>
         <button
           className="toolbar-view-btn"
           role="tab"
           aria-selected={view === 'lighting'}
           data-active={view === 'lighting'}
-          data-locked={!pro}
           onClick={() => onSwitchView('lighting')}
-          title={pro ? 'The lighting rig: patch, faders and the DMX going out' : 'Lighting — part of Cuerunner Pro'}
+          title='The lighting rig: patch, faders and the DMX going out'
         >
           Lighting
-          {!pro && <ProMark />}
         </button>
       </div>
     </div>

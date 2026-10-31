@@ -3,7 +3,6 @@ import { cueEngine } from '../engine/CueEngine'
 import { TimecodeChase } from '../engine/timecodeChase'
 import { setTimecodeSettings, setTimecodeStatus, timecodeStatus } from '../engine/timecodeStatus'
 import { useStore } from '../store'
-import { isPro } from '../../../shared/license'
 import { formatFrames } from '../../../shared/timecode'
 import { listMembership, MAIN_CUE_LIST_ID } from '../../../shared/cueLists'
 import type { Cue } from '../../../shared/cue'
@@ -47,7 +46,6 @@ export function useTimecodeFollow(): void {
         return list.timecode?.offsetFrames ?? 0
       },
       settings: () => useStore.getState().timecode,
-      isPro: () => isPro(useStore.getState().license),
       fire: (cue, frames, rate) => {
         // The cause first, so the log reads in the order the show happened.
         useStore.getState().appendLog([{

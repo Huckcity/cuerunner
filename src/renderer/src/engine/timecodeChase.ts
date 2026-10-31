@@ -30,7 +30,6 @@ import {
 export interface ChaseDeps {
   getCues(): Cue[]
   settings(): { chase: boolean; toleranceFrames: number; onStop: TimecodeOnStop }
-  isPro(): boolean
   /** Fires a cue the way a trigger does. `frames` is the trigger's own, for the log. */
   fire(cue: Cue, frames: number, rate: TimecodeRate): void
   /** Starts a cue `seekMs` into itself, with no pre-wait: the clock is already past its start. */
@@ -94,11 +93,6 @@ export class TimecodeChase {
   update(status: TimecodeReceiverStatus, now: number): void {
     const position = positionAt(status, now)
     const running = status.state === 'locked' || status.state === 'freewheel'
-    if (!this.deps.isPro()) {
-      this.last = position
-      this.lastRunning = running
-      return
-    }
     const settings = this.deps.settings()
 
     if (!running) {

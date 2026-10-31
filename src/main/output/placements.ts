@@ -7,7 +7,7 @@ import type { TimerWindowState } from '../../shared/ipc/output'
  * Where this machine puts each of a show's outputs, and the only place that is read or
  * written.
  *
- * Kept beside `license.key` and `redundancy.json` rather than in the workspace: a show is
+ * Kept beside `redundancy.json` rather than in the workspace: a show is
  * rehearsed on a laptop with one screen and run on a rig with three projectors, and which
  * display an output goes to is a fact about the machine it is running on (spine AD-14). The
  * show keeps its outputs — names, sizes, the warp each projector needs — and this keeps their

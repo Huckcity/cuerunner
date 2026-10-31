@@ -1,6 +1,4 @@
 import { useState } from 'react'
-import { usePro } from '../../store'
-import { ProMark } from '../license/ProLock'
 import { timecodeStatus, useTimecodeStatus } from '../../engine/timecodeStatus'
 import {
   formatFrames,
@@ -36,7 +34,6 @@ export function parseTriggerText(text: string, rate: TimecodeRate): Timecode | n
  * click: play to the moment, press Take.
  */
 export function TimecodeTriggerSection({ onAdd }: { onAdd: (trigger: CueTrigger) => void }) {
-  const pro = usePro()
   const { receiver } = useTimecodeStatus()
   const [text, setText] = useState('')
   const rate = receiver.rate
@@ -50,7 +47,7 @@ export function TimecodeTriggerSection({ onAdd }: { onAdd: (trigger: CueTrigger)
 
   return (
     <div className="trigger-section" data-kind="timecode">
-      <div className="trigger-section-label">Timecode {!pro && <ProMark />}</div>
+      <div className="trigger-section-label">Timecode</div>
       <div className="field-row">
         <label htmlFor="trigger-timecode">At</label>
         <input

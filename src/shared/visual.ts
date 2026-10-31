@@ -7,8 +7,7 @@
 // output *is* belongs to the show (its name, the size it is composed at, the timer it carries,
 // the way it is pinned to a projector's throw); *where* it is — which display, fullscreen or a
 // window — belongs to the machine, because the same show runs on a laptop in rehearsal and on
-// the venue's rig on the night. The second half lives in userData (`OutputPlacement`), beside
-// the licence and the pair's settings, never in the showfile (spine AD-14).
+// the venue's rig on the night. The second half lives in userData (`OutputPlacement`), beside the pair's settings, never in the showfile (spine AD-14).
 //
 // A video's sound is not the picture's: the picture element is muted, and the sound plays as
 // an ordinary voice on the native engine — routing matrix, fades, meters and all — started on

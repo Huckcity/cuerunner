@@ -89,7 +89,6 @@ interface PeerFacts {
 export class RedundancyService implements ShowService {
   readonly id = 'redundancy'
   readonly label = 'Redundant playback'
-  readonly pro = true
   /**
    * None: redundancy's role and partner are the machine's rather than the show's — the
    * service reads them from its own settings, handed in as options — so no configure of

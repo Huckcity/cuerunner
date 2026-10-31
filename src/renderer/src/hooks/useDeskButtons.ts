@@ -4,7 +4,7 @@ import { sendDeskMessage } from '../engine/deskSend'
 import { deskMidi } from '../utils/desk'
 import { DeskButtons, muteGroupGet, type DeskButton } from '../utils/deskInput'
 import { sceneStep } from '../utils/scenes'
-import { useStore, usePro } from '../store'
+import { useStore } from '../store'
 import { deskLinkName } from '../../../shared/deskLink'
 import type { DeskButtons as DeskButtonMap, DeskSettings } from '../../../shared/show'
 
@@ -70,19 +70,14 @@ export function watchedGroups(desk: DeskSettings): number[] {
  * triggers use: the window would read a fast hand as a bounce, and the toggle in the message
  * already says which press this is. The window is still what stands in front of a *cue*
  * firing, which is a different question — whether one cue was fired twice.
- *
- * The show services only exist while licensed and listening, so with no key there is nothing
- * here to read.
  */
 export function useDeskButtons(): void {
-  const pro = usePro()
   // The show's desk is what decides which groups are watched and where to ask: a workspace
   // opened after the app started carries its own buttons, and the question has to be asked
   // again when they are. A reader is made per desk, so a changed group primes afresh.
   const desk = useStore(s => s.showSettings.desk)
 
   useEffect(() => {
-    if (!pro) return
     const buttons = new DeskButtons()
 
     const askWhereTheGroupsStand = (): void => {
@@ -130,7 +125,7 @@ export function useDeskButtons(): void {
         stepScenes(action)
       }
     })
-  }, [pro, desk])
+  }, [desk])
 }
 
 /** Moves the show's scenes one step, the way the desk's key asked. */

@@ -6,9 +6,8 @@
 // this process cannot read — is asked for as one call and comes back as data. Nothing
 // here writes to the show.
 import { useEffect, useState } from 'react'
-import { useStore, usePro, type ChangesTab } from '../../store'
+import { useStore, type ChangesTab } from '../../store'
 import { useModal } from '../../hooks/useModal'
-import { ProLock } from '../license/ProLock'
 import { buildWorkspace } from '../../utils/workspace'
 import {
   describeEntry,
@@ -281,7 +280,6 @@ interface Props {
  */
 export function ChangesDialog({ initialTab, onClose }: Props) {
   useModal()
-  const pro = usePro()
   const [tab, setTab] = useState<ChangesTab>(initialTab)
 
   // Closed from Escape like the other panels, and never from a press beside it: a
@@ -318,13 +316,7 @@ export function ChangesDialog({ initialTab, onClose }: Props) {
           ))}
         </div>
         <div className="settings-body changes-body">
-          {tab === 'history' ? <HistoryTab /> : pro ? <CompareTab /> : (
-            <ProLock
-              variant="section"
-              feature="Comparing shows"
-              blurb="Comparing sets this show beside another version of it, cue by cue, and merging puts two people's work together. What this file's own saves changed reads anywhere."
-            />
-          )}
+          {tab === 'history' ? <HistoryTab /> : <CompareTab />}
         </div>
       </div>
     </div>

@@ -1,7 +1,6 @@
 import { useEffect, useCallback } from 'react'
 import { cueEngine } from '../engine/CueEngine'
 import { useStore } from '../store'
-import { isPro } from '../../../shared/license'
 
 export function useCueEngine() {
   const setRunning = useStore(s => s.setRunning)
@@ -25,7 +24,6 @@ export function useCueEngine() {
       getMidiDefaultPort: () => useStore.getState().midiSettings.outputPortName,
       getTriggerGuard: () => useStore.getState().triggerGuard,
       getRunning: () => useStore.getState().running,
-      isPro: () => isPro(useStore.getState().license),
       getOscPatches: () => useStore.getState().oscPatches,
       setArmed: (cueIds, armed) => useStore.getState().updateCues(cueIds, { isArmed: armed }),
       getCueLists: () => useStore.getState().cueLists,

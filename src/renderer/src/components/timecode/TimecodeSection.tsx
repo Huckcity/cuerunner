@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
-import { usePro, useStore } from '../../store'
+import { useStore } from '../../store'
 import { NumberField } from '../common/Field'
-import { ProLock } from '../license/ProLock'
 import { ServiceStatus } from '../common/ServiceStatus'
 import { configureTimecode, useTimecodeSettings } from '../../engine/timecodeStatus'
 import { TimecodePanel } from './TimecodeDisplay'
@@ -46,11 +45,10 @@ function parseOffset(text: string): number | null {
 
 /**
  * Where this machine hears the show's clock, and what the cue list does with it. The
- * settings are the machine's, kept beside the licence: which port the clock is on and which
+ * settings are the machine's, kept in the user-data folder: which port the clock is on and which
  * input the LTC cable is in belong to this rack, not to the show that is loaded on it.
  */
 export function TimecodeSection(): React.JSX.Element {
-  const pro = usePro()
   const settings = useTimecodeSettings()
   // How the show follows the clock is the show's own: it is saved in the file, dirties it, and
   // goes back with undo. Where the clock arrives is the machine's, above.
@@ -65,15 +63,6 @@ export function TimecodeSection(): React.JSX.Element {
     window.cuerunner.timecode.inputs().then(setInputs).catch(() => {})
   }, [])
 
-  if (!pro) {
-    return (
-      <ProLock
-        variant="section"
-        feature="Timecode"
-        blurb="Follow MTC, LTC or Art-Net timecode: cues fire on their frame, and the cue list chases the clock."
-      />
-    )
-  }
   if (settings === null) return <p className="inspector-hint">Reading this machine’s settings…</p>
 
   const update = (patch: Partial<TimecodeSettings>): void => {
@@ -255,7 +244,7 @@ export function TimecodeSection(): React.JSX.Element {
         </div>
       </section>
 
-      {failed !== null && <p className="inspector-hint license-hint">{failed}</p>}
+      {failed !== null && <p className="inspector-hint settings-refusal">{failed}</p>}
     </>
   )
 }

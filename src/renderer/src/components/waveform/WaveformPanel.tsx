@@ -163,9 +163,8 @@ export function WaveformPanel() {
   const cueRef = useRef(audioCue)
   cueRef.current = audioCue
   /**
-   * Whether the trim applies to this cue here: the cue asks for it and this machine is
-   * licensed to apply it. The same two questions `CueEngine` asks before a firing, so
-   * what the panel shades is what the engine will sound.
+   * Whether the trim applies to this cue here: the question `CueEngine` asks before a
+   * firing, so what the panel shades is what the engine will sound.
    */
   const trim = audioCue?.trimSilence === true
   const runState = audioCue ? running.get(audioCue.id) : undefined

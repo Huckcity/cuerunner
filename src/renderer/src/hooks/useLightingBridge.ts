@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { usePro, useStore } from '../store'
+import { useStore } from '../store'
 import { stableJson } from '../../../shared/showfile'
 import type { LightingSettings } from '../../../shared/dmx'
 import type { DmxConfig } from '../../../shared/dmxWire'
@@ -17,20 +17,18 @@ export function lightingConfig(lighting: LightingSettings): DmxConfig {
 }
 
 /**
- * Keeps the lighting engine told where the show's universes go: on load, on every edit to the
- * outputs, and whenever a licence turns the engine on. Compared by value, so an edit to a
+ * Keeps the lighting engine told where the show's universes go: on load, and on every edit to the
+ * outputs. Compared by value, so an edit to a
  * fixture's name — which main never reads — sends nothing, and a re-render sends nothing twice.
  * The patch itself stays here: main is handed slots, never fixtures.
  */
 export function useLightingBridge(): void {
   const key = useStore(s => stableJson(lightingConfig(s.lighting)))
-  const pro = usePro()
   useEffect(() => {
-    if (!pro) return
     void lightingCommand('configure', JSON.parse(key) as DmxConfig).then(result => {
       if (!result.ok) {
         useStore.getState().appendLog([{ level: 'error', message: `Lighting: ${result.error ?? 'the outputs were not taken'}` }])
       }
     })
-  }, [key, pro])
+  }, [key])
 }

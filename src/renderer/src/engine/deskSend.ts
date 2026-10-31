@@ -43,7 +43,7 @@ export async function sendDeskMessage(message: DeskMessage): Promise<DeskSendRes
         rides: message.rides
       })
       // Two answers, because two things can be wrong: the service never took the command
-      // (not running, not licensed), or it took it and had no session to write on. Both are
+      // (not running), or it took it and had no session to write on. Both are
       // the same sentence to the operator, and neither is the show stopping.
       if (!answer.ok) return { ok: false, error: answer.error ?? 'the SQ service did not take it' }
       const written = answer.result as SqMembershipAnswer | undefined

@@ -42,7 +42,7 @@ function standing(status: UpdateStatus): string {
 /**
  * Updates on this machine: what is running, whether there is something newer, and the rules
  * for asking — on launch and daily, never in the hours the show runs, never in Show Mode with a
- * show open. The settings are the machine's, kept beside the licence.
+ * show open. The settings are the machine's, kept in the user-data folder.
  */
 export function UpdateSection() {
   const status = useUpdateStatus()

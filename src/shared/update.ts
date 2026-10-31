@@ -97,7 +97,7 @@ export function selfUpdateRefusal(install: UpdateInstall): string | null {
 /** A time of day, as the settings carry it: `HH:MM`, 24-hour, this machine's local time. */
 export type ClockTime = string
 
-/** The machine's update settings: kept beside the licence, never in a show. */
+/** The machine's update settings: kept in the user-data folder, never in a show. */
 export interface UpdateSettings {
   /** Check on launch and once a day. Off means only the operator's own Check now. */
   check: boolean

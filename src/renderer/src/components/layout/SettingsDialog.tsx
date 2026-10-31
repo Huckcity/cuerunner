@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useStore, usePro } from '../../store'
+import { useStore } from '../../store'
 import { useShallow } from 'zustand/react/shallow'
 import { useModal } from '../../hooks/useModal'
 import { audioEngine } from '../../engine/audioEngineClient'
@@ -22,7 +22,6 @@ import { isAllowEntry, remoteEnabled } from '../../../../shared/oscRemote'
 import type { EwDxFound } from '../../../../shared/ipc/show'
 import type { RfThresholds, TelemetrySource, TelemetrySourceKind } from '../../../../shared/show'
 import type { SettingsTab } from '../../store'
-import { LicenseSection } from '../license/LicenseSection'
 import { RedundancySection } from '../redundancy/RedundancySection'
 import { TimecodeSection } from '../timecode/TimecodeSection'
 import { UpdateSection } from '../update/UpdateSection'
@@ -83,7 +82,6 @@ const SETTINGS_TABS: { id: SettingsTab; label: string; scope: 'show' | 'machine'
   { id: 'wireless', label: 'Wireless', scope: 'show' },
   { id: 'redundancy', label: 'Backup machine', scope: 'machine' },
   { id: 'timecode', label: 'Timecode', scope: 'machine' },
-  { id: 'license', label: 'License', scope: 'machine' },
   { id: 'updates', label: 'Updates', scope: 'machine' }
 ]
 
@@ -95,7 +93,6 @@ const TAB_BLURB: Record<SettingsTab, string> = {
   network: 'How consoles, tablets and other gear reach this show.',
   wireless: 'Where pack readings come from, and when to warn about them.',
   redundancy: 'A second computer, ready to take the show over.',
-  license: 'Cuerunner Pro on this machine.',
   timecode: 'The SMPTE clock this machine follows, and how the cue list follows it.',
   updates: 'Newer versions of Cuerunner, and when this machine may look for them.'
 }
@@ -109,22 +106,9 @@ const TAB_SERVICE: Partial<Record<SettingsTab, string>> = {
   timecode: 'timecode'
 }
 
-/**
- * Why a Pro service's settings are here but not running. The settings travel with the
- * show whatever the license says; only the listening waits for one.
- */
 /** The allow list as it is typed: entries by comma or space, blanks dropped. */
 export function splitAllowList(text: string): string[] {
   return text.split(/[,\s]+/).map(entry => entry.trim()).filter(Boolean)
-}
-
-function ProHint({ onUnlock, children }: { onUnlock: () => void; children?: React.ReactNode }) {
-  return (
-    <p className="inspector-hint license-hint">
-      {children ?? 'Part of Cuerunner Pro. These settings are saved with the show, and start working once this machine is licensed.'}{' '}
-      <button className="license-link" onClick={onUnlock}>Enter a license key</button>
-    </p>
-  )
 }
 
 export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
@@ -152,7 +136,6 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
     triggerGuard: s.triggerGuard,
     updateTriggerGuard: s.updateTriggerGuard
   })))
-  const pro = usePro()
   const [tab, setTab] = useState<SettingsTab>(initialTab)
   const [devices, setDevices] = useState<AudioDeviceInfo[]>([])
   const [reconnecting, setReconnecting] = useState(false)
@@ -724,13 +707,6 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
                 <OscSettings />
               </ServiceBlock>
 
-              {!pro && (
-                <ProHint onUnlock={() => setTab('license')}>
-                  Finding devices and the tablet view are part of Cuerunner Pro. Listening
-                  for OSC is free.
-                </ProHint>
-              )}
-
               <ServiceBlock
                 title="Find devices"
                 blurb="List the gear on the show network in the Monitor, and warn when one drops off."
@@ -809,7 +785,6 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
 
           {tab === 'wireless' && (
             <>
-              {!pro && <ProHint onUnlock={() => setTab('license')} />}
               <div className="field-section-title">Where the readings come from</div>
               {showSettings.rf.sources.length === 0 ? (
                 <p className="inspector-hint" data-scope="panel">
@@ -921,7 +896,6 @@ export function SettingsDialog({ onClose, initialTab = 'general' }: Props) {
 
           {tab === 'redundancy' && <RedundancySection />}
 
-          {tab === 'license' && <LicenseSection />}
 
           {tab === 'timecode' && <TimecodeSection />}
 

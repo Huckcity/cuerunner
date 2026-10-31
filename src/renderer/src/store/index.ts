@@ -66,7 +66,6 @@ import { describeSwap, recordSwaps, releasePerformerPacks } from '../utils/rfPlo
 import { incidentsFrom, MAX_INCIDENTS } from '../utils/rfIncidents'
 import type { RfIncident } from '../utils/rfIncidents'
 import { liveCue } from '../utils/liveCue'
-import type { LicenseStatus } from '../../../shared/license'
 import { defaultLightingSettings, heldLighting, type LightingSettings } from '../../../shared/dmx'
 import {
   defaultTimecodeShowSettings,
@@ -91,11 +90,8 @@ import { cursorFor, cursorOf, withCueLists, type ListCursor } from './cueLists'
 
 export type RunState = 'idle' | 'pre-wait' | 'playing' | 'post-wait' | 'paused'
 
-/**
- * The tabs the settings dialog has. `license` is the machine's own settings rather
- * than the workspace's, which is why the dialog can be opened straight onto it.
- */
-export type SettingsTab = 'general' | 'audio' | 'midi' | 'network' | 'wireless' | 'redundancy' | 'license' | 'timecode' | 'updates'
+/** The tabs the settings dialog has. */
+export type SettingsTab = 'general' | 'audio' | 'midi' | 'network' | 'wireless' | 'redundancy' | 'timecode' | 'updates'
 
 /** The tabs Show Settings has, in the order they are drawn. */
 export type ShowSettingsTab = 'channels' | 'cast' | 'mic-plot'
@@ -511,10 +507,6 @@ interface CueListState {
   /** Records a refusal, or forgets one when a cue is pointed at another file. */
   setSilenceFailure: (cueId: string, filePath: string | null) => void
 
-  // License. The machine's, not the show's: it is read from the main process before
-  // the first frame, it never travels in a workspace, and it never dirties one.
-  license: LicenseStatus
-  setLicense: (status: LicenseStatus) => void
   /** Which tab the settings dialog is on, or null when it is closed. */
   settingsTab: SettingsTab | null
   openSettings: (tab: SettingsTab) => void
@@ -1015,9 +1007,6 @@ export const useStore = create<CueListState>()(withCueLists<CueListState>((set, 
   past: [],
   future: [],
 
-  // Locked until the main process says otherwise: the window is told what this machine
-  // holds before it draws anything, and a failure to read it must not unlock the app.
-  license: { state: 'unlicensed' },
   settingsTab: null,
   showSettingsTab: null,
   changesTab: null,
@@ -1834,7 +1823,6 @@ export const useStore = create<CueListState>()(withCueLists<CueListState>((set, 
     return { silenceFailures: { ...s.silenceFailures, [cueId]: filePath } }
   }),
 
-  setLicense: (license) => set({ license }),
 
   setAudioDeviceError: (audioDeviceError) => set({ audioDeviceError }),
 
@@ -2275,15 +2263,6 @@ export function subscribeToParts(
 
 export function useSelectedCue(): Cue | null {
   return useStore(s => s.cues.find(c => c.id === s.selectedId) ?? null)
-}
-
-/**
- * Whether this machine is licensed, which is what decides if the Pro surfaces are
- * drawn at all. Read through the store rather than from the main process directly so
- * that a surface and its gate agree within a frame.
- */
-export function usePro(): boolean {
-  return useStore(s => s.license.state === 'active')
 }
 
 // Returns the GroupCue that owns the given cue, or null.

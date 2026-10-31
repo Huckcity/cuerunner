@@ -11,7 +11,6 @@ import type {
 import { fadeTargetIds, oscDestination, oscMessages, STOP_ALL, stopTargetIds } from '../../../shared/cueTargets'
 import { fadeRoutes, stopOrder } from './targets'
 import type { MidiFileCue } from '../../../shared/cue'
-import { isProCueType } from '../../../shared/cue'
 import type { PictureSettings, VideoCue, VideoOutput, VisualCue } from '../../../shared/visual'
 import { isVisualCue } from '../../../shared/visual'
 import { cameraSourceProblem } from '../../../shared/camera'
@@ -288,7 +287,6 @@ interface RunnerDeps {
   getMidiDefaultPort: () => string
   // Whether this machine may run the Pro cues. Read per firing rather than latched at
   // init: a key can be entered or removed while the show is loaded.
-  isPro: () => boolean
   // How long each firing surface stays deaf after it fires. Read per press, because the
   // operator can change it while the show is loaded.
   getTriggerGuard: () => TriggerGuardSettings
@@ -875,18 +873,6 @@ export class CueEngine {
   }
 
   private execute(cue: Cue, run: CueRun, at: number, finish: Finish): void {
-    // The class is a declaration (`PRO_CUE_TYPES`, beside `CUE_TYPES`) read where the cue
-    // is dispatched, so every Pro type the declaration names is refused — not only the one
-    // whose executor was written first.
-    if (isProCueType(cue.type) && !this.deps!.isPro()) {
-      const label = this.cueLabel(cue)
-      // The cue stays in the file — a show written on a licensed machine opens on an
-      // unlicensed one, and nothing is thrown away — but the desk is not driven
-      // without a license, and a cue that did nothing quietly would be worse.
-      this.log({ level: 'error', message: `${cue.type} cues need Cuerunner Pro`, label })
-      finish(this.now(), { outcome: 'error', error: 'Cuerunner Pro is required' })
-      return
-    }
     switch (cue.type) {
       case 'audio':
         // Planned when the cue was fired: its command and end carry absolute times.

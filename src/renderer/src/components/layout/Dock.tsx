@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { useSelectedCue, useStore, usePro } from '../../store'
+import { useSelectedCue, useStore } from '../../store'
 import type { Cue, GroupCue } from '../../../../shared/cue'
 import { WaveformPanel } from '../waveform/WaveformPanel'
 import { TimelineEditor } from '../timeline/TimelineEditor'
@@ -9,7 +9,6 @@ import { RfPanel } from '../rf/RfPanel'
 import { ScriptPanel } from '../script/ScriptPanel'
 import { ActivePanel } from '../active/ActivePanel'
 import { OutputsPanel } from '../outputs/OutputsPanel'
-import { ProLock, ProMark } from '../license/ProLock'
 import { CueIcon } from '../../utils/cueIcons'
 import { formatDuration } from '../../utils/cueDefaults'
 import { groupDurationMs } from '../../utils/cueDuration'
@@ -22,13 +21,13 @@ export type DockTab = 'cue' | 'active' | ShowStrip
 
 // The class names are the ones the strips' buttons had, which is what the specs and the
 // guide's screenshot script press.
-const TABS: { id: DockTab; label: string; className: string; pro?: true }[] = [
+const TABS: { id: DockTab; label: string; className: string }[] = [
   { id: 'cue', label: 'Cue', className: 'btn-cue' },
   { id: 'active', label: 'Active', className: 'btn-active' },
   { id: 'log', label: 'Log', className: 'btn-log' },
   { id: 'monitor', label: 'Monitor', className: 'btn-monitor' },
-  { id: 'rf', label: 'Wireless', className: 'btn-rf', pro: true },
-  { id: 'script', label: 'Script', className: 'btn-script', pro: true },
+  { id: 'rf', label: 'Wireless', className: 'btn-rf' },
+  { id: 'script', label: 'Script', className: 'btn-script' },
   { id: 'outputs', label: 'Outputs', className: 'btn-outputs' }
 ]
 
@@ -108,7 +107,6 @@ interface Props {
  * under the operator's pointer moves as they walk the list.
  */
 export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: Props) {
-  const pro = usePro()
   const selected = useSelectedCue()
 
   // The height is the operator's, and the window is a limit on what is drawn rather than
@@ -234,15 +232,9 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
       case 'monitor':
         return <MonitorPanel onClose={backToCue} />
       case 'rf':
-        return pro ? <RfPanel onClose={backToCue} /> : (
-          <ProLock variant="strip" feature="Wireless"
-            blurb="The mic plot, the packs on stage, and the alarm before a battery dies mid-line." onClose={backToCue} />
-        )
+        return <RfPanel onClose={backToCue} />
       case 'script':
-        return pro ? <ScriptPanel onClose={backToCue} /> : (
-          <ProLock variant="strip" feature="Script panel"
-            blurb="The script beside the cue stack, with cues pinned to the lines they fire on." onClose={backToCue} />
-        )
+        return <ScriptPanel onClose={backToCue} />
       case 'outputs':
         return <OutputsPanel onClose={backToCue} />
     }
@@ -269,14 +261,13 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
         />
       )}
       <div className="dock-tabs" role="tablist" aria-label="Dock">
-        {tabs.map(({ id, label, className, pro: gated }) => (
+        {tabs.map(({ id, label, className }) => (
           <button
             key={id}
             role="tab"
             className={`dock-tab ${className}`}
             aria-selected={tab === id}
             data-active={tab === id}
-            data-locked={gated === true && !pro}
             onClick={() => choose(id)}
           >
             {label}
@@ -289,7 +280,6 @@ export function Dock({ view, tab, onTab, timelineExpanded, onToggleTimeline }: P
                 {unreadErrors > 99 ? '99+' : unreadErrors}
               </span>
             )}
-            {gated === true && !pro && <ProMark />}
           </button>
         ))}
         {/* The fold press says what it does and does what it says: the press sets the fold

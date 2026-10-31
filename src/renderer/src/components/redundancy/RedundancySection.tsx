@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
-import { usePro, useStore } from '../../store'
+import { useStore } from '../../store'
 import { NumberField, TextField } from '../common/Field'
 import { Advanced, ServiceBlock } from '../common/SettingsBlock'
-import { ProLock } from '../license/ProLock'
 import {
   MAX_TIMEOUT_MS,
   MIN_TIMEOUT_MS,
@@ -16,12 +15,11 @@ import './Redundancy.css'
  *
  * The settings here belong to the machine rather than to the show — both machines run
  * the same workspace file, so a role written into the show would be read as the same
- * answer by both of them — and they are kept beside the license key, not in the file the
+ * answer by both of them — and they are kept beside the machine's other settings, not in the file the
  * two machines share. The status below them is the machine's own account of what it has
  * heard, which is the half of redundancy an operator actually runs a show on.
  */
 export function RedundancySection(): React.JSX.Element {
-  const pro = usePro()
   const settings = useStore(s => s.redundancySettings)
   const setRedundancySettings = useStore(s => s.setRedundancySettings)
   const status = useStore(s => s.redundancy)
@@ -37,33 +35,19 @@ export function RedundancySection(): React.JSX.Element {
     // The store only learns redundancy from change events, so a quiet pair plus a
     // renderer reload leaves this panel on "waiting" with no takeover button. Ask for
     // the service's current reading on mount: the command exists for exactly this.
-    if (pro) {
-      window.cuerunner.show.command('redundancy', 'status')
-        .then(result => {
-          if (result.ok && result.result && typeof result.result === 'object') {
-            useStore.getState().applyShowEvents([{
-              kind: 'redundancy',
-              at: Date.now(),
-              status: result.result as RedundancyStatus
-            }])
-          }
-        })
-        .catch(() => {})
-    }
+    window.cuerunner.show.command('redundancy', 'status')
+      .then(result => {
+        if (result.ok && result.result && typeof result.result === 'object') {
+          useStore.getState().applyShowEvents([{
+            kind: 'redundancy',
+            at: Date.now(),
+            status: result.result as RedundancyStatus
+          }])
+        }
+      })
+      .catch(() => {})
     return () => clearInterval(timer)
-  }, [pro])
-
-  // A locked machine is told what the feature is rather than shown a dead panel: the
-  // settings it would have are machine settings, and reading them is not the gate.
-  if (!pro) {
-    return (
-      <ProLock
-        variant="section"
-        feature="Redundant playback"
-        blurb="A second computer runs the same show, and picks it up where this one stopped."
-      />
-    )
-  }
+  }, [])
 
   if (settings === null) {
     return <p className="inspector-hint">Reading this machine’s settings…</p>
@@ -147,10 +131,10 @@ export function RedundancySection(): React.JSX.Element {
         </div>
 
         {failed !== null && (
-          <p className="inspector-hint license-hint">Those settings were not taken: {failed}</p>
+          <p className="inspector-hint settings-refusal">Those settings were not taken: {failed}</p>
         )}
         {settings.enabled && settings.token === '' && (
-          <p className="inspector-hint license-hint">
+          <p className="inspector-hint settings-refusal">
             Set an access code below, the same on both computers. Without one, any machine
             that finds this port can claim the pair.
           </p>

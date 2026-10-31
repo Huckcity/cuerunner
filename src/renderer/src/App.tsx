@@ -40,9 +40,8 @@ import { ShowModeView } from './components/show-mode/ShowModeView'
 import { useCartMode, useShowMode } from './hooks/useShowMode'
 import { CartView } from './components/cart/CartView'
 import { useLogFile } from './hooks/useLogFile'
-import { useSelectedCue, useStore, usePro } from './store'
+import { useSelectedCue, useStore } from './store'
 import type { GroupCue } from '../../shared/cue'
-import { ProLock } from './components/license/ProLock'
 import { LightingView } from './components/lighting/LightingView'
 import { useLightingBridge } from './hooks/useLightingBridge'
 import { CueListTabs } from './components/cue-lists/CueListTabs'
@@ -106,8 +105,6 @@ export function App() {
   const mergeReport = useStore(s => s.mergeReport)
   const setMergeReport = useStore(s => s.setMergeReport)
   const showSettingsTab = useStore(s => s.showSettingsTab)
-  const setLicense = useStore(s => s.setLicense)
-  const pro = usePro()
   const [timelineExpanded, setTimelineExpanded] = useState(false)
   // The bottom of the window is one dock: the selected cue, or one of the show's panels.
   const [dockTab, setDockTab] = useState<DockTab>('cue')
@@ -138,11 +135,6 @@ export function App() {
 
   const timelineFullscreen = timelineExpanded && timelineGroupCue !== null && dockTab === 'cue' && view === 'cues'
   const shellClass = `app-shell${timelineFullscreen ? ' timeline-fullscreen' : ''}${showMode ? ' in-show-mode' : ''}${cartShown ? ' in-cart' : ''}`
-
-  // The license can change while the window is open — a key entered in Settings, or one
-  // that ran out overnight — so the panels follow the main process rather than the read
-  // taken at startup. The startup read itself happens before the first frame (main.tsx).
-  useEffect(() => window.cuerunner.license.onChanged(setLicense), [setLicense])
 
   useEffect(() => {
     return window.cuerunner.app.onMenuAction((action) => {
@@ -215,25 +207,9 @@ export function App() {
         ) : cartShown ? (
           <CartView onExit={activeIsCart ? () => setCartAsRows(true) : toggleCartMode} />
         ) : view === 'scenes' ? (
-          pro ? (
-            <ScenesView />
-          ) : (
-            <ProLock
-              variant="view"
-              feature="Scenes"
-              blurb="Who is open on stage, scene by scene. Recall one and the desk moves with the show."
-            />
-          )
+          <ScenesView />
         ) : view === 'lighting' ? (
-          pro ? (
-            <LightingView />
-          ) : (
-            <ProLock
-              variant="view"
-              feature="Lighting"
-              blurb="The rig patched, faders to build a look, and sACN or Art-Net out of this machine, run from the cue list."
-            />
-          )
+          <LightingView />
         ) : (
           <>
             <CueList />

@@ -3,8 +3,7 @@
 //
 // Every namespace declares its channel table and its bridge in its own file — the ten
 // beside this one, audio in `src/shared/audio.ts` — and each wire shape is written where
-// it already belongs: a request the domain module owns (`network`, `osc`, `playback`,
-// `license`) stays there, and one only this seam has is declared in the namespace file.
+// it already belongs: a request the domain module owns (`network`, `osc`, `playback`) stays there, and one only this seam has is declared in the namespace file.
 // This file composes them into the type the renderer's `window` and the preload's
 // `satisfies` both use, so a member added, renamed or removed fails to compile at both
 // ends rather than at a button on stage.
@@ -23,7 +22,6 @@ import { NETWORK_CHANNELS, type NetworkBridge } from './network'
 import { OSC_CHANNELS, type OscBridge } from './osc'
 import { SHOW_CHANNELS, type ShowBridge } from './show'
 import { REDUNDANCY_CHANNELS, type RedundancyBridge } from './redundancy'
-import { LICENSE_CHANNELS, type LicenseBridge } from './license'
 import { SCRIPT_CHANNELS, type ScriptBridge } from './script'
 import { WORKSPACE_CHANNELS, type WorkspaceBridge } from './workspace'
 import { QLAB_CHANNELS, type QLabBridge } from './qlab'
@@ -45,7 +43,6 @@ export interface CuerunnerBridge {
   osc: OscBridge
   show: ShowBridge
   redundancy: RedundancyBridge
-  license: LicenseBridge
   script: ScriptBridge
   workspace: WorkspaceBridge
   qlab: QLabBridge
@@ -69,7 +66,6 @@ export const CHANNEL_TABLES = [
   OSC_CHANNELS,
   SHOW_CHANNELS,
   REDUNDANCY_CHANNELS,
-  LICENSE_CHANNELS,
   SCRIPT_CHANNELS,
   WORKSPACE_CHANNELS,
   AUDIO_CHANNELS,
@@ -91,7 +87,6 @@ export const EVENT_CHANNELS = [
   PLAYBACK_CHANNELS.panic,
   AUDIO_CHANNELS.events,
   SHOW_CHANNELS.events,
-  LICENSE_CHANNELS.changed,
   TIMECODE_CHANNELS.events,
   UPDATE_CHANNELS.events,
   OUTPUT_CHANNELS.events

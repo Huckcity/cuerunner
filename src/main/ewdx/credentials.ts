@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto'
  * What this machine knows about the receivers it has been told about: the password a
  * receiver was given in WSM, and the certificate it was first seen presenting.
  *
- * It is a file of its own beside `license.key`, never the workspace, for the same reason
+ * It is a file of its own in the user-data folder, never the workspace, for the same reason
  * the redundancy pair's settings are: the showfile is emailed, copied to the second machine
  * and kept in version control, and a receiver's password has no business travelling with
  * it. Entries are keyed by the telemetry source's id, so the show says *which* receiver

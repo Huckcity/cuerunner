@@ -3,7 +3,7 @@
 // numbers a scene recall happens to carry.
 //
 // And which network interface this machine's OSC listens and sends on: a fact about the
-// machine, kept in its own `osc.json` beside the licence, chosen in Settings.
+// machine, kept in its own `osc.json` in the user-data folder, chosen in Settings.
 
 import type { OscArg } from '../cue'
 import type { Refusal } from './refusal'

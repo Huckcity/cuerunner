@@ -3,7 +3,7 @@
 // The window used to open at 1280x800 in the middle of the primary display every time: an
 // operator who runs the show maximised on the booth's second monitor arranged it again at
 // every launch. What is remembered is the machine's, not the show's — it lives in the
-// profile beside the recent list and the licence, and never travels in a workspace.
+// profile beside the recent list, and never travels in a workspace.
 //
 // The file is the app's own and still is not trusted: it is read with a bound, checked for
 // shape, and then checked against the displays this machine has *now*. A laptop that was

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { usePro, useStore, subscribeToParts } from '../store'
+import { useStore, subscribeToParts } from '../store'
 import { cueEngine } from '../engine/CueEngine'
 import { audioEngine } from '../engine/audioEngineClient'
 import {
@@ -43,7 +43,6 @@ const MAX_PREPARED = 8
  * than decodes.
  */
 export function useRedundancy(): void {
-  const pro = usePro()
   const enabled = useStore(s => s.redundancySettings?.enabled ?? false)
   const notice = useStore(s => s.redundancy?.lastNotice ?? null)
   // The sequence of the last decision acted on. A notice reaches a window more than once —
@@ -52,7 +51,6 @@ export function useRedundancy(): void {
   const actedOn = useRef(0)
 
   useEffect(() => {
-    if (!pro) return
     // The machine's own half of the pair, read once for the session. The settings tab
     // writes it back through the same slice, so a change made there is a change here.
     let live = true
@@ -67,10 +65,10 @@ export function useRedundancy(): void {
     return () => {
       live = false
     }
-  }, [pro])
+  }, [])
 
   useEffect(() => {
-    if (!pro || !enabled) return
+    if (!enabled) return
 
     /** Cue ids whose media this machine has already been asked to warm. */
     const asked = new Set<string>()
@@ -168,10 +166,10 @@ export function useRedundancy(): void {
       clearInterval(timer)
       unsubscribe()
     }
-  }, [pro, enabled])
+  }, [enabled])
 
   useEffect(() => {
-    if (!pro || !notice) return
+    if (!notice) return
     if (notice.seq <= actedOn.current) return
     // A notice the machine would not act on now is one from before: a takeover is only
     // adopted while this machine is the one driving, and a stand-down only while it is
@@ -199,7 +197,7 @@ export function useRedundancy(): void {
     // The runner writes the plan's own line to the session log — what was picked up,
     // what could not be, and how much of the show went by unheard.
     cueEngine.adopt(plan)
-  }, [pro, notice])
+  }, [notice])
 }
 
 /** One running cue as the partner has to know it: its phase and where in its file it is. */

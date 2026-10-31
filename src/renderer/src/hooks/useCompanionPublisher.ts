@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useStore, usePro, subscribeToParts } from '../store'
+import { useStore, subscribeToParts } from '../store'
 import type { CompanionCue, CompanionState } from '../../../shared/show'
 import type { Cue } from '../../../shared/cue'
 import { cuesOfList } from '../../../shared/cueLists'
@@ -27,7 +27,6 @@ function toCompanionCue(cue: Cue): CompanionCue {
  * page twenty times a second is a battery and a distraction both.
  */
 export function useCompanionPublisher(): void {
-  const pro = usePro()
   const enabled = useStore(s => s.showSettings.companion.enabled)
   const scriptPath = useStore(s => s.showSettings.script.path)
   // Turning the companion on is itself a settings change, and a settings change restarts
@@ -39,9 +38,7 @@ export function useCompanionPublisher(): void {
   )
 
   useEffect(() => {
-    // The tablet is served by a Pro service, and off the same setting: a companion
-    // nobody is licensed to run has nothing to publish to.
-    if (!enabled || !pro) return
+    if (!enabled) return
 
     let lines: string[] | null = null
     let cancelled = false
@@ -124,5 +121,5 @@ export function useCompanionPublisher(): void {
       cancelled = true
       unsubscribe()
     }
-  }, [enabled, pro, scriptPath, serviceState])
+  }, [enabled, scriptPath, serviceState])
 }

@@ -71,7 +71,6 @@ import {
   type RendererCrash
 } from '../shared/ipc/app'
 import { PLAYBACK_CHANNELS } from '../shared/ipc/playback'
-import { LICENSE_CHANNELS } from '../shared/ipc/license'
 import { MIDI_CHANNELS, type MidiSendPayload, type MidiSendResult, type MidiSendTcpPayload } from '../shared/ipc/midi'
 import type {
   MidiFileCuePayload,
@@ -170,7 +169,6 @@ import type { CameraDevice } from '../shared/camera'
 import type { CuerunnerBridge, EventChannel } from '../shared/ipc'
 import type { Workspace } from '../shared/workspace'
 import type { ShowEvent, ShowSettings, ShowSnapshot, ScriptDocument } from '../shared/show'
-import type { ActivationResult, LicenseStatus } from '../shared/license'
 import type { MidiAvailability } from '../shared/midi'
 import type { NetworkRequest, NetworkResult } from '../shared/network'
 import type { PlaybackPanic } from '../shared/playback'
@@ -429,16 +427,6 @@ contextBridge.exposeInMainWorld('cuerunner', {
       invoke(REDUNDANCY_CHANNELS.settings),
     configure: (patch: Partial<RedundancySettings>): Promise<RedundancyConfigureResult> =>
       invoke(REDUNDANCY_CHANNELS.configure, patch)
-  },
-  license: {
-    status: (): Promise<LicenseStatus> =>
-      invoke(LICENSE_CHANNELS.status),
-    activate: (text: string): Promise<ActivationResult> =>
-      invoke(LICENSE_CHANNELS.activate, text),
-    deactivate: (): Promise<LicenseStatus> =>
-      invoke(LICENSE_CHANNELS.deactivate),
-    onChanged: (callback: (status: LicenseStatus) => void): (() => void) =>
-      subscribe(LICENSE_CHANNELS.changed, callback)
   },
   script: {
     readFile: (

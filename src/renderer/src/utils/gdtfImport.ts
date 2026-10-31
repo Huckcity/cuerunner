@@ -4,8 +4,7 @@ import { lightingCommand } from '../engine/lighting'
 /**
  * A GDTF file the operator picked, read by main — a `.gdtf` is a zip, and the window has neither
  * a zip reader nor a file system — and handed back as a fixture type for the show, or as the
- * sentence it was refused with. The lighting service is Pro, so a machine without a licence is
- * refused there as well as by the locked view this is drawn in.
+ * sentence it was refused with.
  */
 export async function importGdtfFixture(file: File): Promise<GdtfImportResult> {
   let path = ''

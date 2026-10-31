@@ -144,7 +144,6 @@ function found(value: unknown): string {
 export class SqNativeService implements ShowService {
   readonly id = 'sq-native'
   readonly label = 'Desk (SQ native control)'
-  readonly pro = true
   readonly settingsSections = ['desk'] as const
 
   /** The context to publish through, so the desk's row can be taken offline on stop. */

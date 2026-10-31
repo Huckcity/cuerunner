@@ -43,10 +43,6 @@ export interface ServiceOptions {
 
 export function defaultServices(options: ServiceOptions = {}): ShowService[] {
   return [
-    // Hearing the room is free: the desk's own key, a footswitch, a tablet or another
-    // program must not be behind a key, or the free half stops competing with free
-    // software. What costs is the show of it — the desk link, the radios, the network
-    // and the second machine — so those services carry `pro` and the host asks.
     new OscInputService({ binding: options.osc?.binding, appVersion: options.osc?.appVersion }),
     new MidiInputService(),
     new MidiTcpService(),
@@ -57,7 +53,7 @@ export function defaultServices(options: ServiceOptions = {}): ShowService[] {
     new PresenceService(),
     new CompanionService(),
     new RedundancyService({ settings: options.redundancy }),
-    // The show's lights: a stream the show keeps up on its own behalf, so Pro like the desk link.
+    // The show's lights: a stream the show keeps up on its own behalf.
     new DmxService(sharedLighting(options.dmx)),
     new TimecodeService(options.timecode ?? noTimecodeHub)
   ]
@@ -92,27 +88,19 @@ export interface ShowRuntime {
  * services exist: it configures them, reads a snapshot, and subscribes to the batch.
  * That is what lets a service be added without touching the window plumbing.
  */
-export function createShowRuntime(
-  services: ShowService[] = defaultServices(),
-  entitled: () => boolean = () => true
-): ShowRuntime {
+export function createShowRuntime(services: ShowService[] = defaultServices()): ShowRuntime {
   const bus = new ShowBus()
-  const host = new ServiceHost(bus, entitled)
+  const host = new ServiceHost(bus)
   for (const service of services) host.register(service)
 
   let current: string | null = null
-  // The licence is not asked about here: this factory runs at module load, before the
-  // manager that answers exists, and an eager call is a crash on the first launch. The
-  // question belongs to configure, which is the only place the answer is used.
-  let entitledNow: boolean | null = null
-
   // Settings application is serialised: a configure that arrives while another is
   // applying waits for it and is applied after, rather than racing it. Two applies in
   // flight interleave at every `await` on a service, and a service left on the older
   // settings while the memory records the newer ones is one no later configure
   // corrects — the memory says those settings are already in force. The callers that
-  // move the services under settings — the renderer's settings effect, a licence change
-  // and redundancy:configure's by-id restart — come through here; a command moves no
+  // move the services under settings — the renderer's settings effect and
+  // redundancy:configure's by-id restart — come through here; a command moves no
   // settings and does not wait, and teardown (`close`) deliberately does not either.
   let applying: Promise<void> = Promise.resolve()
   function serialised<T>(task: () => Promise<T>): Promise<T> {
@@ -133,28 +121,20 @@ export function createShowRuntime(
         // comparison is by value — `stableJson`, the equality the host's slice diff
         // uses — so a re-send that only reorders keys is the same settings.
         const serialized = stableJson(settings)
-        const mayRunPro = entitled()
-        // Whether the licence changed is a different question from whether the settings
-        // did, and a settings diff cannot answer it: it re-decides every service,
-        // including the ones whose settings have not moved (redundancy reads machine
-        // settings, and nothing here compares those). The renderer re-sends settings
-        // whenever a workspace loads or autosaves, which is why identical settings on an
-        // unchanged licence are left alone rather than rebinding a UDP port mid-flight.
-        const licenceChanged = entitledNow !== null && mayRunPro !== entitledNow
-        if (serialized === current && !licenceChanged) return
+        // The renderer re-sends settings whenever a workspace loads or autosaves, which is
+        // why identical settings are left alone rather than rebinding a UDP port mid-flight.
+        if (serialized === current) return
         if (current !== null && serialized !== current) {
           // A restart here means the service is turned off or pointed somewhere else.
           // Say so once, at the level of the thing that changed.
           const before = JSON.parse(current) as ShowSettings
           announceChange(bus, before, settings)
         }
-        if (licenceChanged) await host.startAll(settings, { entitlementOnly: true })
-        else await host.startChanged(settings)
+        await host.startChanged(settings)
         // Committed once every service has settled — never before applying — so the
         // memory says what is running, and settings already in force are the only ones a
         // configure skips.
         current = serialized
-        entitledNow = mayRunPro
       }),
 
     snapshot(): ShowSnapshot {

@@ -29,7 +29,6 @@ import { gdtfFallbackName, importGdtfFile, readGdtfRequest } from '../dmx/gdtf'
 export class DmxService implements ShowService {
   readonly id = DMX_SERVICE_ID
   readonly label = 'Lighting (sACN / Art-Net)'
-  readonly pro = true
   readonly settingsSections = [] as const
 
   constructor(private readonly lighting: DmxLighting = sharedLighting()) {}

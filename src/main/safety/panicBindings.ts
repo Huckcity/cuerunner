@@ -2,7 +2,7 @@ import type { ShowEvent } from '../../shared/show'
 import type { PanicSource } from '../../shared/playback'
 
 // The two bindings a show already has for panicking. A desk, a tablet or a keyboard
-// sends them over the licensed inputs the show services are already listening on, and
+// sends them over the inputs the show services are already listening on, and
 // the main process acts on them itself — the engine is here, and a panic that had to
 // wait for the window would be no use in the case it exists for.
 //

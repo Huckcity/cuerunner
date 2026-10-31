@@ -17,10 +17,8 @@ export interface PlayRegion {
 }
 
 /**
- * What a cue plays, with the silence trim folded in when the trim is on and this machine
- * is licensed to apply it. `trim` is the caller's answer to both of those questions
- * (`CueEngine` reads them per firing), because a utility has no business knowing what a
- * licence is.
+ * What a cue plays, with the silence trim folded in when the trim is on. `trim` is the
+ * caller's answer (`CueEngine` reads it per firing).
  *
  * A cue with the trim on and no measurement yet plays its whole region: the scan is a
  * pass over the file, and a GO that waited for one would be a GO waiting on a disk.

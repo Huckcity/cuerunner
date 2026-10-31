@@ -270,14 +270,6 @@ Object.defineProperty(window, 'cuerunner', {
       ewDxDiscover: vi.fn(() => Promise.resolve({ receivers: [], error: null })),
       onEvents: vi.fn(() => () => {})
     },
-    license: {
-      status: vi.fn(() => Promise.resolve({ state: 'unlicensed' as const })),
-      activate: vi.fn(() => Promise.resolve({
-        ok: false, error: 'Unit tests run unlicensed', status: { state: 'unlicensed' as const }
-      })),
-      deactivate: vi.fn(() => Promise.resolve({ state: 'unlicensed' as const })),
-      onChanged: vi.fn(() => () => {})
-    },
     redundancy: {
       settings: vi.fn(() => Promise.resolve({ ...redundancySettings })),
       configure: vi.fn((patch: Partial<RedundancySettings>): Promise<RedundancyConfigureResult> =>

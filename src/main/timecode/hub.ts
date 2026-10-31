@@ -3,11 +3,10 @@
  * receiver that follows an incoming clock, the generators the timecode cues run, and the
  * status the window draws from both.
  *
- * The receiver runs as a show service (`TimecodeService` below), so it comes and goes with
- * the licence and shows in the monitor beside the other listeners, and its lock and its loss
+ * The receiver runs as a show service (`TimecodeService` below), so it shows in the monitor beside the other listeners, and its lock and its loss
  * are alarms on the same strip. Its settings are the machine's: which port the clock is on
- * and which input the LTC cable is in are facts about this rack, so they are kept beside the
- * licence rather than in the show.
+ * and which input the LTC cable is in are facts about this rack, so they are kept in the
+ * user-data folder rather than in the show.
  */
 import { readFileSync, statSync } from 'node:fs'
 import { writeFileAtomically } from '../workspace/recovery'

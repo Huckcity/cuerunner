@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useSelectedCue, usePro } from '../../store'
-import { ProLock, ProMark } from '../license/ProLock'
+import { useSelectedCue } from '../../store'
 import { BasicTab } from './BasicTab'
 import { Triggers } from './Triggers'
 import { cueTriggers } from '../../engine/triggers'
@@ -28,7 +27,6 @@ import type {
   MscCue, MicCue, LightCue, TimecodeCue, VideoCue, ImageCue, TextCue, CameraCue, ControlCue, InputCue
 } from '../../../../shared/cue'
 import type { MidiFileCue } from '../../../../shared/cue'
-import { isProCueType } from '../../../../shared/cue'
 import './Inspector.css'
 
 // Basics is what every cue shares, then what this type does, then what else can fire
@@ -64,7 +62,6 @@ const TYPE_TABS: Record<string, string[]> = {
 const TRIGGERS_TAB = 'Triggers'
 
 function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
-  const pro = usePro()
   if (tab === 'Basics') return <BasicTab cue={cue} />
   if (tab === TRIGGERS_TAB) {
     return <Triggers cue={cue} />
@@ -78,55 +75,16 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
   if (tab === 'Group') return <GroupInspector cue={cue as GroupCue} />
   if (tab === 'Network') return <NetworkInspector cue={cue as NetworkCue} />
   if (tab === 'Script') return <ScriptInspector cue={cue as ScriptCue} />
-  if (tab === 'Scene') {
-    return pro ? (
-      <SceneInspector cue={cue as SceneCue} />
-    ) : (
-      <ProLock
-        variant="inspector"
-        feature="Scene cues"
-        blurb="A cue that recalls a scene, so GO moves the desk along with the show."
-      />
-    )
-  }
+  if (tab === 'Scene') return <SceneInspector cue={cue as SceneCue} />
   if (tab === 'Stop') return <StopInspector cue={cue as StopCue} />
   if (tab === 'Control') return <ControlInspector cue={cue as ControlCue} />
   if (tab === 'Devamp') return <DevampInspector cue={cue as DevampCue} />
   if (tab === 'Show Control') return <MscInspector cue={cue as MscCue} />
   if (tab === 'MIDI File' || tab === 'Channels') return <MidiFileInspector cue={cue as MidiFileCue} tab={tab} />
-  if (tab === 'Mic') {
-    return pro ? (
-      <MicInspector cue={cue as MicCue} />
-    ) : (
-      <ProLock
-        variant="inspector"
-        feature="Mic cues"
-        blurb="A cue that mutes or unmutes a radio mic at its receiver, so a pack is closed by the cue list and not by a hand on a fader."
-      />
-    )
-  }
-  if (tab === 'Light' || tab === 'Tracking') {
-    return pro ? (
-      tab === 'Light' ? <LightInspector cue={cue as LightCue} /> : <LightTrackingTab cue={cue as LightCue} />
-    ) : (
-      <ProLock
-        variant="inspector"
-        feature="Light cues"
-        blurb="A cue that fades the lighting rig to a look over sACN or Art-Net, tracking what it does not change."
-      />
-    )
-  }
-  if (tab === 'Timecode') {
-    return pro ? (
-      <TimecodeInspector cue={cue as TimecodeCue} />
-    ) : (
-      <ProLock
-        variant="inspector"
-        feature="Timecode cues"
-        blurb="A cue that runs a SMPTE clock — MTC, LTC and Art-Net — so the lighting desk, the video and the band follow the cue list."
-      />
-    )
-  }
+  if (tab === 'Mic') return <MicInspector cue={cue as MicCue} />
+  if (tab === 'Light') return <LightInspector cue={cue as LightCue} />
+  if (tab === 'Tracking') return <LightTrackingTab cue={cue as LightCue} />
+  if (tab === 'Timecode') return <TimecodeInspector cue={cue as TimecodeCue} />
   // The picture cues share the Picture tab; each has its own for what it shows.
   if (cue.type === 'video') return <VideoInspector cue={cue as VideoCue} tab={tab} />
   if (cue.type === 'image') return <ImageInspector cue={cue as ImageCue} tab={tab} />
@@ -137,7 +95,6 @@ function TabContent({ cue, tab }: { cue: Cue; tab: string }) {
 
 export function Inspector() {
   const cue = useSelectedCue()
-  const pro = usePro()
   const [activeTab, setActiveTab] = useState('Basics')
   const bodyRef = useRef<HTMLDivElement>(null)
 
@@ -160,11 +117,6 @@ export function Inspector() {
   const tabs = [...(TYPE_TABS[cue.type] ?? ['Basics']), TRIGGERS_TAB]
   const tab = tabs.includes(activeTab) ? activeTab : tabs[0]
   const triggerCount = cueTriggers(cue).length
-  // The type's own tab — the one `TYPE_TABS` names beside `Basics` — is the one the type's
-  // class locks: `PRO_CUE_TYPES` is the declaration that says which types cost, so a type
-  // added to it is locked and marked here rather than only where its executor was written.
-  const typeTab = (TYPE_TABS[cue.type] ?? [])[1]
-  const typeLocked = isProCueType(cue.type) && !pro
 
   return (
     <div className="inspector">
@@ -174,14 +126,12 @@ export function Inspector() {
             key={t}
             className="inspector-tab"
             data-active={t === tab}
-            data-locked={(t === typeTab && typeLocked) || (t === TRIGGERS_TAB && !pro)}
             onClick={() => setActiveTab(t)}
           >
             {t}
-            {t === TRIGGERS_TAB && pro && triggerCount > 0 && (
+            {t === TRIGGERS_TAB && triggerCount > 0 && (
               <span className="inspector-tab-count">{triggerCount}</span>
             )}
-            {t === typeTab && typeLocked && <ProMark />}
           </button>
         ))}
       </div>

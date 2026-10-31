@@ -1,11 +1,9 @@
 // The problem report: one plain-text document the operator reads before it goes anywhere.
 //
-// Nothing here sends anything. The app has no phone-home (SPEC: offline-first, and the
-// README says the licence "tells nobody"), so the report is composed on request, shown in
+// Nothing here sends anything. The app has no phone-home (SPEC: offline-first), so the report is composed on request, shown in
 // full, and leaves only when the operator copies it, saves it or mails it themselves. What it
 // holds is what a person answering the mail would otherwise ask for one question at a time:
-// the versions, the audio engine's own state and last words, whether the licence is doing
-// anything (its state, never the key or who it was issued to), the crash dumps Chromium left
+// the versions, the audio engine's own state and last words, the crash dumps Chromium left
 // on this machine, and the tail of the session log.
 //
 // It never holds the show: no cue names, no file contents. The log can name a media path, and
@@ -18,7 +16,6 @@ import { readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AudioEngineInfo } from '../../shared/audio'
 import type { AudioEngineStatus } from '../audio/AudioEngine'
-import type { LicenseStatus } from '../../shared/license'
 import type { ReportInput } from '../../shared/ipc/app'
 
 /** What the operator typed. Longer is cut, and the cut is said. */
@@ -53,7 +50,6 @@ export interface ReportFacts {
   osRelease: string
   engine: AudioEngineInfo | null
   engineStatus: AudioEngineStatus
-  license: LicenseStatus['state']
   crashDumps: CrashDump[]
   crashDumpDir: string
   home: string
@@ -156,7 +152,6 @@ export function composeReport(facts: ReportFacts, input: ReportInput): string {
     `Cuerunner ${facts.appVersion}${facts.packaged ? '' : ' (development build)'}`,
     `${facts.platform} ${facts.arch}, OS ${facts.osRelease}`,
     `Electron ${facts.electron}, Chromium ${facts.chrome}, Node ${facts.node}`,
-    `licence: ${facts.license}`,
     '',
     'AUDIO ENGINE',
     ...engineLines(facts),

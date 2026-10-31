@@ -47,7 +47,6 @@ import {
 } from '../../shared/audio'
 import { refusalFrom, type AudioResult } from '../../shared/audioResult'
 import { APP_CHANNELS } from '../../shared/ipc/app'
-import { LICENSE_CHANNELS } from '../../shared/ipc/license'
 import {
   MIDI_CHANNELS,
   type MidiSendPayload,
@@ -163,12 +162,8 @@ import type { RedundancySettings } from '../../shared/redundancy'
 import { drainMainErrors, onMainError } from '../errors'
 import { loadScriptDocument } from '../script/document'
 import { shellWorkingDirectory } from '../script/shellCwd'
-import { createLicenseManager } from '../license/LicenseManager'
-import { trustedPublicKeys } from '../license/trustedKeys'
 import { defaultShowSettings } from '../../shared/show'
-import { isPro } from '../../shared/license'
 import type { ScriptDocument, ShowEvent, ShowSettings } from '../../shared/show'
-import type { LicenseStatus } from '../../shared/license'
 import type { Workspace } from '../../shared/workspace'
 import { AUDIO_FILE_EXTENSIONS } from '../../shared/media'
 import { registerOutputHandlers } from '../output/ipc'
@@ -179,8 +174,7 @@ const midi = new MidiEngine(midiModuleLoader())
 // A MIDI File cue's players send through the same engine, so a port it names is the port
 // every other MIDI cue would reach by that name.
 midiFiles.useOutput((portName, messages) => midi.sendRaw(portName, messages))
-// Which interface this machine's OSC listens and sends on: the machine's, beside the
-// licence, so a show carried to another desk uses that desk's network (`osc.json`).
+// Which interface this machine's OSC listens and sends on: the machine's, in the user-data folder, so a show carried to another desk uses that desk's network (`osc.json`).
 const oscInterfaces = createOscInterfaces({
   machine: createMachineOsc({ filePath: path.join(app.getPath('userData'), 'osc.json') }),
   restartInput: async () => {
@@ -191,15 +185,14 @@ const oscInterfaces = createOscInterfaces({
 const osc = new OscEngine(undefined, () => oscInterfaces.outputAddress())
 
 // This machine's half of a redundant pair, read once at startup and written only when
-// the operator changes it. It lives beside `license.key` rather than in the workspace:
+// the operator changes it. It lives in the user-data folder rather than in the workspace:
 // both machines of a pair run the same workspace file, so which one is the main and
 // where the other one is are facts about the machines.
 const machineRedundancy = createMachineRedundancy({
   filePath: path.join(app.getPath('userData'), 'redundancy.json')
 })
 
-// The receivers' passwords and the certificates they were first seen with. Beside the
-// licence for the same reason as the pair's settings, and for a plainer one too: the
+// The receivers' passwords and the certificates they were first seen with. In the user-data folder for the same reason as the pair's settings, and for a plainer one too: the
 // showfile is emailed and copied between machines, and a password has no business in it.
 // `safeStorage` is the OS's own keychain, so a copied file is not a copied password.
 const ewDxCredentials = createEwDxCredentials({
@@ -226,11 +219,11 @@ function discoverReceivers(): Promise<EwDxDiscoverResult> {
 }
 
 // What each pack used in the shows before this one. A fact about a pack in a case and not about a
-// show — a show is copied between machines and a pack is not — so it is kept here, beside the licence.
+// show — a show is copied between machines and a pack is not — so it is kept here, in the user-data folder.
 const batteryLog = new BatteryLog({ filePath: path.join(app.getPath('userData'), 'rf-battery.json') })
 
 // SMPTE timecode: the clock this machine follows and the clocks its cues run. Its settings
-// are the machine's, kept beside the licence like the pair's: which port the clock arrives
+// are the machine's, kept in the user-data folder like the pair's: which port the clock arrives
 // on is a fact about this rack. The receiver is a show service, restarted on its own when
 // those settings change.
 const timecodeHub = createTimecodeHub({
@@ -253,12 +246,11 @@ const show = createShowRuntime(
     discoverReceivers,
     batteryLog,
     // Which interface the lights go out of and who this machine is on the wire: the
-    // machine's, beside the licence, so a show carried to another desk goes out of that
+    // machine's, in the user-data folder, so a show carried to another desk goes out of that
     // desk's own network.
     dmx: { machine: createMachineDmx({ filePath: path.join(app.getPath('userData'), 'dmx.json') }) },
     osc: { binding: () => oscInterfaces.input(), appVersion: () => app.getVersion() }
-  }),
-  () => isPro(license.status())
+  })
 )
 
 // Network cues are HTTP clients, not page fetches: a console on the LAN has no reason to
@@ -286,34 +278,6 @@ function midiModuleLoader(): MidiModuleLoader | undefined {
   return undefined
 }
 
-/**
- * The dev-only harness that reaches a key's own boundary: the E2E suite launches with an
- * offset from the system clock, so a key ending tonight ends seconds after launch instead
- * of at whatever hour the run happens to start. An offset rather than an instant, because
- * the manager waits for that boundary with a real timer — a frozen clock would arm a wait
- * that nothing could ever cross. A packaged build never takes this branch, and an offset
- * that is not a number is no offset at all.
- */
-function testClockOffset(): number {
-  if (app.isPackaged) return 0
-  const raw = process.env['CUERUNNER_TEST_CLOCK_OFFSET_MS']
-  if (raw === undefined) return 0
-  const offset = Number(raw)
-  return Number.isFinite(offset) ? offset : 0
-}
-
-// The license this machine holds, read from disk once at startup and written only when
-// the operator enters or removes a key, with the clock consulted whenever anything asks
-// what it is worth. Everything Pro is gated on it from here, in the process that owns the
-// sockets: a window can explain a lock, but only this can be one.
-const clockOffset = testClockOffset()
-const license = createLicenseManager({
-  filePath: path.join(app.getPath('userData'), 'license.key'),
-  publicKeys: trustedPublicKeys(app.isPackaged, process.env),
-  // `0` is the shipped answer: nothing but the dev-gated harness above moves the clock.
-  ...(clockOffset === 0 ? {} : { now: () => Date.now() + clockOffset })
-})
-
 // The last settings the window sent. Kept so a key entered mid-session can start the
 // services the operator had configured, without waiting for the window to re-send them.
 let lastShowSettings: ShowSettings = defaultShowSettings()
@@ -322,8 +286,6 @@ let lastShowSettings: ShowSettings = defaultShowSettings()
 // and starting services on them when a key arrives would bind a port this workspace
 // does not use.
 let settingsReceived = false
-
-const PRO_REQUIRED = 'Cuerunner Pro is required for the show services'
 
 // One batch, every window that is still alive. A window that is mid-reload has no
 // listener yet; it catches up from the snapshot it asks for on startup. A window whose
@@ -360,28 +322,12 @@ show.subscribe(events => {
   broadcastShowEvents(events)
   // The two bindings a show already has for panicking, acted on in the process that
   // owns the engine rather than the one that owns the screen. These arrive through the
-  // licensed show inputs — the same socket and the same ports as everything else the
+  // show inputs — the same socket and the same ports as everything else the
   // panel shows — so nothing new is listening and nothing is loosened to make it work.
   for (const event of events) {
     const binding = panicFromShowEvent(event) ?? remotePanicFromEvent(event, lastShowSettings.oscIn)
     if (binding) playbackSafety.panic(binding.source, binding.reason)
   }
-})
-
-/**
- * A license that changes takes the show services with it: entering a key starts what
- * the window had configured, and a key that lapses stops the Pro half while the free
- * listeners keep running. One configure does both, because the host answers the
- * licence question for every service rather than the app answering it for all of them.
- * The window is told as well, so the panels it draws follow the same fact.
- *
- * A key entered before the window has sent its settings starts nothing: the window
- * re-sends them the moment it sees the license, and starting the defaults first would
- * bind a port on a machine that may not use one.
- */
-license.subscribe((status: LicenseStatus) => {
-  for (const win of BrowserWindow.getAllWindows()) sendToWindow(win, LICENSE_CHANNELS.changed, status)
-  if (settingsReceived) void show.configure(lastShowSettings)
 })
 
 function getWin(event: Electron.IpcMainInvokeEvent): BrowserWindow {
@@ -405,9 +351,7 @@ export function registerIpcHandlers(): void {
   // The services come up with the defaults, before the window has finished loading:
   // a console that is already sending when the operator launches the app should not
   // have its first cues fall on the floor. The renderer re-sends its own settings —
-  // which may come from the workspace — as soon as it has them. The free services start
-  // on any machine; the Pro ones answer to the licence, and the host says so in their
-  // status rather than leaving a port bound to nothing.
+  // which may come from the workspace — as soon as it has them.
   void show.configure(defaultShowSettings())
 
   // Video outputs: the windows main keeps for the show's pictures (src/main/output).
@@ -599,8 +543,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(OSC_CHANNELS.setInterface, (_, payload: OscSetInterfacePayload): Promise<OscSetInterfaceResult> =>
     refusalValue(async () => ({ ok: true as const, ...await oscInterfaces.set(payload.direction, payload.name) })))
 
-  // Network cues. No license gate: network cues shipped in the free half of the app, and
-  // this is the same cue making the same request from a process the page's origin does
+  // Network cues: this is the same cue making the same request from a process the page's origin does
   // not apply to. A console on the LAN does not send CORS headers, and the request has
   // to outlive a busy or reloaded window.
   ipcMain.handle(NETWORK_CHANNELS.request, async (_, request: NetworkRequest) => network.request(request))
@@ -629,7 +572,7 @@ export function registerIpcHandlers(): void {
   // The problem report: composed on request, shown by the window, and sent nowhere by the
   // app. Saving and mailing take back the text the window showed, so what leaves is what
   // was read. An ordinary refusal (nothing to send, a report past its ceiling) is an answer.
-  const reportSources = { engine: audioEngine, license: () => license.status() }
+  const reportSources = { engine: audioEngine }
   ipcMain.handle(APP_CHANNELS.composeReport, (_, input: ReportInput) =>
     composeProblemReport(reportSources, input))
   ipcMain.handle(APP_CHANNELS.saveReport, (event, text: unknown) =>
@@ -650,9 +593,6 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(SHOW_CHANNELS.configure, async (_, settings: ShowSettings) => {
     lastShowSettings = settings
     settingsReceived = true
-    // No licence check here any more: the host decides per service, because OSC and
-    // MIDI input are the free half and the desk link, the radios, the network and the
-    // pair are not. A blanket refusal here would also have stopped the free listeners.
     await show.configure(settings)
   })
 
@@ -698,7 +638,6 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(SHOW_CHANNELS.ewDxSetPassword, (_, payload: EwDxSetPasswordPayload): Promise<EwDxCredentialResult> =>
     refusalValue(async () => {
       const sourceId = ewDxSourceId(payload.sourceId)
-      if (!isPro(license.status())) throw new Refusal(PRO_REQUIRED)
       // The field is typed by a person: a blank is an answer to give, and the bound is
       // what keeps a pasted file from becoming a password.
       if (typeof payload.password !== 'string' || payload.password === '') {
@@ -722,7 +661,6 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(SHOW_CHANNELS.ewDxTrustAgain, (_, sourceId: string): Promise<EwDxCredentialResult> =>
     refusalValue(async () => {
       const id = ewDxSourceId(sourceId)
-      if (!isPro(license.status())) throw new Refusal(PRO_REQUIRED)
       await ewDxCredentials.unpin(id)
       await ewDxApplied()
       return { ok: true as const, ...ewDxStatus(id) }
@@ -730,13 +668,13 @@ export function registerIpcHandlers(): void {
 
   // A look at the network, made when the settings window asks and not before: a show that
   // never opens that page sends nothing. It only reads — nothing is added, and nothing
-  // logs in — so it is open to a locked app like the rest of what only reads.
+  // logs in.
   ipcMain.handle(SHOW_CHANNELS.ewDxDiscover, (): Promise<EwDxDiscoverResult> => discoverReceivers())
 
   ipcMain.handle(SHOW_CHANNELS.ewDxForget, async (_, sourceId: string): Promise<EwDxCredentialStatus> => {
     const id = ewDxSourceId(sourceId)
-    // Forgetting is housekeeping for a source that is already gone from the show, so it
-    // is not behind the licence: a lapsed key must not leave a password behind.
+    // Forgetting is housekeeping for a source that is already gone from the show, so
+    // it stands on its own.
     await ewDxCredentials.forget(id)
     return ewDxStatus(id)
   })
@@ -744,14 +682,12 @@ export function registerIpcHandlers(): void {
   // Redundant playback. Which half of a pair this machine is, and where its partner is,
   // are the machine's own settings — the showfile travels between the two — so they are
   // read and written through their own pair of channels rather than through the
-  // workspace's settings. Reading is open: a locked app should be able to say what it
-  // would be, and the gate is on the change.
+  // workspace's settings.
   ipcMain.handle(REDUNDANCY_CHANNELS.settings, () => machineRedundancy.current())
 
   ipcMain.handle(REDUNDANCY_CHANNELS.configure, async (
     _, patch: Partial<RedundancySettings>
   ): Promise<RedundancyConfigureResult> => {
-    if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED, settings: machineRedundancy.current() }
     const settings = await machineRedundancy.update(patch)
     // The service reads this machine's settings when it starts, so a change is a restart
     // of that one service — a new port, a new partner, being switched off — rather than a
@@ -762,8 +698,7 @@ export function registerIpcHandlers(): void {
   })
 
   // Timecode. The settings are the machine's and free to read and write — they only say
-  // where to listen, and the receiver that listens is a Pro service the host answers for.
-  // Starting a clock is the Pro half, refused here where the licence is known.
+  // where to listen, and the receiver that listens is a service the host answers for.
   ipcMain.handle(TIMECODE_CHANNELS.settings, (): TimecodeSettings => timecodeHub.current())
   ipcMain.handle(TIMECODE_CHANNELS.configure, (_, patch: Partial<TimecodeSettings>): Promise<TimecodeSettings> =>
     timecodeHub.update(patch))
@@ -777,7 +712,6 @@ export function registerIpcHandlers(): void {
   })
   ipcMain.handle(TIMECODE_CHANNELS.generate, (_, request: TimecodeGenerateRequest): Promise<TimecodeGenerateResult> =>
     refusalValue(async () => {
-      if (!isPro(license.status())) throw new Refusal('Cuerunner Pro is required to generate timecode')
       const result = await timecodeHub.generate(request)
       if (!result.ok) throw new Refusal(result.error)
       return result
@@ -813,12 +747,6 @@ export function registerIpcHandlers(): void {
   // The schedule and any download stop with the app, and no write is left landing behind it.
   app.on('will-quit', () => closeUpdates())
 
-  // License. The window reads the status, asks for a key to be checked, and is told
-  // when it changes — including the change it asked for.
-  ipcMain.handle(LICENSE_CHANNELS.status, () => license.status())
-  ipcMain.handle(LICENSE_CHANNELS.activate, (_, text: string) => license.activate(text))
-  ipcMain.handle(LICENSE_CHANNELS.deactivate, () => license.deactivate())
-
   // Script
   // include() resolves against the file that is doing the including, or the workspace
   // directory for the script body itself; the resolved path goes back so the file's own
@@ -845,19 +773,14 @@ export function registerIpcHandlers(): void {
 
   // The script panel's reader. It refuses what it cannot show — a binary file, or a
   // document far larger than any script — because rendering one is what took the
-  // window's process to 3 GB and stopped the interface answering. The panel itself is
-  // Pro, so a locked app is refused here as well as in the window. Script *cues* read
-  // their includes through `script:readFile` above, which stays free.
+  // window's process to 3 GB and stopped the interface answering. Script *cues* read
+  // their includes through `script:readFile` above.
   ipcMain.handle(SCRIPT_CHANNELS.readDocument, async (_, payload: ScriptReadDocumentPayload): Promise<ScriptDocument> => {
-    if (!isPro(license.status())) {
-      return { ok: false, error: 'The script panel is part of Cuerunner Pro.' }
-    }
     return loadScriptDocument(payload.filePath, payload.workspacePath)
   })
 
   // The script panel reads the document the same way a script cue reads its includes.
   ipcMain.handle(SCRIPT_CHANNELS.pickFile, async (event) => {
-    if (!isPro(license.status())) return null
     const result = await dialog.showOpenDialog(getWin(event), {
       title: 'Select Script',
       filters: [
@@ -943,23 +866,17 @@ export function registerIpcHandlers(): void {
       saved: await saveWorkspaceAs(getWin(event), workspace)
     })))
 
-  // Reading a show's history — and comparing two of them — is the Pro half of the
-  // showfile work. The file records its history either way: the data belongs to the show,
-  // and a window that is not licensed still saves one.
-  // A bundle is a show and its media in one file, for handover. It is a Pro surface like
-  // the rest of the showfile work; the show it carries is the operator's either way.
+  // A bundle is a show and its media in one file, for handover.
   ipcMain.handle(
     WORKSPACE_CHANNELS.exportBundle,
     (event, payload: WorkspaceExportPayload): Promise<WorkspaceExportResult> =>
       refusalValue(async (): Promise<WorkspaceExportResult> => {
-        if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
         return { ok: true, exported: await exportBundle(getWin(event), payload.workspace, payload.workspacePath) }
       })
   )
 
   ipcMain.handle(WORKSPACE_CHANNELS.importBundle, (event): Promise<WorkspaceImportResult> =>
     refusalValue(async (): Promise<WorkspaceImportResult> => {
-      if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
       return { ok: true, imported: await importBundle(getWin(event)) }
     }))
 
@@ -972,7 +889,6 @@ export function registerIpcHandlers(): void {
     WORKSPACE_CHANNELS.merge,
     (event, payload: WorkspaceMergePayload): Promise<WorkspaceMergeResult> =>
       refusalValue(async (): Promise<WorkspaceMergeResult> => {
-        if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
         const policy = payload.options?.policy ?? 'ours'
         const again = payload.options?.again === true
         if (again && lastMerge === null) {
@@ -993,7 +909,6 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(WORKSPACE_CHANNELS.compare, (event, workspace: Workspace): Promise<WorkspaceCompareResult> =>
     refusalValue(async (): Promise<WorkspaceCompareResult> => {
-      if (!isPro(license.status())) return { ok: false, error: PRO_REQUIRED }
       return { ok: true, comparison: await compareWorkspace(getWin(event), workspace) }
     }))
 

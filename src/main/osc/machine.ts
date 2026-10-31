@@ -1,6 +1,6 @@
 // This machine's half of OSC: which network interface the show listens for OSC on, and which
 // one its OSC cues send out of. Facts about the machine, not the show (AD-14) — a show carried
-// to another desk listens on that desk's network — so they live beside the licence in
+// to another desk listens on that desk's network — so they live in the user-data folder in
 // `osc.json`, like the lighting's interface in `dmx.json`.
 //
 // An interface is remembered by name and by the address it had when it was chosen, and found

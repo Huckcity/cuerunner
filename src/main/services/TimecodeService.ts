@@ -14,7 +14,6 @@ import type { ShowSettings } from '../../shared/show'
 export class TimecodeService implements ShowService {
   readonly id = 'timecode'
   readonly label = 'Timecode'
-  readonly pro = true as const
   readonly settingsSections = [] as const
 
   constructor(private readonly hub: () => TimecodeHub) {}

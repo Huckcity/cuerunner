@@ -243,7 +243,7 @@ export type TimecodeSourceKind = 'none' | 'mtc' | 'ltc' | 'artnet'
 export type TimecodeLockState = 'off' | 'waiting' | 'locked' | 'freewheel' | 'stopped' | 'lost'
 
 /**
- * The machine's timecode settings. They live beside the licence rather than in the show:
+ * The machine's timecode settings. They live in the user-data folder rather than in the show:
  * which MIDI port the clock arrives on and which input the LTC cable is in are facts about
  * the rack this machine sits in. What the show does with the clock is the show's own
  * (`TimecodeShowSettings`), and travels in the file.

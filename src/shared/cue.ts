@@ -27,32 +27,6 @@ export const CUE_TYPES = [
 export type CueType = (typeof CUE_TYPES)[number]
 
 /**
- * The cue types that need Cuerunner Pro: the class, declared beside the types themselves
- * so the refusal and the published record read one fact rather than spelling the same
- * literal twice.
- *
- * `scene` and `mic`. A cue that puts the desk somewhere the show can lose is a production
- * workflow, and so is one that opens and closes a radio mic from the cue list: both write to
- * live equipment on the show's behalf, where a send the operator's own hand caused is not,
- * whichever socket it uses. The runner refuses these through `isProCueType` when the machine
- * is unlicensed.
- *
- * `light` too: a Light cue puts a look on the rig that the lighting engine holds and sends on
- * the show's behalf for as long as the show runs, the way the desk is held by a scene.
- *
- * `timecode` too: a clock that drives the lighting desk, the video server and the band's
- * click from the cue list is the production running the building, not a send of its own.
- */
-export const PRO_CUE_TYPES = ['scene', 'mic', 'light', 'timecode'] as const satisfies readonly CueType[]
-
-export type ProCueType = (typeof PRO_CUE_TYPES)[number]
-
-/** Whether a cue type is Pro, and so refused where it runs without a licence. */
-export function isProCueType(type: CueType): type is ProCueType {
-  return PRO_CUE_TYPES.some(entry => entry === type)
-}
-
-/**
  * What a second firing does to a cue that is already running.
  *
  * `ignore` leaves it alone: the second press was a hand that shook, a desk that sent

@@ -6,9 +6,7 @@
 // worth doing next — open the result, or run the same merge over the same two files with
 // the other side's choices, which is why the merge remembers them.
 import { useEffect } from 'react'
-import { usePro } from '../../store'
 import { useModal } from '../../hooks/useModal'
-import { ProLock } from '../license/ProLock'
 import { openMergedShow, mergeAnotherShow } from '../../hooks/useWorkspace'
 import type { MergeTally } from '../../../../shared/showfileMerge'
 import type { MergeReport } from '../../store'
@@ -41,7 +39,6 @@ export function MergeReportDialog({ report, onClose }: Props) {
   // modal that is always mounted stands the transport keys down whether or not anything
   // is on screen.
   useModal()
-  const pro = usePro()
 
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => { if (e.key === 'Escape') onClose() }
@@ -70,7 +67,7 @@ export function MergeReportDialog({ report, onClose }: Props) {
           >✕</button>
         </div>
         <div className="settings-body changes-body">
-          {pro ? (
+          {(
             <>
               <p className="changes-intro">
                 <strong>{fileName(report.path)}</strong> holds the merge: {summarise(report.tally)}.
@@ -118,12 +115,6 @@ export function MergeReportDialog({ report, onClose }: Props) {
                 </button>
               </div>
             </>
-          ) : (
-            <ProLock
-              variant="section"
-              feature="Merging two shows"
-              blurb="Two people working on different acts merge into one show, with the cues both changed named rather than decided quietly."
-            />
           )}
         </div>
       </div>

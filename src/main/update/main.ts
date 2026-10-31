@@ -1,5 +1,5 @@
-// The update rules, wired to this process: electron-updater, the machine's settings file beside
-// the licence, the CHANGELOG the build ships with, the engines whose sound counts as the show
+// The update rules, wired to this process: electron-updater, the machine's settings file in
+// the user-data folder, the CHANGELOG the build ships with, the engines whose sound counts as the show
 // running, and every window told when anything changes.
 //
 // The service is made on first use. `registerIpcHandlers()` registers its channels at startup

@@ -8,7 +8,6 @@ import { writeFile } from 'node:fs/promises'
 import { homedir, release } from 'node:os'
 import { join } from 'node:path'
 import type { BrowserWindow } from 'electron'
-import type { LicenseStatus } from '../../shared/license'
 import type { ReportEmailResult, ReportInput, ReportSaveResult } from '../../shared/ipc/app'
 import { SUPPORT_ADDRESS } from '../../shared/support'
 import type { NativeAudioEngine } from '../audio/AudioEngine'
@@ -18,7 +17,6 @@ import { composeReport, readCrashDumps, REPORT_TEXT_LIMIT, type ReportFacts } fr
 /** What the report needs from the rest of main. */
 export interface ReportSources {
   engine: Pick<NativeAudioEngine, 'snapshot' | 'status'>
-  license(): LicenseStatus
 }
 
 export function gatherFacts(sources: ReportSources, now: number = Date.now()): ReportFacts {
@@ -34,8 +32,6 @@ export function gatherFacts(sources: ReportSources, now: number = Date.now()): R
     osRelease: release(),
     engine: sources.engine.snapshot(),
     engineStatus: sources.engine.status(),
-    // The state only: a key names who it was issued to, and the report is not the place.
-    license: sources.license().state,
     crashDumps: readCrashDumps(crashDumpDir),
     crashDumpDir,
     home: homedir(),

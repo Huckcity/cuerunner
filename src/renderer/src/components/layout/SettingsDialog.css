@@ -340,4 +340,4 @@
 
 /* Why a Pro tab's services are not running: first on the tab, with room under it before
    the fields start. */
-.settings-body .license-hint { margin: 0 0 var(--space-3); }
+.settings-body .settings-refusal { margin: 0 0 var(--space-3); }

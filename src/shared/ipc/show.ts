@@ -87,7 +87,7 @@ export interface EwDxSetPasswordPayload {
 
 /**
  * A change to what is held for a receiver: the new status, or the sentence saying why not.
- * The refusals are ordinary — no Pro licence, an empty password — and are an arm of the
+ * The refusals are ordinary — an empty password — and are an arm of the
  * answer, not a rejection.
  */
 export type EwDxCredentialResult = ({ ok: true } & EwDxCredentialStatus) | Refusal

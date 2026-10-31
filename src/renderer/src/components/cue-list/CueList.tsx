@@ -10,8 +10,6 @@ import { layoutStyle, loadLayout, saveLayout, type ColumnLayout } from '../../ut
 import { groupDurationMs } from '../../utils/cueDuration'
 import { createCue, cueNameFromFile, nextCueNumber } from '../../utils/cueDefaults'
 import { droppedCueType, isNewCueDrag } from '../../utils/newCueDrag'
-import { isProCueType } from '../../../../shared/cue'
-import { isPro } from '../../../../shared/license'
 import { groupLengthState, mediaLengthsFrom, mediaLengthState } from '../../utils/mediaLength'
 import { openDemoWorkspace } from '../../hooks/useWorkspace'
 import { AUDIO_FORMATS_SENTENCE, isPlayableAudioFile } from '../../../../shared/media'
@@ -378,11 +376,6 @@ export function CueList() {
     setDropRenderIndex(null)
     if (type === null || at === null) return
     const state = useStore.getState()
-    // A Pro type is the license's to give, as the toolbar's own click says.
-    if (isProCueType(type) && !isPro(state.license)) {
-      state.openSettings('license')
-      return
-    }
     const cue = { ...createCue(type, nextCueNumber(cues)), parentId: dropParentId(renderItems, at) }
     if (cue.type === 'audio') cue.trimSilence = state.audioSettings.autoTrimSilence === true
     const beforeIndex = at < renderItems.length ? renderItems[at].flatIndex : cues.length

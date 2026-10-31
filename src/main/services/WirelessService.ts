@@ -200,7 +200,6 @@ interface ChannelHistory {
 export class WirelessService implements ShowService {
   readonly id = 'rf'
   readonly label = 'Wireless'
-  readonly pro = true
   /** The rack and its sources, and the cast the plot's alarms are named after. */
   readonly settingsSections = ['rf', 'cast'] as const
 

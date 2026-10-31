@@ -10,8 +10,8 @@ import {
 /**
  * This machine's half of a redundant pair, and the only place it is read or written.
  *
- * It lives in a file of its own beside `license.key` rather than in the workspace, and
- * for a sharper reason than the licence has: both machines of a pair run the *same*
+ * It lives in a file of its own in the user-data folder rather than in the workspace, and
+ * for a sharp reason: both machines of a pair run the *same*
  * workspace file, so a role or a partner's address kept in the show would be read as the
  * same answer by both of them. Which machine is the main and where the other one is are
  * facts about the machines, and the showfile travels between them.
