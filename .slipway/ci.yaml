@@ -1,0 +1,55 @@
+# Cuerunner CI on Slipway, Linux lane (first slice of the port from .github/workflows/ci.yml).
+# Pull requests from forks start nothing on Slipway (PIPELINE_SPEC section 2), so a stranger's
+# pipeline file never reaches the runner pool.
+# Not yet ported: windows and macOS lanes (no runners), e2e, integration, native, tsan, soak.
+version: 1
+name: ci
+description: Typecheck and unit tests on Linux
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'native/**'
+      - 'e2e/**'
+      - 'integration/**'
+      - 'scripts/**'
+      - 'website/**'
+      - 'resources/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig*.json'
+      - 'electron.vite.config.*'
+      - '.slipway/**'
+  manual: {}
+concurrency:
+  group: ci-${{ git.ref }}
+  cancel_in_progress: true
+defaults:
+  runs_on: [linux, x64, docker]
+  timeout: 45m
+  shell: bash
+jobs:
+  - name: typecheck
+    matrix:
+      node: ["24", "26"]
+    container:
+      image: node:${{ matrix.node }}-bookworm
+    steps:
+      - uses: slipway/checkout@v1
+      - name: ALSA headers
+        run: apt-get update -qq && apt-get install -y -qq libasound2-dev
+      - run: npm ci --legacy-peer-deps
+      - run: npm run typecheck
+  - name: unit-test
+    matrix:
+      node: ["24", "26"]
+    container:
+      image: node:${{ matrix.node }}-bookworm
+    steps:
+      - uses: slipway/checkout@v1
+      - name: ALSA headers and compiler
+        run: apt-get update -qq && apt-get install -y -qq libasound2-dev build-essential
+      - run: npm ci --legacy-peer-deps
+      - name: Unit tests
+        run: npm test
