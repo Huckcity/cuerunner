@@ -50,6 +50,11 @@ jobs:
       - uses: slipway/checkout@v1
       - name: ALSA headers and compiler
         run: apt-get update -qq && apt-get install -y -qq libasound2-dev build-essential
-      - run: npm ci --legacy-peer-deps
+      # Not as root: the workspace tests rely on chmod denying access (a read-only directory,
+      # an unreadable file), which root bypasses. The image's `node` user is uid 1000.
+      - name: Hand the workspace to the node user
+        run: chown -R node:node .
+      - name: Install dependencies
+        run: runuser -u node -- npm ci --legacy-peer-deps
       - name: Unit tests
-        run: npm test
+        run: runuser -u node -- npm test
