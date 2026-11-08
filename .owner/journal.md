@@ -21,3 +21,8 @@ Shipped: `.slipway/ci.yaml`, the Linux slice of ci.yml (typecheck and unit tests
 Result: the repository is linked and Slipway ran the pipeline on PR #6 (runs #1-#3) on runner `adam-desktop-slipway-1`. It fails before any of our code: in the job container, files the checkout step wrote are `Permission denied` even as root (SELinux label on the workspace mount, suspected). Filed slipway-systems/slipway#217 (dogfood, from:cuerunner). PR #6 is left open, not merged, until a run is green. The `.slipway/ci.yaml` on the branch is otherwise final. GitHub workflows stay until the Slipway lanes are proven green; `scripts/public-runners.test.ts` still applies.
 
 Next: when #217 is fixed, rerun `ci` on PR #6, merge on green, then port e2e (Linux) and native, then retire the matching GitHub lanes.
+
+### Update, same day (later)
+The runner permission problem cleared on its own side (Adam or the host; slipway#217 and cuerunner#7 can be closed once confirmed). Run #4 then showed 3 unit-test failures that were mine: `recovery.test.ts` and `saveGuard.test.ts` rely on chmod denying access, which root bypasses, and the container ran as root. Fix: unit-test runs as the image's `node` user (`runuser -u node`). Run #5 green (typecheck and unit-test, Node 24 and 26). Merged PR #6. First Slipway-green lane for Cuerunner.
+
+Next: port e2e (Linux, Xvfb) and native lanes; then retire the GitHub typecheck/unit-test Linux jobs; Windows and macOS wait for runners.
