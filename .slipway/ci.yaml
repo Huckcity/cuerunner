@@ -37,6 +37,8 @@ jobs:
       image: node:${{ matrix.node }}-bookworm
     steps:
       - uses: slipway/checkout@v1
+      - name: where
+        run: pwd; ls -la | head -20; git rev-parse --show-toplevel
       - name: ALSA headers
         run: apt-get update -qq && apt-get install -y -qq libasound2-dev
       - run: npm ci --legacy-peer-deps
