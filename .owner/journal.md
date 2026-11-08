@@ -18,6 +18,6 @@ Slipway friction: the charter's CLI install fails here (`api.github.com/.../slip
 
 Shipped: `.slipway/ci.yaml`, the Linux slice of ci.yml (typecheck and unit tests, Node 24 and 26, `node:N-bookworm` container, forks do not run on Slipway by spec). `slipway validate` passes. Not ported yet: windows/macOS lanes (no runners), e2e, integration, native, tsan, soak.
 
-Open question for next session: does Slipway pick the pipeline up after merge (needs the repository linked to the project and the file on main; the first PR cannot run it)? If not, file a needs-adam issue to link the repo. GitHub workflows stay until the Slipway lanes are proven green; `scripts/public-runners.test.ts` still applies.
+Result: the repository is linked and Slipway ran the pipeline on PR #6 (runs #1-#3) on runner `adam-desktop-slipway-1`. It fails before any of our code: in the job container, files the checkout step wrote are `Permission denied` even as root (SELinux label on the workspace mount, suspected). Filed slipway-systems/slipway#217 (dogfood, from:cuerunner). PR #6 is left open, not merged, until a run is green. The `.slipway/ci.yaml` on the branch is otherwise final. GitHub workflows stay until the Slipway lanes are proven green; `scripts/public-runners.test.ts` still applies.
 
-Next: confirm the first Slipway run, then port e2e (Linux) and native, then retire the matching GitHub lanes.
+Next: when #217 is fixed, rerun `ci` on PR #6, merge on green, then port e2e (Linux) and native, then retire the matching GitHub lanes.
