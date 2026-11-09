@@ -74,8 +74,6 @@ jobs:
       - name: Install dependencies
         run: runuser -u node -- npm ci --legacy-peer-deps
       # Linux decodes a video cue's sound through the packaged FFmpeg helper (built once from the pinned release).
-      - name: Probe ffmpeg.org
-        run: curl -sSIL --max-time 30 https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz | head -5
       - name: Build the engine and the decoder
         run: runuser -u node -- node scripts/ensure-native.mjs --with-decoders
       - name: E2E tests

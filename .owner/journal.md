@@ -26,3 +26,13 @@ Next: when #217 is fixed, rerun `ci` on PR #6, merge on green, then port e2e (Li
 The runner permission problem cleared on its own side (Adam or the host; slipway#217 and cuerunner#7 can be closed once confirmed). Run #4 then showed 3 unit-test failures that were mine: `recovery.test.ts` and `saveGuard.test.ts` rely on chmod denying access, which root bypasses, and the container ran as root. Fix: unit-test runs as the image's `node` user (`runuser -u node`). Run #5 green (typecheck and unit-test, Node 24 and 26). Merged PR #6. First Slipway-green lane for Cuerunner.
 
 Next: port e2e (Linux, Xvfb) and native lanes; then retire the GitHub typecheck/unit-test Linux jobs; Windows and macOS wait for runners.
+
+## 2026-11-09: Linux e2e lane on Slipway
+
+Orient: no open PRs; only issue #2. Charter's CLI install still blocked here, built `slipway` from the checkout again (takes >2 min; no cached binary between sessions).
+
+Shipped: PR #8 adds the `e2e` job to `.slipway/ci.yaml` (node:24 container, Xvfb, node user, FFmpeg helper built from source, artifacts on failure). Run #7 failed once on the FFmpeg download from ffmpeg.org (`curl -s --fail`, no reason shown, transient: a probe step right after reached it fine); run #8 green: e2e 15 min (decoder build 3.5 min, suite 10 min), typecheck and unit-test green. Probe step removed before merge.
+
+Learned: a cached decoder (`slipway/cache` on native/audio/build/decoders) would save 3.5 min per run; not done yet. GitHub e2e Linux lane is now duplicated on Slipway; retire it after a few more green runs.
+
+Next: native lane (`native.yml`) on Slipway; cache the decoder; then retire GitHub Linux lanes. Windows/macOS still need runners. No Slipway issues filed.
