@@ -1,10 +1,10 @@
 # Cuerunner CI on Slipway, Linux lane (first slice of the port from .github/workflows/ci.yml).
 # Pull requests from forks start nothing on Slipway (PIPELINE_SPEC section 2), so a stranger's
 # pipeline file never reaches the runner pool.
-# Not yet ported: windows and macOS lanes (no runners), e2e, integration, native, tsan, soak.
+# Not yet ported: windows and macOS lanes (no runners), integration, native, tsan, soak.
 version: 1
 name: ci
-description: Typecheck and unit tests on Linux
+description: Typecheck, unit tests and e2e on Linux
 on:
   pull_request:
     branches: [main]
@@ -58,3 +58,25 @@ jobs:
         run: runuser -u node -- npm ci --legacy-peer-deps
       - name: Unit tests
         run: runuser -u node -- npm test
+  - name: e2e
+    container:
+      image: node:24-bookworm
+    timeout: 60m
+    steps:
+      - uses: slipway/checkout@v1
+      - name: System packages
+        run: apt-get update -qq && apt-get install -y -qq libasound2-dev build-essential xvfb
+      - name: Chromium runtime libraries
+        run: npx --yes playwright install-deps
+      # Non-root for the same reason as unit-test (and Chromium's sandbox).
+      - name: Hand the workspace to the node user
+        run: chown -R node:node .
+      - name: Install dependencies
+        run: runuser -u node -- npm ci --legacy-peer-deps
+      # Linux decodes a video cue's sound through the packaged FFmpeg helper (built once from the pinned release).
+      - name: Build the engine and the decoder
+        run: runuser -u node -- node scripts/ensure-native.mjs --with-decoders
+      - name: E2E tests
+        run: runuser -u node -- npm run test:e2e
+    artifacts:
+      - { name: e2e-results, path: test-results/**, when: failure, retention: 7d }
