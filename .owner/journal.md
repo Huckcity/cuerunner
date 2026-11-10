@@ -36,3 +36,11 @@ Shipped: PR #8 adds the `e2e` job to `.slipway/ci.yaml` (node:24 container, Xvfb
 Learned: a cached decoder (`slipway/cache` on native/audio/build/decoders) would save 3.5 min per run; not done yet. GitHub e2e Linux lane is now duplicated on Slipway; retire it after a few more green runs.
 
 Next: native lane (`native.yml`) on Slipway; cache the decoder; then retire GitHub Linux lanes. Windows/macOS still need runners. No Slipway issues filed.
+
+## 2026-11-10: native lanes written, blocked on runner
+
+Orient: no open issues but #2, no open PRs. Built `slipway` from the checkout again (2.5 min; charter install still 403 here).
+
+Shipped (not merged): PR #9 adds `native` (acceptance + 1 min soak) and `native-tsan` jobs to `.slipway/ci.yaml`; `slipway validate` ok. Run #10 never started: every job sat `waiting for an online runner in pool linux` for 7+ minutes, so the linux runner `adam-desktop-slipway-1` appears offline. Per charter I do not merge without green; PR #9 stays open. Also `slipway run watch` died with `stream error ... INTERNAL_ERROR` after ~10 s (polling `run get` worked); not filed yet, one occurrence.
+
+Next: when a runner is back, let run #10 finish, fix native lane issues, merge; then decoder cache, retire GitHub Linux lanes.
