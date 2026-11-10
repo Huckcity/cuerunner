@@ -1,10 +1,10 @@
 # Cuerunner CI on Slipway, Linux lane (first slice of the port from .github/workflows/ci.yml).
 # Pull requests from forks start nothing on Slipway (PIPELINE_SPEC section 2), so a stranger's
 # pipeline file never reaches the runner pool.
-# Not yet ported: windows and macOS lanes (no runners), integration, native, tsan, soak.
+# Not yet ported: windows and macOS lanes (no runners), integration, soak.
 version: 1
 name: ci
-description: Typecheck, unit tests and e2e on Linux
+description: Typecheck, unit tests, e2e and native engine on Linux
 on:
   pull_request:
     branches: [main]
@@ -80,3 +80,37 @@ jobs:
         run: runuser -u node -- npm run test:e2e
     artifacts:
       - { name: e2e-results, path: test-results/**, when: failure, retention: 7d }
+  # native.yml: the engine's acceptance scripts (real mixer, offline render), then a minute of soak.
+  # Timing-sensitive: matrix-bench floors the realtime factor, so it measures the host's spare cores.
+  - name: native
+    container:
+      image: node:24-bookworm
+    timeout: 60m
+    steps:
+      - uses: slipway/checkout@v1
+      - name: System packages
+        run: apt-get update -qq && apt-get install -y -qq libasound2-dev build-essential
+      - name: Hand the workspace to the node user
+        run: chown -R node:node .
+      - name: Install dependencies
+        run: runuser -u node -- npm ci --legacy-peer-deps
+      # The pretest hook builds the pinned FFmpeg decoder on Linux (needs network).
+      - name: Native acceptance
+        run: runuser -u node -- npm run test:native
+      - name: Soak smoke (a minute of show)
+        run: runuser -u node -- npm run soak -- --minutes 1
+  # The races that crash a show pass every check above; only the sanitizer sees the access.
+  - name: native-tsan
+    container:
+      image: node:24-bookworm
+    timeout: 60m
+    steps:
+      - uses: slipway/checkout@v1
+      - name: System packages
+        run: apt-get update -qq && apt-get install -y -qq libasound2-dev build-essential
+      - name: Hand the workspace to the node user
+        run: chown -R node:node .
+      - name: Install dependencies
+        run: runuser -u node -- npm ci --legacy-peer-deps
+      - name: Engine under ThreadSanitizer
+        run: runuser -u node -- npm run test:native:tsan
