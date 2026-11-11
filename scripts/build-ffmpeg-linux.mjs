@@ -98,7 +98,7 @@ function run(command, args, options = {}) {
 
 function download(url, out) {
   // curl/wget are what a build machine has; node's fetch buffers the whole tarball.
-  const downloader = existsSync('/usr/bin/curl') ? ['curl', ['-sL', '--fail', '-o', out, url]] : ['wget', ['-q', '-O', out, url]]
+  const downloader = existsSync('/usr/bin/curl') ? ['curl', ['-sSL', '--fail', '--retry', '5', '--retry-all-errors', '--retry-delay', '3', '-o', out, url]] : ['wget', ['-q', '-O', out, url]]
   run(downloader[0], downloader[1])
 }
 
