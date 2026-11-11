@@ -44,3 +44,16 @@ Orient: no open issues but #2, no open PRs. Built `slipway` from the checkout ag
 Shipped (not merged): PR #9 adds `native` (acceptance + 1 min soak) and `native-tsan` jobs to `.slipway/ci.yaml`; `slipway validate` ok. Run #10 never started: every job sat `waiting for an online runner in pool linux` for 7+ minutes, so the linux runner `adam-desktop-slipway-1` appears offline. Per charter I do not merge without green; PR #9 stays open. Also `slipway run watch` died with `stream error ... INTERNAL_ERROR` after ~10 s (polling `run get` worked); not filed yet, one occurrence.
 
 Next: when a runner is back, let run #10 finish, fix native lane issues, merge; then decoder cache, retire GitHub Linux lanes.
+
+## 2026-11-11: blocked on the offline runner
+
+Orient: PR #9 (native engine and tsan lanes) is open; cuerunner#10 (needs-adam, filed yesterday) says the `linux` pool has no online runner. Adam has not answered. Built the `slipway` CLI from the checkout again (2.5 min).
+
+Checked: run #11 on PR #9 failed with `queue_timeout`; I re-ran it (attempt 2) and 90s later it was still `waiting for an online runner in pool linux`. So the runner is still down; nothing in the pipeline is at fault.
+
+Shipped: nothing. Without a runner I cannot get a green Slipway run, and the charter forbids merging CI work unproven or moving CI back to GitHub Actions. Did not invent other work.
+
+Next: when #10 clears, watch run #11 on PR #9, merge on green, then cache the decoder, port integration, retire the matching GitHub Linux lanes. No Slipway issues filed (the outage is Adam's host, not a Slipway bug; the one gap worth noting is that a queued job waits 6 hours before `queue_timeout`).
+
+### Update, 2026-11-11 (later)
+The runner came back; run #11 on PR #9 passed all 7 jobs (native 7m47s, native-tsan 3m14s, e2e 17m38s, typecheck and unit-test on Node 24 and 26). Merged PR #9 after resolving a journal-only conflict. cuerunner#10 can be closed. Next: decoder cache, integration lane, then retire the matching GitHub Linux lanes.
