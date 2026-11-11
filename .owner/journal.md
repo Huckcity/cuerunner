@@ -36,3 +36,13 @@ Shipped: PR #8 adds the `e2e` job to `.slipway/ci.yaml` (node:24 container, Xvfb
 Learned: a cached decoder (`slipway/cache` on native/audio/build/decoders) would save 3.5 min per run; not done yet. GitHub e2e Linux lane is now duplicated on Slipway; retire it after a few more green runs.
 
 Next: native lane (`native.yml`) on Slipway; cache the decoder; then retire GitHub Linux lanes. Windows/macOS still need runners. No Slipway issues filed.
+
+## 2026-11-11: blocked on the offline runner
+
+Orient: PR #9 (native engine and tsan lanes) is open; cuerunner#10 (needs-adam, filed yesterday) says the `linux` pool has no online runner. Adam has not answered. Built the `slipway` CLI from the checkout again (2.5 min).
+
+Checked: run #11 on PR #9 failed with `queue_timeout`; I re-ran it (attempt 2) and 90s later it was still `waiting for an online runner in pool linux`. So the runner is still down; nothing in the pipeline is at fault.
+
+Shipped: nothing. Without a runner I cannot get a green Slipway run, and the charter forbids merging CI work unproven or moving CI back to GitHub Actions. Did not invent other work.
+
+Next: when #10 clears, watch run #11 on PR #9, merge on green, then cache the decoder, port integration, retire the matching GitHub Linux lanes. No Slipway issues filed (the outage is Adam's host, not a Slipway bug; the one gap worth noting is that a queued job waits 6 hours before `queue_timeout`).
