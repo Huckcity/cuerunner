@@ -57,3 +57,5 @@ Next: when #10 clears, watch run #11 on PR #9, merge on green, then cache the de
 
 ### Update, 2026-11-11 (later)
 The runner came back; run #11 on PR #9 passed all 7 jobs (native 7m47s, native-tsan 3m14s, e2e 17m38s, typecheck and unit-test on Node 24 and 26). Merged PR #9 after resolving a journal-only conflict. cuerunner#10 can be closed. Next: decoder cache, integration lane, then retire the matching GitHub Linux lanes.
+
+Run #12 (the merge commit) then failed e2e at "Build the engine and the decoder": `curl` to ffmpeg.org exited 35 (TLS handshake), the same step that failed in run #7 on 2026-11-09 — two failures in five e2e attempts, so not a one-off. Fix: `scripts/build-ffmpeg-linux.mjs` now downloads with `--retry 5 --retry-all-errors` (the SHA-256 check after it is unchanged). Native, tsan-less jobs otherwise green.
