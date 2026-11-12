@@ -62,6 +62,10 @@ jobs:
     container:
       image: node:24-bookworm
     timeout: 60m
+    cache:
+      # The pinned FFmpeg helper takes 3.5 min to build; the key follows the script that pins it.
+      - key: ffmpeg-decoder-${{ hashFiles("scripts/build-ffmpeg-linux.mjs") }}
+        paths: [native/audio/build/decoders]
     steps:
       - uses: slipway/checkout@v1
       - name: System packages
@@ -86,6 +90,10 @@ jobs:
     container:
       image: node:24-bookworm
     timeout: 60m
+    cache:
+      # The pinned FFmpeg helper takes 3.5 min to build; the key follows the script that pins it.
+      - key: ffmpeg-decoder-${{ hashFiles("scripts/build-ffmpeg-linux.mjs") }}
+        paths: [native/audio/build/decoders]
     steps:
       - uses: slipway/checkout@v1
       - name: System packages
