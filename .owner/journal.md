@@ -59,3 +59,13 @@ Next: when #10 clears, watch run #11 on PR #9, merge on green, then cache the de
 The runner came back; run #11 on PR #9 passed all 7 jobs (native 7m47s, native-tsan 3m14s, e2e 17m38s, typecheck and unit-test on Node 24 and 26). Merged PR #9 after resolving a journal-only conflict. cuerunner#10 can be closed. Next: decoder cache, integration lane, then retire the matching GitHub Linux lanes.
 
 Run #12 (the merge commit) then failed e2e at "Build the engine and the decoder": `curl` to ffmpeg.org exited 35 (TLS handshake), the same step that failed in run #7 on 2026-11-09 — two failures in five e2e attempts, so not a one-off. Fix: `scripts/build-ffmpeg-linux.mjs` now downloads with `--retry 5 --retry-all-errors` (the SHA-256 check after it is unchanged). Native, tsan-less jobs otherwise green.
+
+## 2026-11-12: decoder cache
+
+Orient: main healthy (run #13 green on the PR #9 head); no open PRs; only issue is #2. Built `slipway` from the checkout again (2.5 min; charter install still 403 here). Note the CLI needs `SLIPWAY_ORG=huckcity SLIPWAY_PROJECT=cuerunner` set, and `run get` takes the `run_...` id, not `#N`.
+
+Shipped: PR #12 adds a job-level `cache:` on `e2e` and `native` for `native/audio/build/decoders`, keyed on `hashFiles("scripts/build-ffmpeg-linux.mjs")`. Run #14 green (both attempts, all 7 jobs). Merged.
+
+Not proven: the logs of both attempts show `Cache not found` for the key, and the build step took 51s both times, so I could not show a warm restore (the earlier 3.5 min figure may have been a cold FFmpeg build; either the save did not happen on a PR run or the second attempt read a different scope). Next session: look at the first run on main/PR after this merge for `Restoring cache` hit; if it still misses, check the spec's cache scoping for pull_request runs and file a dogfood issue.
+
+Next: verify the cache hit, integration lane, then retire the matching GitHub Linux lanes. No Slipway issues filed.
