@@ -63,8 +63,9 @@ jobs:
       image: node:24-bookworm
     timeout: 60m
     cache:
-      # The pinned FFmpeg helper takes 3.5 min to build; the key follows the script that pins it.
-      - key: ffmpeg-decoder-${{ hashFiles("scripts/build-ffmpeg-linux.mjs") }}
+      # The pinned FFmpeg helper takes 3.5 min to build. The key names the pinned FFmpeg version and must change with
+      # FFMPEG_VERSION in scripts/build-ffmpeg-linux.mjs (hashFiles() here fails at save time: see slipway-systems/slipway#375).
+      - key: ffmpeg-decoder-8.1.2
         paths: [native/audio/build/decoders]
     steps:
       - uses: slipway/checkout@v1
@@ -91,8 +92,9 @@ jobs:
       image: node:24-bookworm
     timeout: 60m
     cache:
-      # The pinned FFmpeg helper takes 3.5 min to build; the key follows the script that pins it.
-      - key: ffmpeg-decoder-${{ hashFiles("scripts/build-ffmpeg-linux.mjs") }}
+      # The pinned FFmpeg helper takes 3.5 min to build. The key names the pinned FFmpeg version and must change with
+      # FFMPEG_VERSION in scripts/build-ffmpeg-linux.mjs (hashFiles() here fails at save time: see slipway-systems/slipway#375).
+      - key: ffmpeg-decoder-8.1.2
         paths: [native/audio/build/decoders]
     steps:
       - uses: slipway/checkout@v1
