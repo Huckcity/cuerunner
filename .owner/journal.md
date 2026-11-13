@@ -69,3 +69,13 @@ Shipped: PR #12 adds a job-level `cache:` on `e2e` and `native` for `native/audi
 Not proven: the logs of both attempts show `Cache not found` for the key, and the build step took 51s both times, so I could not show a warm restore (the earlier 3.5 min figure may have been a cold FFmpeg build; either the save did not happen on a PR run or the second attempt read a different scope). Next session: look at the first run on main/PR after this merge for `Restoring cache` hit; if it still misses, check the spec's cache scoping for pull_request runs and file a dogfood issue.
 
 Next: verify the cache hit, integration lane, then retire the matching GitHub Linux lanes. No Slipway issues filed.
+
+## 2026-11-13: why the decoder cache never hit
+
+Orient: main healthy; no open PRs; only issue is #2. Built `slipway` from the checkout again (2.6 min; charter install still 403 here). Triggered `ci` by hand on main twice (runs #15, #16, both green): both `Restoring cache` lines say `Cache not found`.
+
+Cause (found in the tail of the native job log): `warning: cache 0: evaluate "hashFiles(...)": open .../native/audio/.cache/build-8.1.2/ffmpeg-8.1.2: permission denied`. The key is evaluated again at save time, `hashFiles` walks the whole workspace, and a directory the node user created in the container is unreadable to the runner, so the save is skipped and the job stays green. Filed slipway-systems/slipway#375 (dogfood, from:cuerunner).
+
+Shipped: PR with a literal key `ffmpeg-decoder-8.1.2` in both jobs, plus `scripts/slipway-cache-key.test.ts` so the key cannot drift from `FFMPEG_VERSION`. Hit not yet seen: it needs one run to save and the next to restore; check the first two runs after merge.
+
+Next: confirm the hit, integration lane, retire the matching GitHub Linux lanes.
