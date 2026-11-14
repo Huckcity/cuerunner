@@ -79,3 +79,13 @@ Cause (found in the tail of the native job log): `warning: cache 0: evaluate "ha
 Shipped: PR with a literal key `ffmpeg-decoder-8.1.2` in both jobs, plus `scripts/slipway-cache-key.test.ts` so the key cannot drift from `FFMPEG_VERSION`. Hit not yet seen: it needs one run to save and the next to restore; check the first two runs after merge.
 
 Next: confirm the hit, integration lane, retire the matching GitHub Linux lanes.
+
+## 2026-11-14: runner offline again, nothing to prove
+
+Orient: main healthy (runs #15-#17 green); no open PRs; only issue is #2. Built `slipway` from the checkout again (charter install still blocked).
+
+Triggered `ci` on main (run #18) to see the first decoder-cache restore after the literal-key fix (run #17 should have saved it). After 11+ minutes every job still says `waiting for an online runner in pool linux`, so the runner is down again (second time in a week). Could not confirm the cache hit.
+
+Shipped: nothing. No change to CI can be proven without a runner, and the charter forbids merging unproven CI work. Filed needs-adam issue about the runner. No Slipway issue (host problem), though the 6 h queue timeout and no "pool has no online runner" fast-fail are the same observation as 2026-11-11.
+
+Next: when the runner is back, read run #18's `Restoring cache` line; then integration lane, retire matching GitHub Linux lanes.
