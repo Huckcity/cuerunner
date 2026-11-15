@@ -10,7 +10,11 @@
  * SIGSEGV that #172 was opened for. TSan reports the access, not the crash.
  *
  * The sanitizer slows the engine, so nothing here is a timing measurement: the soak's own
- * tolerance for how late a start may be is the one it has everywhere, and it has held. The
+ * tolerance for how late a start may be is the one it has everywhere, and it has held. Device
+ * callback xruns are timing too, and a sanitized build on a shared runner misses deadlines the
+ * real build does not (Slipway run #21: 10, 37 and 74 on one lane, none under the real engine),
+ * so the soak runs here with an xrun budget no run reaches; the zero-xrun gate is the `native`
+ * lane's soak on the unsanitized engine. Races, crashes, lost cues and the start tolerance still fail. The
  * build goes to a directory of its own, so the engine the other lanes run is untouched.
  *
  *   node native/audio/tests/tsan.mjs [--minutes n]
@@ -30,6 +34,8 @@ if (process.platform !== 'linux') {
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(here, '..', '..', '..')
+/** Xruns are not judged under the sanitizer (see the header); `native` gates them at zero. */
+export const XRUN_BUDGET = 1e9
 const minutes = process.argv.includes('--minutes') ? process.argv[process.argv.indexOf('--minutes') + 1] : '1'
 
 const workDir = mkdtempSync(join(tmpdir(), 'cuerunner-tsan-'))
@@ -83,7 +89,7 @@ try {
   } else {
     const binary = unrandomised(join(buildDir, 'cuerunner-audio'))
     const env = { TSAN_OPTIONS: `halt_on_error=0:log_path=${join(logDir, 'tsan')}` }
-    const soak = step(`the soak, ${minutes} min`, process.execPath, ['native/audio/tests/soak.mjs', '--minutes', minutes, '--binary', binary], env)
+    const soak = step(`the soak, ${minutes} min`, process.execPath, ['native/audio/tests/soak.mjs', '--minutes', minutes, '--xrun-budget', String(XRUN_BUDGET), '--binary', binary], env)
     const race = step('stopping under load', process.execPath, ['native/audio/tests/shutdown-race.mjs', '--binary', binary], env)
     // The read-ahead's pads change hands between the decode thread, a command thread and the
     // audio thread without a lock the audio thread takes (spine AD-29): 24 streamed voices
