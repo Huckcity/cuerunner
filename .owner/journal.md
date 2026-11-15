@@ -97,3 +97,6 @@ Orient: runner is back (run #18, triggered 11-14, ran after all). Main run #18 f
 Shipped (PR #16, pending Slipway run #19): `listenFd_` is now `std::atomic<int>`, closed once via `exchange(-1)`. Could not reproduce TSan cleanly locally (sandbox xruns in the soak), so Slipway is the proof.
 
 Next: if #19 is green, merge. Then stream-stall flake/regression on `native` (is it timing on a shared runner or a real runaway?), check cache hit on the next run, integration lane, retire GitHub Linux lanes. Note main is red until these land. No Slipway issues filed.
+
+### Update, 2026-11-15 (later)
+Run #20 on PR #16 sat `waiting for an online runner in pool linux` for 20+ minutes: the runner is down again (cuerunner#15 still open). PR #16 not merged, since there is no green Slipway run. The GitHub macOS e2e lane (#2, known) also failed on the PR; it does not cover this change. Next session: if the runner is back, read run #20, merge on green.
