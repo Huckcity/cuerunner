@@ -171,7 +171,7 @@ bool SocketServer::listen(const std::string& path, std::string& error) {
     error = "cannot listen on audio socket " + path;
     return false;
   }
-  listenFd_ = fd;
+  listenFd_.store(fd, std::memory_order_release);
 #endif
   path_ = path;
   listening_.store(true, std::memory_order_release);
@@ -254,7 +254,7 @@ void SocketServer::acceptLoop() {
     // The connect signalled the event the reads will use; they want it clear.
     ResetEvent(static_cast<HANDLE>(client->readEvent));
 #else
-    const int fd = ::accept(listenFd_, nullptr, nullptr);
+    const int fd = ::accept(listenFd_.load(std::memory_order_acquire), nullptr, nullptr);
     if (fd < 0) {
       if (stopping_.load(std::memory_order_acquire)) break;
       continue;
@@ -475,10 +475,10 @@ void SocketServer::requestStop() {
     if (wake != INVALID_HANDLE_VALUE) CloseHandle(wake);
   }
 #else
-  if (listenFd_ >= 0) {
-    ::shutdown(listenFd_, SHUT_RDWR);
-    ::close(listenFd_);
-    listenFd_ = -1;
+  const int fd = listenFd_.exchange(-1, std::memory_order_acq_rel);
+  if (fd >= 0) {
+    ::shutdown(fd, SHUT_RDWR);
+    ::close(fd);
   }
 #endif
 }
@@ -505,10 +505,10 @@ void SocketServer::close() {
     listenHandle_ = nullptr;
   }
 #else
-  if (listenFd_ >= 0) {
-    ::shutdown(listenFd_, SHUT_RDWR);
-    ::close(listenFd_);
-    listenFd_ = -1;
+  const int fd = listenFd_.exchange(-1, std::memory_order_acq_rel);
+  if (fd >= 0) {
+    ::shutdown(fd, SHUT_RDWR);
+    ::close(fd);
     if (!path_.empty()) ::unlink(path_.c_str());
   }
 #endif
