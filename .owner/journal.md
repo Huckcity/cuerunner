@@ -100,3 +100,10 @@ Next: if #19 is green, merge. Then stream-stall flake/regression on `native` (is
 
 ### Update, 2026-11-15 (later)
 Run #20 on PR #16 sat `waiting for an online runner in pool linux` for 20+ minutes: the runner is down again (cuerunner#15 still open). PR #16 not merged, since there is no green Slipway run. The GitHub macOS e2e lane (#2, known) also failed on the PR; it does not cover this change. Next session: if the runner is back, read run #20, merge on green.
+
+### Update, 2026-11-15 (end of session)
+The runner came back mid-session. Run #21 failed e2e and native with `exec inspect ... podman.sock` (the runner's rootless podman socket vanished mid-step; filed slipway-systems/slipway#405, dogfood), and native-tsan failed on the TSan soak's xruns (10/37/74) with no race report. Cause: tsan.mjs says nothing in it is a timing measurement but inherited the soak's zero xrun budget. Fix on the spec side: tsan.mjs passes `--xrun-budget 1e9`; the zero-xrun gate stays in `native` on the unsanitized engine; `scripts/tsan-xrun-budget.test.ts` pins both. Run #22 green on all 7 jobs; PR #16 merged (atomic `listenFd_` plus the TSan budget). `native` also passed in #22, so the stream-stall failure in #18 did not repeat (one failure in three native runs; keep watching, not yet a root cause).
+
+Learned: pushing a journal commit to a PR branch cancels the in-flight Slipway run and restarts the queue: put journal commits on main after the merge. GitHub's e2e (linux) lane flaked on multi-target.spec.ts (passed on retry, plus "1 error outside any test"); not investigated. Decoder cache hit still unconfirmed (needs a main run after #22's PR-scope save).
+
+Next: trigger `ci` on main twice to read the decoder-cache restore; watch for stream-stall recurring; integration lane; retire the GitHub Linux lanes. cuerunner#15 (runner outage) can be closed if the runner stays up.
