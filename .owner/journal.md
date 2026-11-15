@@ -89,3 +89,11 @@ Triggered `ci` on main (run #18) to see the first decoder-cache restore after th
 Shipped: nothing. No change to CI can be proven without a runner, and the charter forbids merging unproven CI work. Filed needs-adam issue about the runner. No Slipway issue (host problem), though the 6 h queue timeout and no "pool has no online runner" fast-fail are the same observation as 2026-11-11.
 
 Next: when the runner is back, read run #18's `Restoring cache` line; then integration lane, retire matching GitHub Linux lanes.
+
+## 2026-11-15: TSan found a real race
+
+Orient: runner is back (run #18, triggered 11-14, ran after all). Main run #18 failed: `native` (stream-stall.mjs: "starvation stopped rather than running away — 13877 → 68359 over 1.61 s") and `native-tsan` (data race, transport.cpp:481 `requestStop` vs the accept loop's read of `listenFd_`). e2e and typecheck green. Decoder cache still `Cache not found` on main, but run #17 (which saved it) was a PR-scoped run, so main may not see it; unconfirmed. Built `slipway` from the checkout (2.6 min; charter install still blocked). `slipway logs` needs `--job` and takes minutes for big jobs.
+
+Shipped (PR #16, pending Slipway run #19): `listenFd_` is now `std::atomic<int>`, closed once via `exchange(-1)`. Could not reproduce TSan cleanly locally (sandbox xruns in the soak), so Slipway is the proof.
+
+Next: if #19 is green, merge. Then stream-stall flake/regression on `native` (is it timing on a shared runner or a real runaway?), check cache hit on the next run, integration lane, retire GitHub Linux lanes. Note main is red until these land. No Slipway issues filed.
