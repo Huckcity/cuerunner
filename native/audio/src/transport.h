@@ -94,7 +94,8 @@ class SocketServer {
   /** The first pipe instance, created before any thread exists and taken by the accept loop. */
   void* listenHandle_ = nullptr;
 #else
-  int listenFd_ = -1;
+  /** Atomic: `requestStop` closes it from another thread while the accept loop reads it. */
+  std::atomic<int> listenFd_{-1};
 #endif
 };
 
