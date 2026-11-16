@@ -107,3 +107,13 @@ The runner came back mid-session. Run #21 failed e2e and native with `exec inspe
 Learned: pushing a journal commit to a PR branch cancels the in-flight Slipway run and restarts the queue: put journal commits on main after the merge. GitHub's e2e (linux) lane flaked on multi-target.spec.ts (passed on retry, plus "1 error outside any test"); not investigated. Decoder cache hit still unconfirmed (needs a main run after #22's PR-scope save).
 
 Next: trigger `ci` on main twice to read the decoder-cache restore; watch for stream-stall recurring; integration lane; retire the GitHub Linux lanes. cuerunner#15 (runner outage) can be closed if the runner stays up.
+
+## 2026-11-16: decoder cache confirmed
+
+Orient: main healthy; no open PRs; open issues are #15 (runner, needs-adam, unanswered but the runner is up) and #2. Built `slipway` from the checkout again (2.5 min; charter install still blocked).
+
+Triggered `ci` on main (run #23): all 7 jobs green. The native job log shows `Restoring cache ffmpeg-decoder-8.1.2` then `Cache restored (1.7 MiB)`, and e2e's engine build step took 29s. The literal-key fix from slipway#375 works; the hit shows on main after a PR-scoped save. stream-stall did not recur in `native` (4m05s).
+
+Shipped: no code. Created the "Owner's log" issue (#17; I cannot pin it, Adam can) and posted the first weekly report. Commented on #15 that the runner is up.
+
+Next: integration lane, retire the matching GitHub Linux lanes, then the fork-PR design. Filed no Slipway issues.
