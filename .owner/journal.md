@@ -117,3 +117,11 @@ Triggered `ci` on main (run #23): all 7 jobs green. The native job log shows `Re
 Shipped: no code. Created the "Owner's log" issue (#17; I cannot pin it, Adam can) and posted the first weekly report. Commented on #15 that the runner is up.
 
 Next: integration lane, retire the matching GitHub Linux lanes, then the fork-PR design. Filed no Slipway issues.
+
+## 2026-11-17: integration lane on Slipway
+
+Orient: main healthy (run #23 green); no open PRs; issues #2, #15, #17 unchanged, no answers from Adam. Built `slipway` from the checkout again (2.5 min; charter install still blocked).
+
+Shipped: PR #18 adds the `integration` job to `.slipway/ci.yaml` (same peers, `EOS_REPLAY` fixture, node user, Xvfb). Run #24 green on all jobs, integration in 2m07s. Merged.
+
+Next: retire the GitHub Linux lanes now covered on Slipway (typecheck, unit, e2e, integration, native, tsan) while keeping the macOS/Windows lanes, and amend `scripts/public-runners.test.ts` and the docs if needed; then the fork-PR design. No Slipway issues filed.
