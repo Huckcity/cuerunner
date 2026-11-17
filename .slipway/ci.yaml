@@ -1,10 +1,10 @@
 # Cuerunner CI on Slipway, Linux lane (first slice of the port from .github/workflows/ci.yml).
 # Pull requests from forks start nothing on Slipway (PIPELINE_SPEC section 2), so a stranger's
 # pipeline file never reaches the runner pool.
-# Not yet ported: windows and macOS lanes (no runners), integration, soak.
+# Not yet ported: windows and macOS lanes (no runners), soak.
 version: 1
 name: ci
-description: Typecheck, unit tests, e2e and native engine on Linux
+description: Typecheck, unit tests, e2e, integration harness and native engine on Linux
 on:
   pull_request:
     branches: [main]
@@ -85,6 +85,29 @@ jobs:
         run: runuser -u node -- npm run test:e2e
     artifacts:
       - { name: e2e-results, path: test-results/**, when: failure, retention: 7d }
+  # The harness: Cuerunner against peers that stand in for the console and the desk (ci.yml `integration`).
+  # The vendor chain answers from the recorded console session, so no vendor software or hardware is needed.
+  - name: integration
+    container:
+      image: node:24-bookworm
+    timeout: 30m
+    steps:
+      - uses: slipway/checkout@v1
+      - name: System packages
+        run: apt-get update -qq && apt-get install -y -qq libasound2-dev build-essential xvfb
+      - name: Chromium runtime libraries
+        run: npx --yes playwright install-deps
+      - name: Hand the workspace to the node user
+        run: chown -R node:node .
+      - name: Install dependencies
+        run: runuser -u node -- npm ci --legacy-peer-deps
+      - name: Integration tests
+        env:
+          EOS_REPLAY: integration/fixtures/vendor/eos-ubox-win.json
+        run: runuser -u node -- npm run test:integration
+    artifacts:
+      - { name: integration-results, path: test-results/**, when: failure, retention: 7d }
+      - { name: lane-status, path: test-results/lane-status.json, when: always, retention: 7d }
   # native.yml: the engine's acceptance scripts (real mixer, offline render), then a minute of soak.
   # Timing-sensitive: matrix-bench floors the realtime factor, so it measures the host's spare cores.
   - name: native
