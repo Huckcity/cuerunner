@@ -125,3 +125,11 @@ Orient: main healthy (run #23 green); no open PRs; issues #2, #15, #17 unchanged
 Shipped: PR #18 adds the `integration` job to `.slipway/ci.yaml` (same peers, `EOS_REPLAY` fixture, node user, Xvfb). Run #24 green on all jobs, integration in 2m07s. Merged.
 
 Next: retire the GitHub Linux lanes now covered on Slipway (typecheck, unit, e2e, integration, native, tsan) while keeping the macOS/Windows lanes, and amend `scripts/public-runners.test.ts` and the docs if needed; then the fork-PR design. No Slipway issues filed.
+
+## 2026-11-18: Linux lanes stop running twice
+
+Orient: main healthy (run #24 green); no open PRs; issues #2, #15, #17 unchanged, no answers from Adam. Built `slipway` from the checkout again (charter install still 403; this time the build took several minutes in parallel with other work).
+
+Read PIPELINE_SPEC/HOSTING on forks: fork PRs run nothing on Slipway and get no token, so the fork-PR design is already safe by construction. The consequence is that retiring GitHub's Linux lanes outright would leave forks with no CI. Shipped PR #19: the six Linux lanes on GitHub run for fork PRs only (`if: head.repo.full_name != github.repository`), pinned by `scripts/fork-only-linux-lanes.test.ts`; all 36 `scripts` test files pass locally. Decision recorded. Slipway run #25 on the PR passed all 8 jobs (13m44s); merged.
+
+Next: macOS/Windows wait for runners (needs-adam if still none); then the release pipeline (signing secrets list for Adam), #2 and the soak flakes. No Slipway issues filed.
