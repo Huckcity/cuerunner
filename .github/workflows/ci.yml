@@ -40,6 +40,9 @@ concurrency:
 
 jobs:
   typecheck:
+    # Same-repository pull requests run this lane on Slipway (.slipway/ci.yaml); Slipway never
+    # runs a fork's, so the fork's is the one GitHub still runs.
+    if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
     runs-on: [ubuntu-24.04]
     strategy:
       fail-fast: false
@@ -82,6 +85,7 @@ jobs:
   # and the two that were real — an engine on a machine with no output endpoint, and a port
   # Windows hands out twice — are fixed rather than skipped.
   unit-test:
+    if: ${{ matrix.label != 'linux' || github.event.pull_request.head.repo.full_name != github.repository }}
     name: unit-test (${{ matrix.label }}, node ${{ matrix.node-version }})
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -230,6 +234,9 @@ jobs:
   # 200 MB download and zip extraction — the path that silently produced no binary on
   # Node 26 (#49). Assert the postinstall's contract, not just that npm exited 0.
   electron-install:
+    # Same-repository pull requests run this lane on Slipway (.slipway/ci.yaml); Slipway never
+    # runs a fork's, so the fork's is the one GitHub still runs.
+    if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
     runs-on: [ubuntu-24.04]
     strategy:
       fail-fast: false
@@ -266,6 +273,7 @@ jobs:
   # `label` is the lane's name (the job's,
   # and the failure artifact's), `runner` is where it runs.
   e2e:
+    if: ${{ matrix.label != 'linux' || github.event.pull_request.head.repo.full_name != github.repository }}
     # Without this the job is named after every matrix value it carries, which for the
     # self-hosted lane is the whole label list.
     name: e2e (${{ matrix.label }})
@@ -416,6 +424,9 @@ jobs:
   # What really exercises a desk — an SQ, an Avantis, a console running ETCnomad — is the
   # vendor and hardware lanes, which are nightly and on demand rather than per pull request.
   integration:
+    # Same-repository pull requests run this lane on Slipway (.slipway/ci.yaml); Slipway never
+    # runs a fork's, so the fork's is the one GitHub still runs.
+    if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
     runs-on: [ubuntu-24.04]
     timeout-minutes: 20
     steps:

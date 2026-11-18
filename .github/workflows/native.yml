@@ -47,6 +47,8 @@ concurrency:
 
 jobs:
   native-engine:
+    # Same-repository pull requests run the engine lane on Slipway; this is the fork's.
+    if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
     runs-on: [ubuntu-24.04]
     # The shared group, for the reason in the header: one lane at a time, and never beside a
     # soak night.
