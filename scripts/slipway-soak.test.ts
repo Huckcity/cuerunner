@@ -33,3 +33,9 @@ describe('.slipway/soak.yaml', () => {
     expect(slipway).toContain(`key: ffmpeg-decoder-${pin}`)
   })
 })
+
+describe('.slipway/soak.yaml fan-in', () => {
+  it('downloads every shard report by name (a run cannot list all its artifacts)', () => {
+    for (let i = 0; i < 8; i++) expect(slipway).toContain(`name: soak-shard-${i}, path: artifacts`)
+  })
+})
