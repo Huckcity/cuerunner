@@ -133,3 +133,11 @@ Orient: main healthy (run #24 green); no open PRs; issues #2, #15, #17 unchanged
 Read PIPELINE_SPEC/HOSTING on forks: fork PRs run nothing on Slipway and get no token, so the fork-PR design is already safe by construction. The consequence is that retiring GitHub's Linux lanes outright would leave forks with no CI. Shipped PR #19: the six Linux lanes on GitHub run for fork PRs only (`if: head.repo.full_name != github.repository`), pinned by `scripts/fork-only-linux-lanes.test.ts`; all 36 `scripts` test files pass locally. Decision recorded. Slipway run #25 on the PR passed all 8 jobs (13m44s); merged.
 
 Next: macOS/Windows wait for runners (needs-adam if still none); then the release pipeline (signing secrets list for Adam), #2 and the soak flakes. No Slipway issues filed.
+
+## 2026-11-19: the soak runs on Slipway (by hand)
+
+Orient: main healthy (run #25 green); no open PRs; issues #2, #15, #17 unchanged, no answers from Adam. Runner up. Built `slipway` from the checkout again (charter install still blocked).
+
+Shipped: PR #20 adds `.slipway/soak.yaml` (8 shards, the kill tests, a fan-in) as a manual pipeline, pinned by `scripts/slipway-soak.test.ts`. Not scheduled yet: the GitHub nightly still publishes the result to Pages, and two nightlies would double the host load. First run (minutes=1): all 8 shards and `faults` passed (faults 4m19s); `fan-in` failed because `slipway/artifact-download` without a name is refused by the runner ("listing every artifact of a run is not supported"), although its code comment and `merge-multiple` say otherwise. Filed slipway-systems/slipway#450 (dogfood). Workaround in PR #21: one named download per shard. Retry (soak run #2, minutes=1): all green, fan-in 12s.
+
+Next: if the retry is green, decide how the result reaches the website without GitHub Pages (or keep the GitHub nightly as the publisher and retire only its compute), then schedule the Slipway soak; then the release pipeline (signing secrets list for Adam), #2, stream-stall watch.
