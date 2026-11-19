@@ -83,8 +83,40 @@ stages:
           image: node:24-bookworm
         steps:
           - uses: slipway/checkout@v1
-          - uses: slipway/artifact-download@v1
-            with: { path: artifacts, merge-multiple: "true" }
+          # A run's artifacts cannot be listed all at once (the runner refuses: name the artifact), so one step per shard.
+          # A shard that failed before uploading is a missing report, which soak-report.mjs --allow-missing tolerates.
+          - name: Shard 0 report
+            uses: slipway/artifact-download@v1
+            with: { name: soak-shard-0, path: artifacts }
+            continue_on_error: true
+          - name: Shard 1 report
+            uses: slipway/artifact-download@v1
+            with: { name: soak-shard-1, path: artifacts }
+            continue_on_error: true
+          - name: Shard 2 report
+            uses: slipway/artifact-download@v1
+            with: { name: soak-shard-2, path: artifacts }
+            continue_on_error: true
+          - name: Shard 3 report
+            uses: slipway/artifact-download@v1
+            with: { name: soak-shard-3, path: artifacts }
+            continue_on_error: true
+          - name: Shard 4 report
+            uses: slipway/artifact-download@v1
+            with: { name: soak-shard-4, path: artifacts }
+            continue_on_error: true
+          - name: Shard 5 report
+            uses: slipway/artifact-download@v1
+            with: { name: soak-shard-5, path: artifacts }
+            continue_on_error: true
+          - name: Shard 6 report
+            uses: slipway/artifact-download@v1
+            with: { name: soak-shard-6, path: artifacts }
+            continue_on_error: true
+          - name: Shard 7 report
+            uses: slipway/artifact-download@v1
+            with: { name: soak-shard-7, path: artifacts }
+            continue_on_error: true
           - name: Fan in the shards
             run: node scripts/soak-report.mjs --reports artifacts --out soak-latest.json --allow-missing
         artifacts:
