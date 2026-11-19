@@ -1,0 +1,91 @@
+# The nightly soak on Slipway (port of .github/workflows/soak.yml): eight independent one-hour shards of show time on
+# the silent pacer, the kill tests, and a fan-in report. Manual only for now: the GitHub nightly still publishes the
+# result to the website (GitHub Pages), so a Slipway schedule would double the load on the host without a consumer.
+# Pull requests from forks start nothing on Slipway (PIPELINE_SPEC section 2).
+version: 1
+name: soak
+description: Eight soak shards, the kill tests and the fan-in report on Linux
+on:
+  manual:
+    inputs:
+      minutes: { type: string, default: "60", description: Show minutes per shard }
+      channels: { type: string, default: "2", description: Output channels per shard (2 = a stereo desk) }
+# Shared with ci's timing-sensitive jobs by intent: a night is measured beside no CI burst.
+concurrency:
+  group: timing-sensitive
+  cancel_in_progress: false
+defaults:
+  runs_on: [linux, x64, docker]
+  timeout: 45m
+  shell: bash
+stages:
+  - name: night
+    jobs:
+      - name: soak
+        timeout: 110m
+        matrix:
+          shard: [0, 1, 2, 3, 4, 5, 6, 7]
+          fail_fast: false
+        container:
+          image: node:24-bookworm
+        steps:
+          - uses: slipway/checkout@v1
+          - name: System packages
+            run: apt-get update -qq && apt-get install -y -qq libasound2-dev build-essential
+          - name: Hand the workspace to the node user
+            run: chown -R node:node .
+          - name: Install dependencies
+            run: runuser -u node -- npm ci --legacy-peer-deps
+          - name: Build the engine
+            run: runuser -u node -- node scripts/ensure-native.mjs
+          # Shard 1 runs eight channels: the same show through the matrix path.
+          - name: Soak shard
+            env:
+              SHARD: ${{ matrix.shard }}
+              MINUTES: ${{ inputs.minutes }}
+              CHANNELS: ${{ inputs.channels }}
+            run: |
+              ch="$CHANNELS"; [ "$SHARD" = 1 ] && ch=8
+              runuser -u node -- node native/audio/tests/soak.mjs --shard "$SHARD" --shards 8 \
+                --minutes "$MINUTES" --channels "$ch" --report "soak-shard-$SHARD.json"
+        artifacts:
+          - { name: "soak-shard-${{ matrix.shard }}", path: "soak-shard-*.json", when: always, retention: 30d }
+      - name: faults
+        timeout: 60m
+        container:
+          image: node:24-bookworm
+        cache:
+          # Literal key, see ci.yaml and slipway-systems/slipway#375; follows FFMPEG_VERSION by hand.
+          - key: ffmpeg-decoder-8.1.2
+            paths: [native/audio/build/decoders]
+        steps:
+          - uses: slipway/checkout@v1
+          - name: System packages
+            run: apt-get update -qq && apt-get install -y -qq libasound2-dev build-essential xvfb
+          - name: Chromium runtime libraries
+            run: npx --yes playwright install-deps
+          - name: Hand the workspace to the node user
+            run: chown -R node:node .
+          - name: Install dependencies
+            run: runuser -u node -- npm ci --legacy-peer-deps
+          - name: Native acceptance, including the fault injection
+            run: runuser -u node -- npm run test:native
+          - name: Kill tests (renderer, engine, device, media)
+            run: runuser -u node -- npm run test:e2e -- e2e/engine-restart.spec.ts e2e/reliability.spec.ts e2e/durability.spec.ts e2e/device-loss.spec.ts
+        artifacts:
+          - { name: soak-faults-results, path: "test-results/**", when: failure, retention: 30d }
+  - name: report
+    needs: [night]
+    jobs:
+      - name: fan-in
+        if: ${{ always() }}
+        container:
+          image: node:24-bookworm
+        steps:
+          - uses: slipway/checkout@v1
+          - uses: slipway/artifact-download@v1
+            with: { path: artifacts, merge-multiple: "true" }
+          - name: Fan in the shards
+            run: node scripts/soak-report.mjs --reports artifacts --out soak-latest.json --allow-missing
+        artifacts:
+          - { name: soak-latest, path: soak-latest.json, when: always, retention: 90d }
