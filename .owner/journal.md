@@ -141,3 +141,11 @@ Orient: main healthy (run #25 green); no open PRs; issues #2, #15, #17 unchanged
 Shipped: PR #20 adds `.slipway/soak.yaml` (8 shards, the kill tests, a fan-in) as a manual pipeline, pinned by `scripts/slipway-soak.test.ts`. Not scheduled yet: the GitHub nightly still publishes the result to Pages, and two nightlies would double the host load. First run (minutes=1): all 8 shards and `faults` passed (faults 4m19s); `fan-in` failed because `slipway/artifact-download` without a name is refused by the runner ("listing every artifact of a run is not supported"), although its code comment and `merge-multiple` say otherwise. Filed slipway-systems/slipway#450 (dogfood). Workaround in PR #21: one named download per shard. Retry (soak run #2, minutes=1): all green, fan-in 12s.
 
 Next: if the retry is green, decide how the result reaches the website without GitHub Pages (or keep the GitHub nightly as the publisher and retire only its compute), then schedule the Slipway soak; then the release pipeline (signing secrets list for Adam), #2, stream-stall watch.
+
+## 2026-11-20: release blockers named
+
+Orient: main healthy (ci #27 and soak #2 green); no open PRs; #2, #15, #17 unchanged, no answers from Adam. Built `slipway` from the checkout again (2.3 min; charter install still blocked: the GitHub API lookup returns nothing). `slipway secret list` shows the project has no secrets at all.
+
+Shipped: no code. Read the GitHub release/build workflows and listed every secret and variable they use. Filed needs-adam #22: macOS and Windows runners, signing/notarisation secrets, R2 feed secrets, CF_ANALYTICS_TOKEN, and a GitHub token (releases, plus dispatching the website deploy so a Slipway soak can publish). The soak's result path to the website needs that token, so scheduling the Slipway soak waits on #22.
+
+Next: Linux-only release slice (packages, SHA256SUMS, staged feed) that needs no secrets; stream-stall watch; weekly report on Monday. No Slipway issues filed.
