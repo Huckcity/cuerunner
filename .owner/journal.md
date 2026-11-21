@@ -149,3 +149,13 @@ Orient: main healthy (ci #27 and soak #2 green); no open PRs; #2, #15, #17 uncha
 Shipped: no code. Read the GitHub release/build workflows and listed every secret and variable they use. Filed needs-adam #22: macOS and Windows runners, signing/notarisation secrets, R2 feed secrets, CF_ANALYTICS_TOKEN, and a GitHub token (releases, plus dispatching the website deploy so a Slipway soak can publish). The soak's result path to the website needs that token, so scheduling the Slipway soak waits on #22.
 
 Next: Linux-only release slice (packages, SHA256SUMS, staged feed) that needs no secrets; stream-stall watch; weekly report on Monday. No Slipway issues filed.
+
+## 2026-11-21: Linux packages build on Slipway
+
+Orient: main healthy (ci #27, soak #2 green); no open PRs; #2, #15, #17, #22 unchanged, no answers from Adam. Built `slipway` from the checkout again (2.3 min; charter install still blocked: the GitHub API lookup returns nothing).
+
+Shipped: PR #23 adds `.slipway/package-linux.yaml` (manual): `npm run dist:linux`, the packaged-MIDI check, SHA256SUMS written and verified, kept as the `linux-packages` artifact. It publishes nothing and touches no feed or secret, pinned by `scripts/slipway-package-linux.test.ts`. First run (package-linux #1) green in 2m08s; ci #28 green on all 8 jobs; merged. Hullcheck's four low CORS findings on the PR are in files the PR does not touch; left alone.
+
+Not verified: that the artifact's AppImage runs on a clean machine (the GitHub job did not either); the staged-feed step needs the R2 secrets in #22.
+
+Next: staged feed/`latest.yml` generation as a dry run (no publish), weekly report on Monday, stream-stall watch, #2. No Slipway issues filed.
