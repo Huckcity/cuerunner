@@ -1,0 +1,46 @@
+# The Linux slice of a release on Slipway (port of build.yml `build-linux`): AppImage and .deb, the packaged-MIDI check
+# and SHA256SUMS, kept as run artifacts. Manual and publishes nothing: the feed at pub.cuerunner.app/latest/ reaches
+# users' machines, so nothing here touches it (publishing waits on the secrets in needs-adam #22).
+# Pull requests from forks start nothing on Slipway (PIPELINE_SPEC section 2).
+version: 1
+name: package-linux
+description: Build the Linux AppImage and .deb, verify them and record SHA256SUMS
+on:
+  manual: {}
+defaults:
+  runs_on: [linux, x64, docker]
+  timeout: 45m
+  shell: bash
+stages:
+  - name: package
+    jobs:
+      - name: linux
+        container:
+          image: node:24-bookworm
+        cache:
+          # Literal key, see ci.yaml and slipway-systems/slipway#375; follows FFMPEG_VERSION by hand.
+          - key: ffmpeg-decoder-8.1.2
+            paths: [native/audio/build/decoders]
+        steps:
+          - uses: slipway/checkout@v1
+          - name: System packages
+            run: apt-get update -qq && apt-get install -y -qq libasound2-dev build-essential
+          - name: Hand the workspace to the node user
+            run: chown -R node:node .
+          - name: Install dependencies
+            run: runuser -u node -- npm ci --legacy-peer-deps
+          - name: Build and package
+            run: runuser -u node -- npm run dist:linux
+          # `midi` is optional: a runner that cannot build it ships an app with no MIDI in it (v0.16.0).
+          - name: The packaged app carries the MIDI module
+            run: runuser -u node -- node scripts/verify-packaged-midi.mjs dist
+          - name: Name the artifacts and record SHA256SUMS
+            run: |
+              cd dist
+              test -n "$(find . -maxdepth 1 -name '*.AppImage')" || { echo "no AppImage in dist/"; exit 1; }
+              test -n "$(find . -maxdepth 1 -name '*.deb')" || { echo "no .deb in dist/"; exit 1; }
+              sha256sum *.AppImage *.deb > SHA256SUMS
+              sha256sum -c SHA256SUMS
+              cat SHA256SUMS
+        artifacts:
+          - { name: linux-packages, path: "dist/*.AppImage dist/*.deb dist/SHA256SUMS", when: success, retention: 30d }
