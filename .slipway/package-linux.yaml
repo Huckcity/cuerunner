@@ -42,5 +42,16 @@ stages:
               sha256sum *.AppImage *.deb > SHA256SUMS
               sha256sum -c SHA256SUMS
               cat SHA256SUMS
+          # The staged feed: electron-builder's `latest-linux.yml` must name this AppImage with the SHA-512 the app
+          # checks a download against. Checked here and kept as an artifact only; nothing is uploaded.
+          - name: The staged feed names this AppImage and its SHA-512
+            run: |
+              cd dist
+              appi=$(basename "$(find . -maxdepth 1 -name '*.AppImage' | head -n1)")
+              test -f latest-linux.yml || { echo "electron-builder wrote no dist/latest-linux.yml"; exit 1; }
+              grep -qF "url: $appi" latest-linux.yml || { echo "latest-linux.yml does not name $appi"; exit 1; }
+              want=$(openssl dgst -sha512 -binary "$appi" | base64 -w0)
+              grep -qF "sha512: $want" latest-linux.yml || { echo "latest-linux.yml sha512 does not match $appi"; exit 1; }
+              cat latest-linux.yml
         artifacts:
-          - { name: linux-packages, path: "dist/*.AppImage dist/*.deb dist/SHA256SUMS", when: success, retention: 30d }
+          - { name: linux-packages, path: "dist/*.AppImage dist/*.deb dist/SHA256SUMS dist/latest-linux.yml", when: success, retention: 30d }

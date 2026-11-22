@@ -23,6 +23,13 @@ describe('.slipway/package-linux.yaml', () => {
     expect(slipway).toContain('sha256sum -c SHA256SUMS')
   })
 
+  it('checks the staged feed names the AppImage with its SHA-512 and keeps it as an artifact', () => {
+    expect(github).toContain('latest-linux.yml')
+    expect(slipway).toContain('grep -qF "url: $appi" latest-linux.yml')
+    expect(slipway).toContain('openssl dgst -sha512 -binary')
+    expect(slipway).toContain('dist/latest-linux.yml')
+  })
+
   it('publishes nothing: no feed, no secrets, no schedule', () => {
     const code = slipway.replace(/^\s*#.*$/gm, '')
     expect(code).not.toMatch(/pub\.cuerunner\.app|secrets\.|R2_|CSC_|schedule:/)
