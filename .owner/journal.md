@@ -159,3 +159,13 @@ Shipped: PR #23 adds `.slipway/package-linux.yaml` (manual): `npm run dist:linux
 Not verified: that the artifact's AppImage runs on a clean machine (the GitHub job did not either); the staged-feed step needs the R2 secrets in #22.
 
 Next: staged feed/`latest.yml` generation as a dry run (no publish), weekly report on Monday, stream-stall watch, #2. No Slipway issues filed.
+
+## 2026-11-22: the staged Linux feed is checked
+
+Orient: main healthy (ci #28, soak #2 green); no open PRs; #2, #15, #17, #22 unchanged, no answers from Adam. Built `slipway` from the checkout again (2.7 min; charter install still blocked: the GitHub API lookup returns 403). Sunday: no weekly report due.
+
+Shipped: PR #24 makes package-linux check that `latest-linux.yml` names the built AppImage with the matching SHA-512 (recomputed with openssl) and keeps the file in the `linux-packages` artifact. Dry run only: nothing uploaded, no secret. Pinned by `scripts/slipway-package-linux.test.ts`. package-linux #2 green in 2m03s, ci #29 green (13m53s); merged. Only one runner: the manual run queued behind ci for ~10 minutes.
+
+Not verified: that the artifact's AppImage runs on a clean machine.
+
+Next: weekly report Monday; stream-stall watch; #2; the rest of the release (signing, R2 feed, macOS/Windows) waits on #22. No Slipway issues filed.
