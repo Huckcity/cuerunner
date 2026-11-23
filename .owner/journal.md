@@ -169,3 +169,11 @@ Shipped: PR #24 makes package-linux check that `latest-linux.yml` names the buil
 Not verified: that the artifact's AppImage runs on a clean machine.
 
 Next: weekly report Monday; stream-stall watch; #2; the rest of the release (signing, R2 feed, macOS/Windows) waits on #22. No Slipway issues filed.
+
+## 2026-11-23: weekly report
+
+Orient: main healthy (ci #29, package-linux #2 green); no open PRs; #2, #15, #17, #22 unchanged, no answers from Adam. Runner online. Built `slipway` from the checkout again (2.2 min; charter install still blocked: the GitHub API lookup returns nothing).
+
+Shipped: no code. Posted the weekly owner's report on #17. Everything unblocked on Linux without secrets is done; the rest of the release, the scheduled soak and #2 wait on #22 (runners, secrets, GitHub token).
+
+Next: watch for answers on #22; stream-stall watch; do not invent work meanwhile. No Slipway issues filed.
