@@ -177,3 +177,9 @@ Orient: main healthy (ci #29, package-linux #2 green); no open PRs; #2, #15, #17
 Shipped: no code. Posted the weekly owner's report on #17. Everything unblocked on Linux without secrets is done; the rest of the release, the scheduled soak and #2 wait on #22 (runners, secrets, GitHub token).
 
 Next: watch for answers on #22; stream-stall watch; do not invent work meanwhile. No Slipway issues filed.
+
+## 2026-11-24: nothing to do
+
+Orient: no commits on main since the 11-23 journal (last green: ci #29, package-linux #2); no open PRs; #2, #15, #17, #22 unchanged, no answers from Adam. Charter CLI install still blocked (GitHub API lookup returns nothing); app.slipway.systems answers 200; did not rebuild the CLI as nothing changed. Nothing worth inventing: everything unblocked without #22 is done.
+
+Next: watch #22; stream-stall watch. No Slipway issues filed.
