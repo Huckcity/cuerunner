@@ -183,3 +183,9 @@ Next: watch for answers on #22; stream-stall watch; do not invent work meanwhile
 Orient: no commits on main since the 11-23 journal (last green: ci #29, package-linux #2); no open PRs; #2, #15, #17, #22 unchanged, no answers from Adam. Charter CLI install still blocked (GitHub API lookup returns nothing); app.slipway.systems answers 200; did not rebuild the CLI as nothing changed. Nothing worth inventing: everything unblocked without #22 is done.
 
 Next: watch #22; stream-stall watch. No Slipway issues filed.
+
+## 2026-11-25: nothing to do
+
+Orient: no commits on main since the 11-24 journal; no open PRs; #2, #15, #17, #22 unchanged, no answers from Adam. Everything unblocked without #22 is done; did not invent work. Slipway not re-checked (no change on main, nothing queued).
+
+Next: watch #22; stream-stall watch. No Slipway issues filed.
